@@ -3,6 +3,18 @@ import streamlit as st
 
 def main():
     st.set_page_config(layout="wide")
+
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            width: 350px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     
     st.title("🏠AI購屋分析")
     st.sidebar.title("側邊欄")
@@ -14,6 +26,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
