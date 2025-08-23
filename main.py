@@ -60,7 +60,6 @@ def main():
 
     elif st.session_state.current_page == 'search':
         st.title("🔍 搜尋頁面")
-        st.write("在這裡搜尋房產")
         with st.form("property_requirements"):
             st.subheader("📍 Location & Budget")
             submit = st.form_submit_button("Update Search")
@@ -79,10 +78,13 @@ def main():
     with st.sidebar.expander("其他功能二"):
         st.write("施工中...")
 
+    if st.sidebar.button("🔄更新資料", use_container_width=True, key="updata_button"):
+        st.write("施工中...")
 
 if __name__ == "__main__":
 
     main()
+
 
 
 
