@@ -44,11 +44,11 @@ def main():
         
         with col2:
             # 右上表單
-            with st.form("form3"):
-                st.subheader("表單 3")
-                submit3 = st.form_submit_button("提交")
-                if submit3:
-                    st.write(f"表單 3 提交：產品={product}, 數量={quantity}")
+            with st.form("analysis"):
+                st.subheader("📊 分析頁面")
+                analysis_bt = st.form_submit_button("開始")
+                if analysis_bt:
+                    st.session_state.current_page = 'analysis'
             
             # 右下表單
             with st.form("form4"):
@@ -82,6 +82,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
