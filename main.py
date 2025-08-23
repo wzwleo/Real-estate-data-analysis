@@ -79,11 +79,12 @@ def main():
         st.write("施工中...")
 
     if st.sidebar.button("🔄更新資料", use_container_width=True, key="updata_button"):
-        st.write("施工中...")
+        st.sidebar.write("施工中...")
 
 if __name__ == "__main__":
 
     main()
+
 
 
 
