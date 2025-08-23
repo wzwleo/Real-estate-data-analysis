@@ -1,5 +1,5 @@
 import streamlit as st
-from Analysis.py import User_Analysis
+from Analysis import User_Analysis
 #from (檔案名稱) import (函式名稱)
 
 def main():
@@ -23,6 +23,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
