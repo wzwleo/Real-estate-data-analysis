@@ -56,7 +56,7 @@ def main():
     elif st.session_state.current_page == 'analysis':
         st.title("📊 分析頁面")
         st.write("房產分析和數據")
-    
+    '''
     st.title("🏠AI購屋分析")
     st.sidebar.title("⚙️設置")
 
@@ -73,11 +73,12 @@ def main():
         st.subheader("📍 Location & Budget")
         submit = st.form_submit_button("Update Search")
     
-
+    '''
 
 if __name__ == "__main__":
 
     main()
+
 
 
 
