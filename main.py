@@ -29,9 +29,9 @@ def main():
 
         with col1:
             # 左上表單
-            with st.form("form1"):
-                st.subheader("表單 1")
-                submit1 = st.form_submit_button("提交")
+            with st.form("search"):
+                st.subheader("🔍 搜尋頁面")
+                submit1 = st.form_submit_button("開始")
                 if submit1:
                     st.session_state.current_page = 'analysis'
             
@@ -82,6 +82,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
