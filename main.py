@@ -5,7 +5,7 @@ def main():
     st.set_page_config(layout="wide")
 
     st.title("🏠AI購屋分析")
-    st.sidebar.title("側邊欄")
+    st.sidebar.title("⚙️設置")
 
     with st.sidebar.expander("操作區"):
         st.button("按鈕")
@@ -14,6 +14,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
