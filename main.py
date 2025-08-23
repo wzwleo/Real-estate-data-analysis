@@ -46,6 +46,7 @@ def main():
             # 右上表單
             with st.form("analysis"):
                 st.subheader("📊 分析頁面")
+                st.write("第二步：阿對對對 就是這樣 嗯嗯嗯 沒錯沒錯")
                 analysis_bt = st.form_submit_button("開始")
                 if analysis_bt:
                     st.session_state.current_page = 'analysis'
@@ -82,6 +83,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
