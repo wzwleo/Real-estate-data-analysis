@@ -1,7 +1,7 @@
-[theme]
-base="dark"
-primaryColor="#ff4b4b"
-backgroundColor="#0e1117"
-secondaryBackgroundColor="#302630"
-textColor="#fafafa"
-font="sans serif"
+[theme]                     # 宣告這是一個 theme 設定區塊
+base="dark"                 # 基礎主題，dark 就是深色模式，light 就是淺色模式
+primaryColor="#ff4b4b"      # 主要按鈕、選取元素的顏色
+backgroundColor="#0e1117"   # 網頁背景顏色
+secondaryBackgroundColor="#262730"  # 側邊欄或次要區塊背景顏色
+textColor="#fafafa"         # 文字顏色
+font="sans serif"           # 字體
