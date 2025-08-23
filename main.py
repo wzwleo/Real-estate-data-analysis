@@ -23,13 +23,50 @@ def main():
     if st.session_state.current_page == 'home':
         st.title("🏠AI購屋分析")
         st.write("歡迎來到房地產分析系統")
+        col1, col2 = st.columns(2)
         
-    elif st.session_state.current_page == 'search':
-        st.title("🔍 搜尋頁面")
-        st.write("在這裡搜尋房產")
-        with st.form("property_requirements"):
-                st.subheader("📍 Location & Budget")
-                submit = st.form_submit_button("Update Search")
+        with col1:
+            # 左上表單
+            with st.form("form1"):
+                st.subheader("表單 1")
+                name1 = st.text_input("姓名")
+                age1 = st.number_input("年齡", min_value=0, max_value=120)
+                submit1 = st.form_submit_button("提交")
+                if submit1:
+                    st.write(f"表單 1 提交：姓名={name1}, 年齡={age1}")
+            
+            # 左下表單
+            with st.form("form2"):
+                st.subheader("表單 2")
+                city1 = st.text_input("城市")
+                submit2 = st.form_submit_button("提交")
+                if submit2:
+                    st.write(f"表單 2 提交：城市={city1}")
+        
+        with col2:
+            # 右上表單
+            with st.form("form3"):
+                st.subheader("表單 3")
+                product = st.text_input("產品名稱")
+                quantity = st.number_input("數量", min_value=0)
+                submit3 = st.form_submit_button("提交")
+                if submit3:
+                    st.write(f"表單 3 提交：產品={product}, 數量={quantity}")
+            
+            # 右下表單
+            with st.form("form4"):
+                st.subheader("表單 4")
+                email = st.text_input("Email")
+                submit4 = st.form_submit_button("提交")
+                if submit4:
+                    st.write(f"表單 4 提交：Email={email}")
+                
+            elif st.session_state.current_page == 'search':
+                st.title("🔍 搜尋頁面")
+                st.write("在這裡搜尋房產")
+                with st.form("property_requirements"):
+                        st.subheader("📍 Location & Budget")
+                        submit = st.form_submit_button("Update Search")
         
     elif st.session_state.current_page == 'analysis':
         st.title("📊 分析頁面")
@@ -49,6 +86,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
