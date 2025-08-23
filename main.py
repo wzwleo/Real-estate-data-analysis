@@ -30,7 +30,7 @@ def main():
             # 左上表單
             with st.form("search"):
                 st.subheader("🔍 搜尋頁面")
-                st.write("第一步:阿對對對 就是這樣 嗯嗯嗯 沒錯沒錯")
+                st.write("第一步：阿對對對 就是這樣 嗯嗯嗯 沒錯沒錯")
                 search_bt = st.form_submit_button("開始")
                 if search_bt:
                     st.session_state.current_page = 'analysis'
@@ -82,6 +82,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
