@@ -33,7 +33,7 @@ def main():
                 st.subheader("表單 1")
                 submit1 = st.form_submit_button("提交")
                 if submit1:
-                    st.write(f"表單 1 提交：姓名={name1}, 年齡={age1}")
+                    
             
             # 左下表單
             with st.form("form2"):
@@ -82,6 +82,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
