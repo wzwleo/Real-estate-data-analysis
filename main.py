@@ -22,7 +22,7 @@ def main():
     if st.session_state.current_page == 'home':
         st.title("🏠AI購屋分析")
         st.write("👋歡迎來到房地產分析系統")
-        st.write("以下是使用說明:")
+        st.write("以下是使用說明：")
         
         col1, col2 = st.columns(2)
 
@@ -83,6 +83,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
