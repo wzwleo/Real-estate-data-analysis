@@ -19,12 +19,14 @@ def main():
 
     with st.form("property_requirements"):
         st.subheader("📍 Location & Budget")
+        submit = st.form_submit_button("Update Search")
     
 
 
 if __name__ == "__main__":
 
     main()
+
 
 
 
