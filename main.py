@@ -18,7 +18,7 @@ def main():
         st.write("施工中...")
 
     with st.form("property_requirements"):
-    st.subheader("📍 Location & Budget")
+        st.subheader("📍 Location & Budget")
     
     col1, col2 = st.columns(2)
     with col1:
@@ -32,6 +32,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
