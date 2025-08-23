@@ -61,6 +61,7 @@ def main():
         st.write("在這裡搜尋房產")
         with st.form("property_requirements"):
             st.subheader("📍 Location & Budget")
+            submit = st.form_submit_button("Update Search")
         
     elif st.session_state.current_page == 'analysis':
         st.title("📊 分析頁面")
@@ -80,6 +81,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
