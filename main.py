@@ -9,7 +9,10 @@ def main():
     st.sidebar.title("⚙️設置")
 
 
-    st.sidebar.button("首頁")
+    with st.sidebar.form(key="my_form"):
+        btn = st.form_submit_button("首頁")
+        if btn:
+            st.write("切換到首頁")
     with st.sidebar.expander("🔑Gemini API KEY"):
         api_key_input = st.text_input("請輸入 Gemini API 金鑰", type="password")
     with st.sidebar.expander("其他功能一"):
@@ -20,6 +23,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
