@@ -22,7 +22,6 @@ def main():
     # 頁面內容
     if st.session_state.current_page == 'home':
         st.title("🏠AI購屋分析")
-        st.title("🏠 首頁")
         st.write("歡迎來到房地產分析系統")
         
     elif st.session_state.current_page == 'search':
@@ -50,6 +49,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
