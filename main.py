@@ -8,12 +8,12 @@ def main():
     st.sidebar.title("⚙️設置")
 
     with st.sidebar.expander("操作區"):
-        st.button("按鈕")
-        st.text_input("輸入框")
+        api_key_input = st.text_input("請輸入 Gemini API 金鑰", type="password")
 
 if __name__ == "__main__":
 
     main()
+
 
 
 
