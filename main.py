@@ -9,9 +9,7 @@ def main():
     st.sidebar.title("⚙️設置")
 
 
-    col1, col2, col3 = st.sidebar.columns([1, 3, 1])
-    with col2:
-        st.button("首頁")
+    st.sidebar.button("首頁", use_container_width=True)
         
     with st.sidebar.expander("🔑Gemini API KEY"):
         api_key_input = st.text_input("請輸入 Gemini API 金鑰", type="password")
@@ -23,6 +21,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
