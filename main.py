@@ -23,8 +23,9 @@ def main():
     if st.session_state.current_page == 'home':
         st.title("🏠AI購屋分析")
         st.write("歡迎來到房地產分析系統")
-        col1, col2 = st.columns(2)
         
+        col1, col2 = st.columns(2)
+
         with col1:
             # 左上表單
             with st.form("form1"):
@@ -60,13 +61,17 @@ def main():
                 submit4 = st.form_submit_button("提交")
                 if submit4:
                     st.write(f"表單 4 提交：Email={email}")
-                
-            elif st.session_state.current_page == 'search':
-                st.title("🔍 搜尋頁面")
-                st.write("在這裡搜尋房產")
-                with st.form("property_requirements"):
-                        st.subheader("📍 Location & Budget")
-                        submit = st.form_submit_button("Update Search")
+
+    elif st.session_state.current_page == 'search':
+        st.title("🔍 搜尋頁面")
+        st.write("在這裡搜尋房產")
+        with st.form("property_requirements"):
+            st.subheader("📍 Location & Budget")
+            city = st.text_input("City", value="New York City")
+            min_price = st.number_input("Minimum Price ($)", value=500000)
+            submit = st.form_submit_button("Update Search")
+            if submit:
+                st.write(f"搜尋條件：城市={city}, 最低價格=${min_price}")
         
     elif st.session_state.current_page == 'analysis':
         st.title("📊 分析頁面")
@@ -86,6 +91,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
