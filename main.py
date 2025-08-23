@@ -59,6 +59,8 @@ def main():
     elif st.session_state.current_page == 'search':
         st.title("🔍 搜尋頁面")
         st.write("在這裡搜尋房產")
+        with st.form("property_requirements"):
+            st.subheader("📍 Location & Budget")
         
     elif st.session_state.current_page == 'analysis':
         st.title("📊 分析頁面")
@@ -78,6 +80,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
