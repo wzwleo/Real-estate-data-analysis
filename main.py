@@ -9,22 +9,7 @@ def main():
     st.sidebar.title("⚙️設置")
 
 
-    st.sidebar.markdown("""
-        <style>
-        .full-width-button > button {
-            width: 100%;
-            background-color: #ff4b4b;
-            color: white;
-            padding: 8px 0;
-            border-radius: 5px;
-            border: none;
-        }
-        </style>
-    """, unsafe_allow_html=True)
-    
-    # HTML 按鈕
-    if st.sidebar.button("首頁", key="home"):
-        st.write("切換到首頁")
+    st.sidebar.button("首頁", key="home"):
         
     with st.sidebar.expander("🔑Gemini API KEY"):
         api_key_input = st.text_input("請輸入 Gemini API 金鑰", type="password")
@@ -36,6 +21,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
