@@ -73,6 +73,8 @@ def main():
         
     with st.sidebar.expander("🔑Gemini API KEY"):
         api_key_input = st.text_input("請輸入 Gemini API 金鑰", type="password")
+        if st.st.sidebar.button("確定", key="api_confirm_button")
+            st.success("✅APIKEY已設定")
     with st.sidebar.expander("其他功能一"):
         st.write("施工中...")
     with st.sidebar.expander("其他功能二"):
@@ -84,6 +86,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
