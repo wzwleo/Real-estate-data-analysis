@@ -20,14 +20,12 @@ def main():
     with st.form("property_requirements"):
         st.subheader("📍 Location & Budget")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        city = st.text_input("City", value="New York City")
 
 
 if __name__ == "__main__":
 
     main()
+
 
 
 
