@@ -9,7 +9,7 @@ def main():
         st.session_state.current_page = 'home'
 
     # 側邊欄按鈕 - 每個都有唯一的 key
-    if st.sidebar.button("🏠 首頁", use_container_width=True, key="home_button"):
+    if st.sidebar.button("🏠 首頁嗨", use_container_width=True, key="home_button"):
         st.session_state.current_page = 'home'
 
     if st.sidebar.button("🔍 搜尋頁面", use_container_width=True, key="search_button"):
@@ -86,3 +86,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
