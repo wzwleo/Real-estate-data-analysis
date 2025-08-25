@@ -19,7 +19,7 @@ def main():
     
     # 頁面內容
     if st.session_state.current_page == 'home':
-        st.title("🏠 AI購屋分析嗨")
+        st.title("🏠 AI購屋分析")
         st.write("👋 歡迎來到房地產分析系統")
         st.write("以下是使用說明：")
         
@@ -31,7 +31,7 @@ def main():
                 st.subheader("🔍 搜尋頁面")
                 st.write("第一步：請輸入搜尋條件")
                 keyword = st.text_input("輸入關鍵字")
-                search_bt = st.form_submit_button("開始搜尋", key="search_start")
+                search_bt = st.form_submit_button("開始搜尋")
                 if search_bt:
                     st.session_state.current_page = 'search'
             
@@ -39,7 +39,7 @@ def main():
             with st.form("form2"):
                 st.subheader("表單 2")
                 city1 = st.text_input("請輸入城市")
-                submit2 = st.form_submit_button("提交", key="form2_submit")
+                submit2 = st.form_submit_button("提交")
                 if submit2:
                     st.write(f"表單 2 提交：城市={city1}")
         
@@ -49,7 +49,7 @@ def main():
                 st.subheader("📊 分析頁面")
                 st.write("第二步：請選擇分析類型")
                 analysis_type = st.selectbox("分析類型", ["價格趨勢", "交易量", "區域比較"])
-                analysis_bt = st.form_submit_button("開始分析", key="analysis_start")
+                analysis_bt = st.form_submit_button("開始分析")
                 if analysis_bt:
                     st.session_state.current_page = 'analysis'
             
@@ -57,7 +57,7 @@ def main():
             with st.form("form4"):
                 st.subheader("表單 4")
                 email = st.text_input("請輸入 Email")
-                submit4 = st.form_submit_button("提交", key="form4_submit")
+                submit4 = st.form_submit_button("提交")
                 if submit4:
                     st.write(f"表單 4 提交：Email={email}")
 
@@ -67,7 +67,7 @@ def main():
             st.subheader("📍 房產篩選條件")
             min_price = st.number_input("最低價格", 0)
             max_price = st.number_input("最高價格", 10000000)
-            submit = st.form_submit_button("開始篩選", key="filter_submit")
+            submit = st.form_submit_button("開始篩選")
             if submit:
                 st.write(f"篩選條件：{min_price} ~ {max_price}")
         
@@ -92,4 +92,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
