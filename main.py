@@ -77,10 +77,10 @@ def main():
             st.success("✅API KEY已設定")
     with st.sidebar.expander("🗺️MAP API KEY"):
         st.write("施工中...")
-    with st.sidebar.expander("其他功能二"):
+    with st.sidebar.expander("🔄更新資料"):
         st.write("施工中...")
 
-    if st.sidebar.button("🔄更新資料", use_container_width=True, key="updata_button"):
+    if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
         st.sidebar.write("施工中...")
 
     if st.sidebar.button("💬智能小幫手", use_container_width=True, key="line_button"):
@@ -89,6 +89,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
