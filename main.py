@@ -31,7 +31,7 @@ def main():
             with st.form("search"):
                 st.subheader("🔍 搜尋頁面")
                 st.write("第一步：阿對對對 就是這樣 嗯嗯嗯 沒錯沒錯")
-                if st.sidebar.button("開始", key="search_start"):
+                if st.button("開始", key="search_start"):
                     st.session_state.current_page = 'search'
             
             # 左下表單
@@ -85,6 +85,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
