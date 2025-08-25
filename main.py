@@ -31,7 +31,7 @@ def main():
             with st.form("search"):
                 st.subheader("🔍 搜尋頁面")
                 st.write("第一步：阿對對對 就是這樣 嗯嗯嗯 沒錯沒錯")
-                search_bt = st.form_submit_button("開始")
+                search_bt = st.form_submit_button("開始", key="search_start")
                 if search_bt:
                     st.session_state.current_page = 'search'
             
@@ -47,7 +47,7 @@ def main():
             with st.form("analysis"):
                 st.subheader("📊 分析頁面")
                 st.write("第二步：阿對對對 就是這樣 嗯嗯嗯 沒錯沒錯")
-                analysis_bt = st.form_submit_button("開始")
+                analysis_bt = st.form_submit_button("開始", key="analysis_start")
                 if analysis_bt:
                     st.session_state.current_page = 'analysis'
             
@@ -86,6 +86,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
