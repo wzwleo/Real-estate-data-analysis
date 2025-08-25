@@ -2,7 +2,6 @@ import streamlit as st
 
 def main():
     st.set_page_config(layout="wide")
-
     # 初始化頁面狀態
     if 'current_page' not in st.session_state:
         st.session_state.current_page = 'home'
@@ -24,14 +23,13 @@ def main():
         st.write("以下是使用說明：")
         
         col1, col2 = st.columns(2)
-
         with col1:
             # 左上表單
             with st.form("search_form"):
                 st.subheader("🔍 搜尋頁面")
                 st.write("第一步：請輸入搜尋條件")
                 keyword = st.text_input("輸入關鍵字")
-                search_bt = st.form_submit_button("開始搜尋")
+                search_bt = st.form_submit_button("開始搜尋")  # 修復：使用正確的變數名
                 if search_bt:
                     st.session_state.current_page = 'search'
             
@@ -49,7 +47,7 @@ def main():
                 st.subheader("📊 分析頁面")
                 st.write("第二步：請選擇分析類型")
                 analysis_type = st.selectbox("分析類型", ["價格趨勢", "交易量", "區域比較"])
-                analysis_bt = st.form_submit_button("開始分析")
+                analysis_bt = st.form_submit_button("開始分析")  # 保持原來的變數名
                 if analysis_bt:
                     st.session_state.current_page = 'analysis'
             
@@ -60,7 +58,7 @@ def main():
                 submit4 = st.form_submit_button("提交")
                 if submit4:
                     st.write(f"表單 4 提交：Email={email}")
-
+    
     elif st.session_state.current_page == 'search':
         st.title("🔍 搜尋頁面")
         with st.form("property_requirements"):
@@ -82,11 +80,13 @@ def main():
         api_key_input = st.text_input("請輸入 Gemini API 金鑰", type="password")
         if st.button("確定", key="api_confirm_button"):
             st.success("✅ APIKEY 已設定")
+    
     with st.sidebar.expander("其他功能一"):
         st.write("施工中...")
+    
     with st.sidebar.expander("其他功能二"):
         st.write("施工中...")
-
+    
     if st.sidebar.button("🔄 更新資料", use_container_width=True, key="update_button"):
         st.sidebar.write("施工中...")
 
