@@ -83,9 +83,13 @@ def main():
     if st.sidebar.button("🔄更新資料", use_container_width=True, key="updata_button"):
         st.sidebar.write("施工中...")
 
+    if st.sidebar.button("💬智能小幫手", use_container_width=True, key="updata_button"):
+        st.sidebar.write("施工中...")
+
 if __name__ == "__main__":
 
     main()
+
 
 
 
