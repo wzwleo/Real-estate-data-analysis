@@ -26,7 +26,7 @@ def main():
         with col1:
             # 左上表單
             with st.form("search_form"):
-                st.subheader("🔍 嗨搜尋頁面")
+                st.subheader("🔍 搜尋頁面")
                 st.write("第一步：請輸入搜尋條件")
                 keyword = st.text_input("輸入關鍵字")
                 search_bt = st.form_submit_button("開始搜尋")  # 修復：使用正確的變數名
@@ -92,4 +92,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
