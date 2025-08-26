@@ -2,7 +2,7 @@ import streamlit as st
 import os
 #from (檔案名稱) import (函式名稱)
 
-def get_city_options(data_dir="./data"):
+def get_city_options(data_dir="./Data"):
     # 讀取 CSV 檔
     files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
     # 中文對照表
@@ -117,3 +117,4 @@ if __name__ == "__main__":
 '''
 streamlit run "C:/專題_購屋/main.py"
 '''
+
