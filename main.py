@@ -1,5 +1,17 @@
 import streamlit as st
+import os
 #from (檔案名稱) import (函式名稱)
+
+def get_city_options(data_dir="./data"):
+    # 讀取 CSV 檔
+    files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
+    # 中文對照表
+    name_map = {
+        "Taichung-city_buy_properties.csv": "台中市",
+    }
+    # 自動 fallback 顯示英文檔名（去掉 -city_buy_properties.csv）
+    options = {name_map.get(f, f.replace("-city_buy_properties.csv", "")): f for f in files}
+    return options
 
 def main():
     st.set_page_config(layout="wide")
@@ -59,9 +71,22 @@ def main():
 
     elif st.session_state.current_page == 'search':
         st.title("🔍 搜尋頁面")
+        # -------- 搜尋頁面 --------
         with st.form("property_requirements"):
             st.subheader("📍 房產篩選條件")
+            
+            options = get_city_options()
+            # 下拉選單
+            selected_label = st.selectbox("請選擇城市：", list(options.keys()))
+            
+            # 提交按鈕
             submit = st.form_submit_button("開始篩選")
+            
+            # 只有按下按鈕才會執行
+            if submit:
+                selected_file = options[selected_label]
+                st.write("✅ 你選擇的城市：", selected_label)
+                st.write("📂 對應到的檔案：", selected_file)
 
     elif st.session_state.current_page == 'analysis':
         st.title("📊 分析頁面")
@@ -89,5 +114,6 @@ if __name__ == "__main__":
 
     main()
 
-
-
+'''
+streamlit run "C:/專題_購屋/main.py"
+'''
