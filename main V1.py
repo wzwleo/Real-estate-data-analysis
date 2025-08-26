@@ -20,7 +20,7 @@ def main():
 
     # 頁面內容
     if st.session_state.current_page == 'home':
-        st.title("🏠AI購屋分析1")
+        st.title("🏠AI購屋分析")
         st.write("👋歡迎來到房地產分析系統")
         st.write("以下是使用說明：")
 
