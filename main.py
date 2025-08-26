@@ -12,6 +12,11 @@ def main():
     if st.sidebar.button("🏠 首頁", use_container_width=True, key="home_button"):
         st.session_state.current_page = 'home'
 
+    if st.sidebar.button("🔍 搜尋頁面", use_container_width=True, key="search_button"):
+        st.session_state.current_page = 'search'
+
+    if st.sidebar.button("📊 分析頁面", use_container_width=True, key="analysis_button"):
+        st.session_state.current_page = 'analysis'
     # 頁面內容
     if st.session_state.current_page == 'home':
         st.title("🏠AI購屋分析")
@@ -34,7 +39,7 @@ def main():
                 st.subheader("表單 2")
                 submit2 = st.form_submit_button("提交")
                 if submit2:
-                    st.write(f"表單 2 提交：城市={city1}")
+                    st.write("施工中...")
 
         with col2:
             # 右上表單
@@ -50,7 +55,7 @@ def main():
                 st.subheader("表單 4")
                 submit4 = st.form_submit_button("提交")
                 if submit4:
-                    st.write(f"表單 4 提交：Email={email}")
+                    st.write("施工中...")
 
     elif st.session_state.current_page == 'search':
         st.title("🔍 搜尋頁面")
@@ -84,60 +89,6 @@ if __name__ == "__main__":
 
     main()
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+'''
+streamlit run "C:/專題_購屋/main.py"
+'''
