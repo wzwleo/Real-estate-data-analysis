@@ -89,6 +89,5 @@ if __name__ == "__main__":
 
     main()
 
-'''
-streamlit run "C:/專題_購屋/main.py"
-'''
+
+
