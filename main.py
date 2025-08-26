@@ -4,7 +4,7 @@ import pandas as pd
 import math
 #from (檔案名稱) import (函式名稱)
 
-def get_city_options(data_dir="./data"):
+def get_city_options(data_dir="./Data"):
     # 讀取 CSV 檔
     files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
     # 中文對照表
@@ -126,7 +126,7 @@ def main():
             # 重置搜尋頁面到第一頁
             st.session_state.current_search_page = 1
             selected_file = options[selected_label]
-            file_path = os.path.join("./data", selected_file)
+            file_path = os.path.join("./Data", selected_file)
             
             try:
                 df = pd.read_csv(file_path)
@@ -249,3 +249,4 @@ if __name__ == "__main__":
 '''
 streamlit run "C:/專題_購屋/main.py"
 '''
+
