@@ -12,6 +12,11 @@ def main():
     if st.sidebar.button("🏠 首頁", use_container_width=True, key="home_button"):
         st.session_state.current_page = 'home'
 
+    if st.sidebar.button("🔍 搜尋頁面", use_container_width=True, key="search_button"):
+        st.session_state.current_page = 'search'
+
+    if st.sidebar.button("📊 分析頁面", use_container_width=True, key="analysis_button"):
+        st.session_state.current_page = 'analysis'
     # 頁面內容
     if st.session_state.current_page == 'home':
         st.title("🏠AI購屋分析")
@@ -83,6 +88,7 @@ def main():
 if __name__ == "__main__":
 
     main()
+
 
 
 
