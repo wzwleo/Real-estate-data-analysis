@@ -243,7 +243,8 @@ def main():
             Special_Requests = st.text_area("請輸入您的需求", placeholder="輸入文字...")
             # 提交按鈕
             col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 1])
-            submit = st.form_submit_button("搜尋")
+            with col5:
+                submit = st.form_submit_button("搜尋")
             
             # 只有按下按鈕才會執行
         if submit:
@@ -415,4 +416,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
