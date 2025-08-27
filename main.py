@@ -329,7 +329,12 @@ def main():
                     # 標題與指標
                     col1, col2, col3, col4 = st.columns([7, 1, 1, 2])
                     with col1:
-                        st.subheader(f"#{global_idx} 🏠 {row['標題']}")
+                        col1, col2, col3= st.columns([7, 1, 1])
+                        with col1:
+                            st.subheader(f"#{global_idx} 🏠 {row['標題']}")
+                        with col2:
+                            st.caption(f"{row['編號']}")
+                            
                         st.write(f"**地址：** {row['地址']} | **屋齡：** {row['屋齡']} | **類型：** {row['類型']}")
                         st.write(f"**建坪：** {row['建坪']} | **主+陽：** {row['主+陽']} | **格局：** {row['格局']} | **樓層：** {row['樓層']}")
                         # 如果有車位資訊就顯示
@@ -416,6 +421,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
