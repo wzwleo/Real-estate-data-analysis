@@ -1,3 +1,4 @@
 streamlit
 requests
 folium
+google-generativeai
