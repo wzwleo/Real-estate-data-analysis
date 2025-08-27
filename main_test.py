@@ -25,8 +25,6 @@ def main():
         render_search_page()
     elif st.session_state.current_page == 'analysis':
         render_analysis_page()
-    elif st.session_state.current_page == 'compare':
-        render_compare_page()
 
 if __name__ == "__main__":
     main()
