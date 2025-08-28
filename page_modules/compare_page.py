@@ -5,12 +5,9 @@ import google.generativeai as genai
 # ===============================
 # 取得 API Key（從 st.session_state 共用）
 # ===============================
-'''
-OPENCAGE_KEY = st.session_state.get("OPENCAGE_KEY")
-GEMINI_KEY = st.session_state.get("GEMINI_KEY")'''
 
-OPENCAGE_KEY ="5b18aaad29f64c6892a3ea7e5168eeb2"
-GEMINI_KEY = "AIzaSyDXPWYkMfNtasScp6A4_9i5a9QwZ3vLW2Q"
+OPENCAGE_KEY = st.session_state.get("OPENCAGE_KEY")
+GEMINI_KEY = st.session_state.get("GEMINI_KEY")
 
 if not OPENCAGE_KEY or not GEMINI_KEY:
     st.warning("請先在側邊欄設定 OPENCAGE 與 GEMINI API Key")
