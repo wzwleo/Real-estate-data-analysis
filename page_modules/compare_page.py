@@ -111,7 +111,7 @@ def render_compare_page():
         # prompt
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
-        model = genai.GenerativeModel("gemini-1.5-flash")
+        model = genai.GenerativeModel("gemini-2.0-flash")
         # ✅ 正確新版呼叫
         response = model.generate_content(text_prompt=prompt)
 
