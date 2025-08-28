@@ -1,10 +1,8 @@
 import streamlit as st
 import requests
-import folium
+import google.generativeai as genai
 import os
 from dotenv import load_dotenv
-from streamlit_folium import st_folium
-import google.generativeai as genai
 
 # ===============================
 # 載入環境變數
@@ -15,12 +13,12 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 
 if not OPENCAGE_KEY:
     st.error("❌ 請先設定環境變數 OPENCAGE_API_KEY")
+    st.stop()
 
 if not GEMINI_KEY:
     st.error("❌ 請先設定環境變數 GEMINI_API_KEY")
+    st.stop()
 
-
-# 設定 Gemini API
 genai.configure(api_key=GEMINI_KEY)
 
 # ===============================
@@ -39,21 +37,17 @@ OSM_TAGS = {
 # 工具函式
 # ===============================
 def geocode_address(address: str):
-    """利用 OpenCage 把地址轉成經緯度"""
     url = "https://api.opencagedata.com/geocode/v1/json"
     params = {"q": address, "key": OPENCAGE_KEY, "language": "zh-TW", "limit": 1}
     try:
         res = requests.get(url, params=params, timeout=10).json()
         if res["results"]:
             return res["results"][0]["geometry"]["lat"], res["results"][0]["geometry"]["lng"]
-        else:
-            return None, None
+        return None, None
     except Exception:
         return None, None
 
-
 def query_osm(lat, lng, radius=200):
-    """合併查詢 OSM，一次拿回所有資料"""
     query_parts = []
     for tag_dict in OSM_TAGS.values():
         for k, v in tag_dict.items():
@@ -69,7 +63,6 @@ def query_osm(lat, lng, radius=200):
     );
     out center;
     """
-
     try:
         r = requests.post("https://overpass-api.de/api/interpreter", data=query.encode("utf-8"), timeout=20)
         data = r.json()
@@ -77,26 +70,20 @@ def query_osm(lat, lng, radius=200):
         return {}
 
     results = {k: [] for k in OSM_TAGS.keys()}
-
     for el in data.get("elements", []):
         tags = el.get("tags", {})
         name = tags.get("name", "未命名")
-
         for label, tag_dict in OSM_TAGS.items():
             for k, v in tag_dict.items():
                 if tags.get(k) == v:
                     results[label].append(name)
-
     return results
 
-
 def format_info(address, info_dict):
-    """整理統計數字給 Gemini"""
     lines = [f"房屋（{address}）："]
     for k, v in info_dict.items():
         lines.append(f"- {k}: {len(v)} 個")
     return "\n".join(lines)
-
 
 # ===============================
 # Streamlit UI
@@ -130,13 +117,12 @@ if st.button("比較房屋"):
         st.error("❌ 無法解析其中一個地址")
         st.stop()
 
-    info_a = query_osm(lat_a, lng_a, radius=200)
-    info_b = query_osm(lat_b, lng_b, radius=200)
+    info_a = query_osm(lat_a, lng_a)
+    info_b = query_osm(lat_b, lng_b)
 
     text_a = format_info(addr_a, info_a)
     text_b = format_info(addr_b, info_b)
 
-    # 儲存資訊給聊天使用
     st.session_state["text_a"] = text_a
     st.session_state["text_b"] = text_b
 
@@ -149,16 +135,15 @@ if st.button("比較房屋"):
     {text_b}
     """
     model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
+    response = model.generate_content(text_prompt=prompt)
 
     st.subheader("📊 Gemini 分析結果")
     st.write(response.text)
 
     st.session_state["comparison_done"] = True
 
-
 # ===============================
-# 簡單對話框（結合地點資訊）
+# 簡單對話框
 # ===============================
 if st.session_state["comparison_done"]:
     st.header("💬 簡單對話框")
@@ -170,7 +155,6 @@ if st.session_state["comparison_done"]:
     if submitted and user_input:
         st.session_state["chat_history"].append(("👤", user_input))
 
-        # ✅ 把房屋資訊帶進 Prompt
         chat_prompt = f"""
         以下是兩間房屋的周邊資訊：
 
@@ -182,11 +166,8 @@ if st.session_state["comparison_done"]:
 
         請根據房屋周邊的生活機能與位置，提供有意義的回答。
         """
-
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(chat_prompt)
+        response = model.generate_content(text_prompt=chat_prompt)
         st.session_state["chat_history"].append(("🤖", response.text))
 
-    # 顯示對話紀錄
     for role, msg in st.session_state["chat_history"]:
         st.markdown(f"**{role}**：{msg}")
