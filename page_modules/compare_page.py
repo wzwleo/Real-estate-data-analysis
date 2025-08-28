@@ -128,13 +128,16 @@ def render_compare_page():
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
         model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(prompt)  # ✅ 舊版寫法
+        response = model.generate_content(prompt)  # 舊版寫法
         st.subheader("📊 Gemini 分析結果")
-        st.write(response.text)  # 舊版回傳 text 屬性
+        st.write(response.text)
         st.session_state["comparison_done"] = True
 
     # 顯示房屋資訊
-
+    if st.session_state["comparison_done"]:
+        st.subheader("房屋資訊對照表")
+        st.markdown(f"### 房屋 A\n{st.session_state['text_a']}")
+        st.markdown(f"### 房屋 B\n{st.session_state['text_b']}")
 
         st.header("💬 對話框")
         with st.form("chat_form", clear_on_submit=True):
@@ -143,10 +146,23 @@ def render_compare_page():
 
         if submitted and user_input:
             st.session_state["chat_history"].append(("使用者", user_input))
-            chat_prompt = f"房屋周邊資訊如下：\n房屋A: {text_a_line}\n房屋B: {text_b_line}\n使用者問題：{user_input}\n請根據周邊生活機能回答。"
+            
+            # 舊版對話框方法：把歷史訊息加入 prompt
+            conversation_text = ""
+            for role, msg in st.session_state["chat_history"]:
+                if role == "使用者":
+                    conversation_text += f"使用者: {msg}\n"
+                else:
+                    conversation_text += f"AI: {msg}\n"
+
+            chat_prompt = (
+                f"房屋周邊資訊如下：\n房屋A: {st.session_state['text_a']}\n房屋B: {st.session_state['text_b']}\n\n"
+                f"歷史對話：\n{conversation_text}\n"
+                f"請根據周邊生活機能回答使用者的最新問題。"
+            )
 
             model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(chat_prompt)  # 舊版寫法
+            response = model.generate_content(chat_prompt)
             st.session_state["chat_history"].append(("AI", response.text))
 
         # 顯示對話紀錄
