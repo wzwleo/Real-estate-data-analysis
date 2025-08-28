@@ -134,10 +134,7 @@ def render_compare_page():
         st.session_state["comparison_done"] = True
 
     # 顯示房屋資訊
-    if st.session_state["comparison_done"]:
-        st.subheader("房屋資訊對照表")
-        st.markdown(f"### 房屋 A\n{st.session_state['text_a']}")
-        st.markdown(f"### 房屋 B\n{st.session_state['text_b']}")
+
 
         st.header("💬 對話框")
         with st.form("chat_form", clear_on_submit=True):
