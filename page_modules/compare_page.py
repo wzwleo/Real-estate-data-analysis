@@ -11,7 +11,7 @@ GEMINI_KEY = st.session_state.get("GEMINI_KEY")
 
 if not OPENCAGE_KEY or not GEMINI_KEY:
     st.warning("請先在側邊欄設定 OPENCAGE 與 GEMINI API Key")
-    
+    st.stop()
 
 # 設定 Gemini API
 genai.configure(api_key=GEMINI_KEY)
