@@ -124,14 +124,13 @@ def render_compare_page():
         st.session_state["text_a"] = text_a_line
         st.session_state["text_b"] = text_b_line
 
-        # prompt
+        # 舊版 prompt 呼叫
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
         model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(input=[{"role": "user", "content": prompt}])
-
+        response = model.generate_content(prompt)  # ✅ 舊版寫法
         st.subheader("📊 Gemini 分析結果")
-        st.write(response.output_text)
+        st.write(response.text)  # 舊版回傳 text 屬性
         st.session_state["comparison_done"] = True
 
     # 顯示房屋資訊
@@ -150,8 +149,8 @@ def render_compare_page():
             chat_prompt = f"房屋周邊資訊如下：\n房屋A: {text_a_line}\n房屋B: {text_b_line}\n使用者問題：{user_input}\n請根據周邊生活機能回答。"
 
             model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(input=[{"role": "user", "content": chat_prompt}])
-            st.session_state["chat_history"].append(("AI", response.output_text))
+            response = model.generate_content(chat_prompt)  # 舊版寫法
+            st.session_state["chat_history"].append(("AI", response.text))
 
         # 顯示對話紀錄
         for role, msg in st.session_state["chat_history"]:
