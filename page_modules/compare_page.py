@@ -65,9 +65,18 @@ def render_compare_page():
         return results
 
     # ===============================
+    # 格式化房屋資訊給 Gemini
+    # ===============================
+    def format_info(address, info_dict):
+        lines = [f"房屋（{address}）："]
+        for k, v in info_dict.items():
+            lines.append(f"- {k}: {len(v)} 個")
+        return "\n".join(lines)
+
+    # ===============================
     # UI
     # ===============================
-    st.title("房屋比較 + 對話助手")
+    st.title("🏠 房屋比較助手 + 💬 對話框")
 
     # 初始化狀態
     if "comparison_done" not in st.session_state:
@@ -115,14 +124,14 @@ def render_compare_page():
         st.session_state["text_a"] = text_a_line
         st.session_state["text_b"] = text_b_line
 
+        # prompt
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
         model = genai.GenerativeModel("gemini-2.0-flash")
-        # ✅ 新版 generate_content 用法
         response = model.generate_content(input=[{"role": "user", "content": prompt}])
 
-        st.subheader("分析結果")
-        st.write(response.text)
+        st.subheader("📊 Gemini 分析結果")
+        st.write(response.output_text)
         st.session_state["comparison_done"] = True
 
     # 顯示房屋資訊
@@ -131,7 +140,7 @@ def render_compare_page():
         st.markdown(f"### 房屋 A\n{st.session_state['text_a']}")
         st.markdown(f"### 房屋 B\n{st.session_state['text_b']}")
 
-        st.header("對話框")
+        st.header("💬 對話框")
         with st.form("chat_form", clear_on_submit=True):
             user_input = st.text_input("你想問什麼？", placeholder="請輸入問題...")
             submitted = st.form_submit_button("送出")
@@ -142,7 +151,8 @@ def render_compare_page():
 
             model = genai.GenerativeModel("gemini-2.0-flash")
             response = model.generate_content(input=[{"role": "user", "content": chat_prompt}])
-            st.session_state["chat_history"].append(("AI", response.text))
+            st.session_state["chat_history"].append(("AI", response.output_text))
 
+        # 顯示對話紀錄
         for role, msg in st.session_state["chat_history"]:
             st.markdown(f"**{role}**：{msg}")
