@@ -2,3 +2,4 @@ streamlit
 requests
 folium
 google-generativeai
+python-dotenv
