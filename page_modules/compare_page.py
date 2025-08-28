@@ -1,12 +1,26 @@
 # compare_page.py
-
 def render_compare_page():
     import streamlit as st
     import requests
     import google.generativeai as genai
+    import os
+    from dotenv import load_dotenv
 
     # ===============================
-    # 支援查詢的 OSM Tags
+    # 載入環境變數
+    # ===============================
+    load_dotenv()
+    OPENCAGE_KEY = os.getenv("OPENCAGE_API_KEY")
+    GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+
+    if not OPENCAGE_KEY or not GEMINI_KEY:
+        st.error("請先設定 OPENCAGE_API_KEY 與 GEMINI_API_KEY")
+        st.stop()
+
+    genai.configure(api_key=GEMINI_KEY)
+
+    # ===============================
+    # OSM Tags
     # ===============================
     OSM_TAGS = {
         "交通": {"public_transport": "stop_position"},
@@ -20,16 +34,16 @@ def render_compare_page():
     # ===============================
     # 工具函式
     # ===============================
-    def geocode_address(address: str, opencage_key: str):
+    def geocode_address(address: str):
         url = "https://api.opencagedata.com/geocode/v1/json"
-        params = {"q": address, "key": opencage_key, "language": "zh-TW", "limit": 1}
+        params = {"q": address, "key": OPENCAGE_KEY, "language": "zh-TW", "limit": 1}
         try:
             res = requests.get(url, params=params, timeout=10).json()
             if res["results"]:
                 return res["results"][0]["geometry"]["lat"], res["results"][0]["geometry"]["lng"]
             else:
                 return None, None
-        except Exception:
+        except:
             return None, None
 
     def query_osm(lat, lng, radius=200):
@@ -64,12 +78,14 @@ def render_compare_page():
                         results[label].append(name)
         return results
 
+    def format_info(info_dict):
+        return ", ".join([f"{k}:{len(v)}" for k, v in info_dict.items()])
+
     # ===============================
     # UI
     # ===============================
     st.title("房屋比較 + 對話助手")
 
-    # 初始化狀態
     if "comparison_done" not in st.session_state:
         st.session_state["comparison_done"] = False
     if "chat_history" not in st.session_state:
@@ -86,62 +102,50 @@ def render_compare_page():
         addr_b = st.text_input("輸入房屋 B 地址")
 
     if st.button("比較房屋"):
-        OPENCAGE_KEY = st.session_state.get("OPENCAGE_KEY")
-        GEMINI_KEY = st.session_state.get("GEMINI_KEY")
-
-        if not OPENCAGE_KEY or not GEMINI_KEY:
-            st.error("請先設定 OPENCAGE 與 GEMINI API Key")
-            st.stop()
-
-        genai.configure(api_key=GEMINI_KEY)
-
         if not addr_a or not addr_b:
             st.warning("請輸入兩個地址")
             st.stop()
 
-        lat_a, lng_a = geocode_address(addr_a, OPENCAGE_KEY)
-        lat_b, lng_b = geocode_address(addr_b, OPENCAGE_KEY)
+        lat_a, lng_a = geocode_address(addr_a)
+        lat_b, lng_b = geocode_address(addr_b)
         if lat_a is None or lat_b is None:
             st.error("無法解析其中一個地址")
             st.stop()
 
-        info_a = query_osm(lat_a, lng_a, radius=200)
-        info_b = query_osm(lat_b, lng_b, radius=200)
+        info_a = query_osm(lat_a, lng_a)
+        info_b = query_osm(lat_b, lng_b)
 
-        # 簡化房屋資訊為單行文字
-        text_a_line = ", ".join([f"{k}:{len(v)}" for k, v in info_a.items()])
-        text_b_line = ", ".join([f"{k}:{len(v)}" for k, v in info_b.items()])
-
+        text_a_line = format_info(info_a)
+        text_b_line = format_info(info_b)
         st.session_state["text_a"] = text_a_line
         st.session_state["text_b"] = text_b_line
 
+        # 新版 Gemini 呼叫
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
-
         model = genai.GenerativeModel("gemini-2.0-flash")
-        # ✅ 新版 generate_content 用法
         response = model.generate_content(input=[{"role": "user", "content": prompt}])
-
         st.subheader("分析結果")
         st.write(response.text)
         st.session_state["comparison_done"] = True
 
-    # 顯示房屋資訊
+    # 對話框（保留上下文）
     if st.session_state["comparison_done"]:
-        st.subheader("房屋資訊對照表")
-        st.markdown(f"### 房屋 A\n{st.session_state['text_a']}")
-        st.markdown(f"### 房屋 B\n{st.session_state['text_b']}")
-
-        st.header("對話框")
+        st.header("💬 對話框")
         with st.form("chat_form", clear_on_submit=True):
             user_input = st.text_input("你想問什麼？", placeholder="請輸入問題...")
             submitted = st.form_submit_button("送出")
 
         if submitted and user_input:
-            st.session_state["chat_history"].append(("使用者", user_input))
-            chat_prompt = f"房屋周邊資訊如下：\n房屋A: {text_a_line}\n房屋B: {text_b_line}\n使用者問題：{user_input}\n請根據周邊生活機能回答。"
+            # 把歷史對話也帶進 prompt
+            chat_history_prompt = ""
+            for role, msg in st.session_state["chat_history"]:
+                chat_history_prompt += f"{role}: {msg}\n"
+
+            chat_prompt = f"{chat_history_prompt}使用者: {user_input}\n請根據房屋周邊生活機能回答。"
 
             model = genai.GenerativeModel("gemini-2.0-flash")
             response = model.generate_content(input=[{"role": "user", "content": chat_prompt}])
+            st.session_state["chat_history"].append(("使用者", user_input))
             st.session_state["chat_history"].append(("AI", response.text))
 
         for role, msg in st.session_state["chat_history"]:
