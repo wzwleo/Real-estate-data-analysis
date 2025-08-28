@@ -14,11 +14,11 @@ GEMINI_KEY = st.session_state.get("GEMINI_KEY")
 
 if not OPENCAGE_KEY:
     st.error("❌ 請先設定環境變數 OPENCAGE_API_KEY")
-    st.stop()
+
 
 if not GEMINI_KEY:
     st.error("❌ 請先設定環境變數 GEMINI_API_KEY")
-    st.stop()
+
 
 # 設定 Gemini API
 genai.configure(api_key=GEMINI_KEY)
