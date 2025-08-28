@@ -3,20 +3,6 @@ import requests
 import google.generativeai as genai
 
 # ===============================
-# 取得 API Key（從 st.session_state 共用）
-# ===============================
-
-OPENCAGE_KEY = st.session_state.get("OPENCAGE_KEY")
-GEMINI_KEY = st.session_state.get("GEMINI_KEY")
-
-if not OPENCAGE_KEY or not GEMINI_KEY:
-    st.warning("請先在側邊欄設定 OPENCAGE 與 GEMINI API Key")
-    
-
-# 設定 Gemini API
-genai.configure(api_key=GEMINI_KEY)
-
-# ===============================
 # 支援查詢的 OSM Tags
 # ===============================
 OSM_TAGS = {
@@ -31,10 +17,10 @@ OSM_TAGS = {
 # ===============================
 # 工具函式
 # ===============================
-def geocode_address(address: str):
+def geocode_address(address: str, opencage_key: str):
     """利用 OpenCage 把地址轉成經緯度"""
     url = "https://api.opencagedata.com/geocode/v1/json"
-    params = {"q": address, "key": OPENCAGE_KEY, "language": "zh-TW", "limit": 1}
+    params = {"q": address, "key": opencage_key, "language": "zh-TW", "limit": 1}
     try:
         res = requests.get(url, params=params, timeout=10).json()
         if res["results"]:
@@ -107,12 +93,23 @@ def render_compare_page():
         addr_b = st.text_input("輸入房屋 B 地址")
 
     if st.button("比較房屋"):
+        # ✅ 按下按鈕時才檢查 API Key
+        OPENCAGE_KEY = st.session_state.get("OPENCAGE_KEY")
+        GEMINI_KEY = st.session_state.get("GEMINI_KEY")
+
+        if not OPENCAGE_KEY or not GEMINI_KEY:
+            st.error("❌ 請先設定 OPENCAGE 與 GEMINI API Key")
+            st.stop()
+
+        # 設定 Gemini API
+        genai.configure(api_key=GEMINI_KEY)
+
         if not addr_a or not addr_b:
             st.warning("請輸入兩個地址")
             st.stop()
 
-        lat_a, lng_a = geocode_address(addr_a)
-        lat_b, lng_b = geocode_address(addr_b)
+        lat_a, lng_a = geocode_address(addr_a, OPENCAGE_KEY)
+        lat_b, lng_b = geocode_address(addr_b, OPENCAGE_KEY)
         if not lat_a or not lat_b:
             st.error("❌ 無法解析其中一個地址")
             st.stop()
