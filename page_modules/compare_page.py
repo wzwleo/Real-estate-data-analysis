@@ -132,7 +132,7 @@ def render_compare_page():
         {text_b}
         """
         model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(prompt)
+        response = model.generate_content(model)
 
         st.subheader("📊 Gemini 分析結果")
         st.write(response.text)
