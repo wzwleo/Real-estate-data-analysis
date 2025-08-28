@@ -1,7 +1,10 @@
 import streamlit as st
 import requests
+import folium
+import os
+from dotenv import load_dotenv
+from streamlit_folium import st_folium
 import google.generativeai as genai
-
 # ===============================
 # 取得 API Key（從 st.session_state 共用）
 # ===============================
@@ -9,8 +12,12 @@ import google.generativeai as genai
 OPENCAGE_KEY = st.session_state.get("OPENCAGE_KEY")
 GEMINI_KEY = st.session_state.get("GEMINI_KEY")
 
-if not OPENCAGE_KEY or not GEMINI_KEY:
-    st.warning("請先在側邊欄設定 OPENCAGE 與 GEMINI API Key")
+if not OPENCAGE_KEY:
+    st.error("❌ 請先設定環境變數 OPENCAGE_API_KEY")
+    st.stop()
+
+if not GEMINI_KEY:
+    st.error("❌ 請先設定環境變數 GEMINI_API_KEY")
     st.stop()
 
 # 設定 Gemini API
@@ -44,6 +51,7 @@ def geocode_address(address: str):
     except Exception:
         return None, None
 
+
 def query_osm(lat, lng, radius=200):
     """合併查詢 OSM，一次拿回所有資料"""
     query_parts = []
@@ -61,6 +69,7 @@ def query_osm(lat, lng, radius=200):
     );
     out center;
     """
+
     try:
         r = requests.post("https://overpass-api.de/api/interpreter", data=query.encode("utf-8"), timeout=20)
         data = r.json()
@@ -68,14 +77,18 @@ def query_osm(lat, lng, radius=200):
         return {}
 
     results = {k: [] for k in OSM_TAGS.keys()}
+
     for el in data.get("elements", []):
         tags = el.get("tags", {})
         name = tags.get("name", "未命名")
+
         for label, tag_dict in OSM_TAGS.items():
             for k, v in tag_dict.items():
                 if tags.get(k) == v:
                     results[label].append(name)
+
     return results
+
 
 def format_info(address, info_dict):
     """整理統計數字給 Gemini"""
@@ -84,91 +97,108 @@ def format_info(address, info_dict):
         lines.append(f"- {k}: {len(v)} 個")
     return "\n".join(lines)
 
+
 # ===============================
-# compare_page UI
+# Streamlit UI
 # ===============================
-def render_compare_page():
-    st.title("🏡 房屋比較 + 💬 對話助手")
+st.title("🏠 房屋比較助手 + 💬 對話框")
 
-    # 初始化狀態
-    if "comparison_done" not in st.session_state:
-        st.session_state["comparison_done"] = False
-    if "chat_history" not in st.session_state:
-        st.session_state["chat_history"] = []
-    if "text_a" not in st.session_state:
-        st.session_state["text_a"] = ""
-    if "text_b" not in st.session_state:
-        st.session_state["text_b"] = ""
+# 初始化狀態
+if "comparison_done" not in st.session_state:
+    st.session_state["comparison_done"] = False
+if "chat_history" not in st.session_state:
+    st.session_state["chat_history"] = []
+if "text_a" not in st.session_state:
+    st.session_state["text_a"] = ""
+if "text_b" not in st.session_state:
+    st.session_state["text_b"] = ""
 
-    col1, col2 = st.columns(2)
-    with col1:
-        addr_a = st.text_input("輸入房屋 A 地址")
-    with col2:
-        addr_b = st.text_input("輸入房屋 B 地址")
+col1, col2 = st.columns(2)
+with col1:
+    addr_a = st.text_input("輸入房屋 A 地址")
+with col2:
+    addr_b = st.text_input("輸入房屋 B 地址")
 
-    if st.button("比較房屋"):
-        if not addr_a or not addr_b:
-            st.warning("請輸入兩個地址")
-            st.stop()
+if st.button("比較房屋"):
+    if not addr_a or not addr_b:
+        st.warning("請輸入兩個地址")
+        st.stop()
 
-        lat_a, lng_a = geocode_address(addr_a)
-        lat_b, lng_b = geocode_address(addr_b)
-        if not lat_a or not lat_b:
-            st.error("❌ 無法解析其中一個地址")
-            st.stop()
+    lat_a, lng_a = geocode_address(addr_a)
+    lat_b, lng_b = geocode_address(addr_b)
+    if not lat_a or not lat_b:
+        st.error("❌ 無法解析其中一個地址")
+        st.stop()
 
-        info_a = query_osm(lat_a, lng_a, radius=200)
-        info_b = query_osm(lat_b, lng_b, radius=200)
+    info_a = query_osm(lat_a, lng_a, radius=200)
+    info_b = query_osm(lat_b, lng_b, radius=200)
 
-        text_a = format_info(addr_a, info_a)
-        text_b = format_info(addr_b, info_b)
+    text_a = format_info(addr_a, info_a)
+    text_b = format_info(addr_b, info_b)
 
-        st.session_state["text_a"] = text_a
-        st.session_state["text_b"] = text_b
+    # 儲存資訊給聊天使用
+    st.session_state["text_a"] = text_a
+    st.session_state["text_b"] = text_b
 
-        prompt = f"""
-        你是一位房地產分析專家，請比較以下兩間房屋的生活機能。
-        請列出優點與缺點，最後做總結：
+    prompt = f"""
+    你是一位房地產分析專家，請比較以下兩間房屋的生活機能。
+    請列出優點與缺點，最後做總結：
 
-        {text_a}
+    {text_a}
 
-        {text_b}
-        """
-        model = genai.GenerativeModel("gemini-2.0-flash")
-        response = model.generate_content(prompt)
+    {text_b}
+    """
+    model = genai.GenerativeModel("gemini-2.0-flash")
+    response = model.generate_content(prompt)
 
-        st.subheader("📊 Gemini 分析結果")
-        st.write(response.text)
-        st.session_state["comparison_done"] = True
+    st.subheader("📊 Gemini 分析結果")
+    st.write(response.text)
 
-    # 顯示房屋資訊
+    st.session_state["comparison_done"] = True
+
+
+# ===============================
+# 側邊欄（即使切換狀態也保留）
+# ===============================
+with st.sidebar:
     if st.session_state["comparison_done"]:
         st.subheader("🏠 房屋資訊對照表")
         st.markdown(f"### 房屋 A\n{st.session_state['text_a']}")
         st.markdown(f"### 房屋 B\n{st.session_state['text_b']}")
+    else:
+        st.info("⚠️ 請先輸入房屋地址並比較")
 
-        # 簡單對話框
-        st.header("💬 對話框")
-        with st.form("chat_form", clear_on_submit=True):
-            user_input = st.text_input("你想問什麼？", placeholder="請輸入問題...")
-            submitted = st.form_submit_button("🚀 送出")
 
-        if submitted and user_input:
-            st.session_state["chat_history"].append(("👤", user_input))
-            chat_prompt = f"""
-            以下是兩間房屋的周邊資訊：
+# ===============================
+# 簡單對話框（結合地點資訊）
+# ===============================
+if st.session_state["comparison_done"]:
+    st.header("💬 簡單對話框")
 
-            {st.session_state['text_a']}
+    with st.form("chat_form", clear_on_submit=True):
+        user_input = st.text_input("你想問什麼？", placeholder="請輸入問題...")
+        submitted = st.form_submit_button("🚀 送出")
 
-            {st.session_state['text_b']}
+    if submitted and user_input:
+        st.session_state["chat_history"].append(("👤", user_input))
 
-            使用者問題：{user_input}
+        # ✅ 把房屋資訊帶進 Prompt
+        chat_prompt = f"""
+        以下是兩間房屋的周邊資訊：
 
-            請根據房屋周邊的生活機能與位置，提供有意義的回答。
-            """
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(chat_prompt)
-            st.session_state["chat_history"].append(("🤖", response.text))
+        {st.session_state['text_a']}
 
-        for role, msg in st.session_state["chat_history"]:
-            st.markdown(f"**{role}**：{msg}")
+        {st.session_state['text_b']}
+
+        使用者問題：{user_input}
+
+        請根據房屋周邊的生活機能與位置，提供有意義的回答。
+        """
+
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content(chat_prompt)
+        st.session_state["chat_history"].append(("🤖", response.text))
+
+    # 顯示對話紀錄
+    for role, msg in st.session_state["chat_history"]:
+        st.markdown(f"**{role}**：{msg}")
