@@ -101,7 +101,7 @@ def render_compare_page():
 
         lat_a, lng_a = geocode_address(addr_a, OPENCAGE_KEY)
         lat_b, lng_b = geocode_address(addr_b, OPENCAGE_KEY)
-        if not lat_a or not lat_b:
+        if lat_a is None or lat_b is None:
             st.error("無法解析其中一個地址")
             st.stop()
 
@@ -115,12 +115,11 @@ def render_compare_page():
         st.session_state["text_a"] = text_a_line
         st.session_state["text_b"] = text_b_line
 
-        # 短版 prompt
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
         model = genai.GenerativeModel("gemini-2.0-flash")
-        # ✅ 使用新版 prompt 呼叫
-        response = model.generate_content(prompt=prompt)
+        # ✅ 新版 generate_content 用法
+        response = model.generate_content(input=[{"role": "user", "content": prompt}])
 
         st.subheader("分析結果")
         st.write(response.text)
@@ -142,7 +141,7 @@ def render_compare_page():
             chat_prompt = f"房屋周邊資訊如下：\n房屋A: {text_a_line}\n房屋B: {text_b_line}\n使用者問題：{user_input}\n請根據周邊生活機能回答。"
 
             model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt=chat_prompt)
+            response = model.generate_content(input=[{"role": "user", "content": chat_prompt}])
             st.session_state["chat_history"].append(("AI", response.text))
 
         for role, msg in st.session_state["chat_history"]:
