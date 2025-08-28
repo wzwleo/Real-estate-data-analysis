@@ -5,9 +5,7 @@ def render_compare_page():
     import requests
     import google.generativeai as genai
 
-    # ===============================
     # 支援查詢的 OSM Tags
-    # ===============================
     OSM_TAGS = {
         "交通": {"public_transport": "stop_position"},
         "超商": {"shop": "convenience"},
@@ -17,9 +15,7 @@ def render_compare_page():
         "藥局": {"amenity": "pharmacy"}
     }
 
-    # ===============================
     # 工具函式
-    # ===============================
     def geocode_address(address: str, opencage_key: str):
         url = "https://api.opencagedata.com/geocode/v1/json"
         params = {"q": address, "key": opencage_key, "language": "zh-TW", "limit": 1}
@@ -64,9 +60,7 @@ def render_compare_page():
                         results[label].append(name)
         return results
 
-    # ===============================
     # UI
-    # ===============================
     st.title("房屋比較 + 對話助手")
 
     # 初始化狀態
@@ -108,25 +102,23 @@ def render_compare_page():
         info_a = query_osm(lat_a, lng_a, radius=200)
         info_b = query_osm(lat_b, lng_b, radius=200)
 
-        # 簡化房屋資訊為單行文字
         text_a_line = ", ".join([f"{k}:{len(v)}" for k, v in info_a.items()])
         text_b_line = ", ".join([f"{k}:{len(v)}" for k, v in info_b.items()])
 
         st.session_state["text_a"] = text_a_line
         st.session_state["text_b"] = text_b_line
 
-        # 短版 prompt
+        # prompt
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
         model = genai.GenerativeModel("gemini-2.0-flash")
-        # ✅ 新版 generate_content 用法
-        response = model.generate_content(input=prompt)
+        # ✅ 正確新版呼叫
+        response = model.generate_content(text_prompt=prompt)
 
         st.subheader("分析結果")
         st.write(response.text)
         st.session_state["comparison_done"] = True
 
-    # 顯示房屋資訊
     if st.session_state["comparison_done"]:
         st.subheader("房屋資訊對照表")
         st.markdown(f"### 房屋 A\n{st.session_state['text_a']}")
@@ -141,8 +133,7 @@ def render_compare_page():
             st.session_state["chat_history"].append(("使用者", user_input))
             chat_prompt = f"房屋周邊資訊如下：\n房屋A: {text_a_line}\n房屋B: {text_b_line}\n使用者問題：{user_input}\n請根據周邊生活機能回答。"
 
-            model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(input=chat_prompt)
+            response = model.generate_content(text_prompt=chat_prompt)
             st.session_state["chat_history"].append(("AI", response.text))
 
         for role, msg in st.session_state["chat_history"]:
