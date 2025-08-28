@@ -119,8 +119,8 @@ def render_compare_page():
         prompt = f"請比較兩間房屋的生活機能，列出優缺點並做總結：\n房屋A: {text_a_line}\n房屋B: {text_b_line}"
 
         model = genai.GenerativeModel("gemini-2.0-flash")
-        # ✅ 使用新版 prompt 呼叫
-        response = model.generate_content(prompt=prompt)
+        # ✅ 新版 generate_content 用法
+        response = model.generate_content(input=prompt)
 
         st.subheader("分析結果")
         st.write(response.text)
@@ -142,7 +142,7 @@ def render_compare_page():
             chat_prompt = f"房屋周邊資訊如下：\n房屋A: {text_a_line}\n房屋B: {text_b_line}\n使用者問題：{user_input}\n請根據周邊生活機能回答。"
 
             model = genai.GenerativeModel("gemini-2.0-flash")
-            response = model.generate_content(prompt=chat_prompt)
+            response = model.generate_content(input=chat_prompt)
             st.session_state["chat_history"].append(("AI", response.text))
 
         for role, msg in st.session_state["chat_history"]:
