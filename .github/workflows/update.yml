@@ -1,0 +1,36 @@
+name: Auto Download Data
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # 每天 00:00 UTC (台北時間早上 8 點)
+  workflow_dispatch:
+
+jobs:
+  run-download:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run download script
+        run: python download_data.py
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add buy_properties.csv || true
+          if git diff --cached --quiet; then
+            echo "No changes - skip commit"
+          else
+            git commit -m "Auto update data: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            git push
+          fi
