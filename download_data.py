@@ -9,6 +9,21 @@ import pandas as pd
 import re
 import time
 
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager  # 讓它自動下載驅動
+
+options = Options()
+options.add_argument("--headless=new")  # 新版 headless 模式更穩定
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--disable-gpu")
+options.add_argument("--window-size=1920,1080")
+
+driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
+
+
+
 # -----------------------------
 # Selenium headless 設定，不開啟瀏覽器畫面
 # -----------------------------
@@ -151,3 +166,4 @@ df.to_csv('buy_properties.csv', index=False, encoding='utf-8-sig')
 print(f"總共抓到 {len(all_properties)} 筆房屋資料，已儲存到 buy_properties.csv")
 
 driver.quit()
+
