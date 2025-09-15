@@ -162,8 +162,9 @@ while True:
 # 存成 CSV
 # -----------------------------
 df = pd.DataFrame(all_properties)
-df.to_csv('buy_properties.csv', index=False, encoding='utf-8-sig')
-print(f"總共抓到 {len(all_properties)} 筆房屋資料，已儲存到 buy_properties.csv")
+df.to_csv('./Data/Taichung-city_buy_properties.csv', index=False, encoding='utf-8-sig')
+print(f"總共抓到 {len(all_properties)} 筆房屋資料，已儲存到 Taichung-city_buy_properties.csv")
 
 driver.quit()
+
 
