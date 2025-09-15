@@ -4,3 +4,6 @@ folium
 google-generativeai
 python-dotenv
 streamlit-folium
+selenium
+beautifulsoup4
+pandas
