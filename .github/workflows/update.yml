@@ -27,7 +27,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add buy_properties.csv || true
+          git add ./Data/Taichung-city_buy_properties.csv || true
           if git diff --cached --quiet; then
             echo "No changes - skip commit"
           else
