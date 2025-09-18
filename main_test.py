@@ -9,10 +9,6 @@ def main():
     主應用程式入口
     """
     st.set_page_config(layout="wide")
-
-    # ✅ 初始化收藏清單
-    if 'favorites' not in st.session_state:
-        st.session_state.favorites = set()
     
     # 初始化頁面狀態
     if 'current_page' not in st.session_state:
