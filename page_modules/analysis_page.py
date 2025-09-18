@@ -17,7 +17,6 @@ def get_favorites_data():
     # 如果沒有 all_properties_df，則從 filtered_df 取得
     elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
         all_df = st.session_state.filtered_df
-        st.warning("⚠️ 分析僅基於當前篩選結果，建議先搜尋所有資料以獲得完整分析")
     
     if all_df is None or all_df.empty:
         return pd.DataFrame()
