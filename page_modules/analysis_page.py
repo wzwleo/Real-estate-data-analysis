@@ -1,7 +1,4 @@
 import streamlit as st
-import requests
-import math
-from streamlit.components.v1 import html
 
 
 def render_analysis_page():
