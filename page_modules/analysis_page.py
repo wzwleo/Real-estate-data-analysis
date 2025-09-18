@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 
 def render_analysis_page():
-    st.title("📊 分析頁面").
+    st.title("📊 分析頁面")
     
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
