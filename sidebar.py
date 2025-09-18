@@ -18,9 +18,7 @@ def render_sidebar():
         st.session_state.current_page = 'analysis'
         # 重置搜尋頁面
         if 'current_search_page' in st.session_state:
-            del st.session_state.current_search_page
-    if st.sidebar.button("🏡 房屋比較", use_container_width=True, key="compare_button"):
-        st.session_state.current_page = 'compare'     
+            del st.session_state.current_search_page   
  
 
     # 設置區域
