@@ -71,15 +71,6 @@ def render_favorites_list(fav_df):
             
             st.markdown("---")
 
-def render_favorites_analysis(fav_df):
-    """
-    渲染收藏房產分析
-    """
-    if fav_df.empty:
-        return
-    
-    st.subheader("📊 收藏分析")
-
 
 def render_analysis_page():
     """
@@ -112,14 +103,7 @@ def render_analysis_page():
         elif not st.session_state.favorites:
             st.info("⭐ 你尚未收藏任何房產，請先到房產列表頁面收藏一些房產")
         else:
-            # 顯示分析標籤
-            tab1, tab2 = st.tabs(["📋 收藏清單", "📊 數據分析"])
-            
-            with tab1:
-                render_favorites_list(fav_df)
-            
-            with tab2:
-                render_favorites_analysis(fav_df)
+            render_favorites_list(fav_df)
     
     elif analysis_scope == "已售出房產":
         st.info("🚧 已售出房產分析功能開發中...")
