@@ -23,9 +23,6 @@ def render_analysis_page():
             return
 
         # 假設總資料存在 st.session_state.all_properties_df
-        if 'all_properties_df' not in st.session_state:
-            st.warning("❌ 尚未載入房產資料")
-            return
         all_df = st.session_state.all_properties_df
         fav_ids = st.session_state.favorites
         fav_df = all_df[all_df['編號'].isin(fav_ids)]
