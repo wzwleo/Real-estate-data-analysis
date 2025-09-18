@@ -37,9 +37,6 @@ def render_favorites_list(fav_df):
         st.info("⭐ 你尚未收藏任何房產")
         return
     
-    # 顯示收藏數量統計
-    st.metric("收藏總數", len(fav_df))
-    
     # 顯示收藏清單
     for idx, (_, row) in enumerate(fav_df.iterrows()):
         with st.container():
