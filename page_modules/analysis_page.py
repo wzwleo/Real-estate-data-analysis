@@ -80,42 +80,7 @@ def render_favorites_analysis(fav_df):
         return
     
     st.subheader("📊 收藏分析")
-    
-    # 基本統計
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        avg_price = fav_df['總價(萬)'].mean()
-        st.metric("平均總價", f"{avg_price:.1f} 萬")
-    
-    with col2:
-        avg_area = fav_df['建坪'].mean() if pd.notna(fav_df['建坪']).any() else 0
-        st.metric("平均建坪", f"{avg_area:.1f} 坪")
-    
-    with col3:
-        # 計算平均單價
-        fav_df_copy = fav_df.copy()
-        fav_df_copy = fav_df_copy[pd.notna(fav_df_copy['建坪']) & (fav_df_copy['建坪'] > 0)]
-        if not fav_df_copy.empty:
-            fav_df_copy['單價'] = (fav_df_copy['總價(萬)'] * 10000) / fav_df_copy['建坪']
-            avg_unit_price = fav_df_copy['單價'].mean()
-            st.metric("平均單價", f"{avg_unit_price:,.0f} /坪")
-        else:
-            st.metric("平均單價", "N/A")
-    
-    with col4:
-        avg_age = fav_df['屋齡'].mean() if pd.notna(fav_df['屋齡']).any() else 0
-        st.metric("平均屋齡", f"{avg_age:.1f} 年")
-    
-    # 類型分布
-    if '類型' in fav_df.columns:
-        st.subheader("🏠 房產類型分布")
-        type_dist = fav_df['類型'].value_counts()
-        st.bar_chart(type_dist)
-    
-    # 價格分布
-    st.subheader("💰 總價分布")
-    st.histogram(fav_df['總價(萬)'], bins=10)
+
 
 def render_analysis_page():
     """
