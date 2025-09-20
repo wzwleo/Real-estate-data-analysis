@@ -88,22 +88,23 @@ def render_analysis_page():
             key="analysis_scope"
         )
     
-    tab1, tab2 = st.tabs(["一對一比較, 多資料圖表分析"])
-    
-    # 根據選擇的範圍進行分析
-    if analysis_scope == "⭐收藏類別":
-        fav_df = get_favorites_data()
+    tab1, tab2 = st.tabs(["一對一比較", "多資料圖表分析"])
+    with tab1:
         
-        if fav_df.empty and st.session_state.favorites:
-            st.warning("⚠️ 找不到收藏房產的詳細資料，請先在搜尋頁面載入房產資料")
-            st.info("💡 提示：請先到搜尋頁面進行搜尋，載入房產資料後再回到分析頁面")
-        elif not st.session_state.favorites:
-            st.info("⭐ 你尚未收藏任何房產，請先到房產列表頁面收藏一些房產")
-        else:
-            render_favorites_list(fav_df)
-    
-    elif analysis_scope == "已售出房產":
-        st.info("🚧 已售出房產分析功能開發中...")
+        # 根據選擇的範圍進行分析
+        if analysis_scope == "⭐收藏類別":
+            fav_df = get_favorites_data()
+            
+            if fav_df.empty and st.session_state.favorites:
+                st.warning("⚠️ 找不到收藏房產的詳細資料，請先在搜尋頁面載入房產資料")
+                st.info("💡 提示：請先到搜尋頁面進行搜尋，載入房產資料後再回到分析頁面")
+            elif not st.session_state.favorites:
+                st.info("⭐ 你尚未收藏任何房產，請先到房產列表頁面收藏一些房產")
+            else:
+                render_favorites_list(fav_df)
+        
+        elif analysis_scope == "已售出房產":
+            st.info("🚧 已售出房產分析功能開發中...")
 
 # 輔助函數：在主程式中確保資料同步
 def ensure_data_sync():
