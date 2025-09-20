@@ -33,10 +33,6 @@ def render_favorites_list(fav_df):
     """
     st.subheader("⭐ 我的收藏清單")
     
-    if fav_df.empty:
-        st.info("⭐ 你尚未收藏任何房產")
-        return
-    
     # 顯示收藏清單
     for idx, (_, row) in enumerate(fav_df.iterrows()):
         with st.container():
