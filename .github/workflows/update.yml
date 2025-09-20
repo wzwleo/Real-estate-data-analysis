@@ -1,42 +1,63 @@
-name: Auto Download Data
+name: Auto Download Data (Incremental)
 
 permissions:
-  contents: write  # 允許 GitHub Actions 對 repo 寫入
+  contents: write
+  actions: read
 
 on:
   schedule:
-    - cron: '0 0 * * *'  # 每天 00:00 UTC (台北時間早上 8 點)
+    - cron: '0 0 * * *'  # 每天 00:00 UTC
   workflow_dispatch:
+    inputs:
+      single_city:
+        description: '指定單一城市 (可選)'
+        required: false
+        type: string
 
 jobs:
   run-download:
     runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 小時
+    
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}  # 預設 token，確保有正確權限
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Run download script
-        run: python download_data.py
-
-      - name: Commit and push changes
+      - name: Install system dependencies
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ./Data/*.csv || true
-          if git diff --cached --quiet; then
-            echo "No changes - skip commit"
-          else
-            git commit -m "Auto update data: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-            git push
-          fi
+          sudo apt-get update
+          sudo apt-get install -y wget unzip xvfb
 
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install selenium beautifulsoup4 pandas webdriver-manager
+
+      - name: Run download script with incremental commits
+        env:
+          SINGLE_CITY: ${{ github.event.inputs.single_city }}
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          python download_data_incremental.py
+
+      - name: Final status
+        run: |
+          echo "=== Final Data directory status ==="
+          ls -la ./Data/ || echo "No Data directory found"
+          echo "=== Git status ==="
+          git status
