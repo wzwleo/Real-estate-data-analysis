@@ -17,11 +17,11 @@ import os
 # 目標城市列表 (台灣主要縣市 buy 頁面)
 # -----------------------------
 cities = [
-    "Taipei-city", "New-Taipei-city", "Taoyuan-city", "Taichung-city",
-    "Tainan-city", "Kaohsiung-city", "Keelung-city", "Hsinchu-city",
-    "Hsinchu-county", "Miaoli-county", "Changhua-county", "Nantou-county",
-    "Yunlin-county", "Chiayi-county", "Chiayi-city", "Pingtung-county",
-    "Yilan-county", "Hualien-county", "Taitung-county", "Penghu-county",
+    "Taipei-city", "NewTaipei-city", "Keelung-city", "Yilan-county",
+    "Hsinchu-city", "Hsinchu-county", "Taoyuan-city", "Miaoli-county",
+    "Taichung-city", "Changhua-county", "Nantou-county", "Yunlin-county",
+    "Chiayi-city", "Chiayi-county", "Tainan-city", "Kaohsiung-city",
+    "Pingtung-county", "Penghu-county", "Taitung-county", "Hualien-county",
     "Kinmen-county", "Lienchiang-county"
 ]
 
@@ -157,3 +157,4 @@ for city in cities:
 
 driver.quit()
 print("所有城市抓取完成。")
+
