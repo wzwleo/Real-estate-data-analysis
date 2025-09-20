@@ -42,7 +42,7 @@ def render_sidebar():
             value=st.session_state.get("GOOGLEMAP", ""),
             key="Google_MAP_input"
         )
-        if st.button("設定 Google MAP KEY", key="Google_MAP_set"):
+        if st.button("設定", key="Google_MAP_set"):
             st.session_state["Google_MAP_KEY"] = Google_MAP_input
             st.success("✅ Google_MAP API KEY 已設定")
     
