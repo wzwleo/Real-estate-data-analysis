@@ -68,7 +68,7 @@ def render_analysis_page():
     with col4:
         analysis_scope = st.selectbox(
             "選擇分析範圍",
-            ["⭐收藏類別", "已售出房產"],
+            ["⭐收藏類別"],
             key="analysis_scope"
         )
     
