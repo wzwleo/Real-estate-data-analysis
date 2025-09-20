@@ -19,14 +19,17 @@ def get_city_options(data_dir="./Data"):
 
 def filter_properties(df, filters):
     """
-    根據篩選條件過濾房產資料
+    根據篩選條件過濾房產資料（支援模糊搜尋類型）
     """
     filtered_df = df.copy()
     
     try:
-        # 房產類型篩選
+        # 🔑 房產類型篩選（模糊搜尋）
         if filters['housetype'] != "不限":
-            filtered_df = filtered_df[filtered_df['類型'] == filters['housetype']]
+            if '類型' in filtered_df.columns:
+                filtered_df = filtered_df[
+                    filtered_df['類型'].astype(str).str.contains(filters['housetype'], case=False, na=False)
+                ]
         
         # 預算篩選（總價萬元）
         if filters['budget_min'] > 0:
@@ -48,8 +51,6 @@ def filter_properties(df, filters):
         
         # 車位篩選
         if filters['car_grip'] == "需要":
-            # 假設有車位的資料在某個欄位中，這裡需要根據實際資料結構調整
-            # 例如：如果有 '車位' 欄位，且值為 "有" 或數量大於0
             if '車位' in filtered_df.columns:
                 filtered_df = filtered_df[
                     (filtered_df['車位'].notna()) & 
