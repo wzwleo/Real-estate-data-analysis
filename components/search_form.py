@@ -16,7 +16,7 @@ def render_search_form():
         with col1:
             # 下拉選單
             selected_label = st.selectbox("請選擇城市：", list(options.keys()))
-            housetype_change = st.selectbox("請選擇房產類別；", housetype, key="housetype")
+            housetype_change = st.selectbox("請選擇房產類別:", housetype, key="housetype")
                      
             
         with col2:
