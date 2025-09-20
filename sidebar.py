@@ -46,8 +46,6 @@ def render_sidebar():
             st.session_state["OPENCAGE_KEY"] = opencage_input
             st.success("✅ OpenCage API KEY 已設定")
     
-    with st.sidebar.expander("🔄更新資料"):
-        st.write("施工中...")
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
         st.sidebar.write("施工中...")
