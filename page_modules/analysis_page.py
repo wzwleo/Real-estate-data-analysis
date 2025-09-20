@@ -68,7 +68,7 @@ def render_analysis_page():
     with col4:
         analysis_scope = st.selectbox(
             "選擇分析範圍",
-            ["⭐收藏類別"],
+            ["⭐收藏類別", "已售出房產"],
             key="analysis_scope"
         )
     
@@ -104,12 +104,38 @@ def render_analysis_page():
             if choice_a and choice_b and choice_a != choice_b:
                 house_a = fav_df.iloc[options[options == choice_a].index[0]]
                 house_b = fav_df.iloc[options[options == choice_b].index[0]]
-                
-                st.write("### 📑 房屋 A")
-                st.json(house_a.to_dict())
-                
-                st.write("### 📑 房屋 B")
-                st.json(house_b.to_dict())
+
+                # 建立比較表格
+                compare_data = {
+                    "項目": ["標題", "地址", "總價(萬)", "建坪", "單價(元/坪)", "格局", "樓層", "屋齡", "類型", "車位"],
+                    "房屋 A": [
+                        house_a.get("標題", ""),
+                        house_a.get("地址", ""),
+                        house_a.get("總價(萬)", ""),
+                        house_a.get("建坪", ""),
+                        f"{(house_a['總價(萬)']*10000/house_a['建坪']):,.0f}" if pd.notna(house_a["建坪"]) and house_a["建坪"]>0 else "—",
+                        house_a.get("格局", ""),
+                        house_a.get("樓層", ""),
+                        house_a.get("屋齡", ""),
+                        house_a.get("類型", ""),
+                        house_a.get("車位", "")
+                    ],
+                    "房屋 B": [
+                        house_b.get("標題", ""),
+                        house_b.get("地址", ""),
+                        house_b.get("總價(萬)", ""),
+                        house_b.get("建坪", ""),
+                        f"{(house_b['總價(萬)']*10000/house_b['建坪']):,.0f}" if pd.notna(house_b["建坪"]) and house_b["建坪"]>0 else "—",
+                        house_b.get("格局", ""),
+                        house_b.get("樓層", ""),
+                        house_b.get("屋齡", ""),
+                        house_b.get("類型", ""),
+                        house_b.get("車位", "")
+                    ]
+                }
+                compare_df = pd.DataFrame(compare_data)
+                st.dataframe(compare_df, use_container_width=True)
+
             else:
                 st.warning("⚠️ 請選擇兩個不同的房屋進行比較")
 
