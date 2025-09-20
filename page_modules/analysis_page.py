@@ -88,7 +88,7 @@ def render_analysis_page():
             key="analysis_scope"
         )
     
-    tab1, tab2 = st.tabs(["一對一比較", "多資料圖表分析"])
+    tab1, tab2 = st.tabs(["個別分析", "市場趨勢分析"])
     with tab1:
         
         # 根據選擇的範圍進行分析
