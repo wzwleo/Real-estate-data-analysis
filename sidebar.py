@@ -31,7 +31,7 @@ def render_sidebar():
             value=st.session_state.get("GEMINI_KEY", ""),
             key="gemini_input"
         )
-        if st.button("設定 Gemini KEY", key="gemini_set"):
+        if st.button("設定", key="gemini_set"):
             st.session_state["GEMINI_KEY"] = api_key_input
             st.success("✅ Gemini API KEY 已設定")
     
