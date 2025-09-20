@@ -88,7 +88,7 @@ def render_analysis_page():
             key="analysis_scope"
         )
     
-    st.markdown("---")
+    tab1, tab2 = st.tabs(["一對一比較, 多資料圖表分析"])
     
     # 根據選擇的範圍進行分析
     if analysis_scope == "⭐收藏類別":
