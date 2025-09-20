@@ -35,16 +35,16 @@ def render_sidebar():
             st.session_state["GEMINI_KEY"] = api_key_input
             st.success("✅ Gemini API KEY 已設定")
     
-    with st.sidebar.expander("🗺️ Google MAP API KEY"):
-        Google_MAP_input = st.text_input(
-            "請輸入 Google MAP 金鑰", 
+    with st.sidebar.expander("🗺️ Google Maps API KEY"):
+        google_maps_input = st.text_input(
+            "請輸入 Google Maps API 金鑰", 
             type="password", 
-            value=st.session_state.get("GOOGLEMAP", ""),
-            key="Google_MAP_input"
+            value=st.session_state.get("GOOGLE_MAPS_KEY", ""),
+            key="google_maps_input"
         )
-        if st.button("設定", key="Google_MAP_set"):
-            st.session_state["Google_MAP_KEY"] = Google_MAP_input
-            st.success("✅ Google MAP API KEY 已設定")
+        if st.button("設定 Google Maps KEY", key="google_maps_set"):
+            st.session_state["GOOGLE_MAPS_KEY"] = google_maps_input
+            st.success("✅ Google Maps API KEY 已設定")
     
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
