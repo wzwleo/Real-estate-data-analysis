@@ -35,16 +35,16 @@ def render_sidebar():
             st.session_state["GEMINI_KEY"] = api_key_input
             st.success("✅ Gemini API KEY 已設定")
     
-    with st.sidebar.expander("🗺️ OpenCage API KEY"):
-        opencage_input = st.text_input(
+    with st.sidebar.expander("🗺️ Google MAP API KEY"):
+        Google_MAP_input = st.text_input(
             "請輸入 OpenCage 金鑰", 
             type="password", 
-            value=st.session_state.get("OPENCAGE_KEY", ""),
-            key="opencage_input"
+            value=st.session_state.get("GOOGLEMAP", ""),
+            key="Google_MAP_input"
         )
-        if st.button("設定 OpenCage KEY", key="opencage_set"):
-            st.session_state["OPENCAGE_KEY"] = opencage_input
-            st.success("✅ OpenCage API KEY 已設定")
+        if st.button("設定 Google MAP KEY", key="Google_MAP_set"):
+            st.session_state["Google_MAP_KEY"] = Google_MAP_input
+            st.success("✅ Google_MAP API KEY 已設定")
     
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
