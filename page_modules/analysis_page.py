@@ -176,8 +176,13 @@ def render_analysis_page():
             gemini_key = st.session_state.get("GEMINI_KEY", "")
 
             if choice_a and choice_b and choice_a != choice_b:
-                house_a = fav_df.iloc[options[options == choice_a].index[0]]
-                house_b = fav_df.iloc[options[options == choice_b].index[0]]
+                # ✅ 修改這裡：用布林篩選 + iloc[0] 避免 index 對不上的問題
+                if (fav_df[options == choice_a].empty) or (fav_df[options == choice_b].empty):
+                    st.error("⚠️ 找不到選取的房屋資料")
+                    st.stop()
+
+                house_a = fav_df[options == choice_a].iloc[0]
+                house_b = fav_df[options == choice_b].iloc[0]
 
                 addr_a, addr_b = house_a["地址"], house_b["地址"]
 
@@ -235,6 +240,11 @@ def render_analysis_page():
 
             else:
                 st.warning("⚠️ 請選擇兩個不同的房屋進行比較")
+
+    # ---------------- 市場趨勢 ----------------
+    with tab3:
+        st.subheader("📈 市場趨勢分析")
+        st.info("🚧 市場趨勢分析功能開發中...")
 
     # ---------------- 市場趨勢 ----------------
     with tab3:
