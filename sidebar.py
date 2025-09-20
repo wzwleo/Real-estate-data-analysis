@@ -37,14 +37,14 @@ def render_sidebar():
     
     with st.sidebar.expander("🗺️ Google MAP API KEY"):
         Google_MAP_input = st.text_input(
-            "請輸入 OpenCage 金鑰", 
+            "請輸入 Google MAP 金鑰", 
             type="password", 
             value=st.session_state.get("GOOGLEMAP", ""),
             key="Google_MAP_input"
         )
         if st.button("設定", key="Google_MAP_set"):
             st.session_state["Google_MAP_KEY"] = Google_MAP_input
-            st.success("✅ Google_MAP API KEY 已設定")
+            st.success("✅ Google MAP API KEY 已設定")
     
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
