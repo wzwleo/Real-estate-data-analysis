@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 
+# ===========================
+# 收藏與分析功能
+# ===========================
 def get_favorites_data():
     """
     取得收藏房產的資料
@@ -154,3 +157,66 @@ def ensure_data_sync():
         st.session_state.all_properties_df = st.session_state.filtered_df.copy()
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
+
+
+# ===========================
+# 側邊欄
+# ===========================
+def render_sidebar():
+    """
+    渲染側邊欄導航和設置
+    """
+    st.sidebar.title("📑 導航")
+    page = st.sidebar.radio(
+        "選擇頁面",
+        ["🏠 首頁", "🔍 搜尋頁面", "📊 分析頁面"],
+        key="nav_radio"
+    )
+
+    if page == "🏠 首頁":
+        st.session_state.current_page = 'home'
+    elif page == "🔍 搜尋頁面":
+        st.session_state.current_page = 'search'
+    elif page == "📊 分析頁面":
+        st.session_state.current_page = 'analysis'
+
+    st.sidebar.title("⚙️ 設置")
+    st.session_state["GEMINI_KEY"] = st.sidebar.text_input(
+        "Gemini API Key",
+        type="password",
+        value=st.session_state.get("GEMINI_KEY", "")
+    )
+    st.session_state["GOOGLE_MAPS_KEY"] = st.sidebar.text_input(
+        "Google Maps API Key",
+        type="password",
+        value=st.session_state.get("GOOGLE_MAPS_KEY", "")
+    )
+
+
+# ===========================
+# 主程式
+# ===========================
+def main():
+    st.set_page_config(page_title="房產分析系統", layout="wide")
+
+    # 初始狀態
+    if "current_page" not in st.session_state:
+        st.session_state.current_page = "home"
+
+    render_sidebar()
+    ensure_data_sync()
+
+    if st.session_state.current_page == "home":
+        st.title("🏠 首頁")
+        st.write("歡迎使用房產分析系統")
+
+    elif st.session_state.current_page == "search":
+        st.title("🔍 搜尋頁面")
+        st.info("🚧 搜尋功能開發中...")
+
+    elif st.session_state.current_page == "analysis":
+        render_analysis_page()
+
+
+if __name__ == "__main__":
+    main()
