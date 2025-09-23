@@ -10,9 +10,7 @@ import google.generativeai as genai
 # 收藏與分析功能
 # ===========================
 def get_favorites_data():
-    """
-    取得收藏房產的資料
-    """
+    """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
         return pd.DataFrame()
     
@@ -31,9 +29,7 @@ def get_favorites_data():
 
 
 def render_favorites_list(fav_df):
-    """
-    渲染收藏清單
-    """
+    """渲染收藏清單"""
     st.subheader("⭐ 我的收藏清單")
     
     for idx, (_, row) in enumerate(fav_df.iterrows()):
@@ -176,7 +172,6 @@ def render_analysis_page():
             gemini_key = st.session_state.get("GEMINI_KEY", "")
 
             if choice_a and choice_b and choice_a != choice_b:
-                # ✅ 修改這裡：用布林篩選 + iloc[0] 避免 index 對不上的問題
                 if (fav_df[options == choice_a].empty) or (fav_df[options == choice_b].empty):
                     st.error("⚠️ 找不到選取的房屋資料")
                     st.stop()
@@ -186,7 +181,8 @@ def render_analysis_page():
 
                 addr_a, addr_b = house_a["地址"], house_b["地址"]
 
-                radius = st.slider("搜尋半徑 (公尺)", min_value=100, max_value=500, value=50, step=50)
+                # ✅ 半徑 slider 最大 500，預設 500
+                radius = st.slider("搜尋半徑 (公尺)", min_value=100, max_value=500, value=500, step=50)
 
                 st.subheader("選擇要比較的生活機能類別")
                 selected_categories = []
@@ -212,18 +208,23 @@ def render_analysis_page():
                     text_a = format_info(addr_a, info_a)
                     text_b = format_info(addr_b, info_b)
 
-                    # 地圖
-                    st.subheader("📍 房屋 A 周邊地圖")
-                    m_a = folium.Map(location=[lat_a, lng_a], zoom_start=15)
-                    folium.Marker([lat_a, lng_a], popup=f"房屋 A：{addr_a}", icon=folium.Icon(color="red", icon="home")).add_to(m_a)
-                    add_markers(m_a, info_a, "red")
-                    html(m_a._repr_html_(), height=400)
+                    # ✅ 地圖左右並排
+                    st.subheader("📍 房屋周邊地圖比較")
+                    col_map1, col_map2 = st.columns(2)
 
-                    st.subheader("📍 房屋 B 周邊地圖")
-                    m_b = folium.Map(location=[lat_b, lng_b], zoom_start=15)
-                    folium.Marker([lat_b, lng_b], popup=f"房屋 B：{addr_b}", icon=folium.Icon(color="blue", icon="home")).add_to(m_b)
-                    add_markers(m_b, info_b, "blue")
-                    html(m_b._repr_html_(), height=400)
+                    with col_map1:
+                        st.markdown("### 房屋 A")
+                        m_a = folium.Map(location=[lat_a, lng_a], zoom_start=15)
+                        folium.Marker([lat_a, lng_a], popup=f"房屋 A：{addr_a}", icon=folium.Icon(color="red", icon="home")).add_to(m_a)
+                        add_markers(m_a, info_a, "red")
+                        html(m_a._repr_html_(), height=400)
+
+                    with col_map2:
+                        st.markdown("### 房屋 B")
+                        m_b = folium.Map(location=[lat_b, lng_b], zoom_start=15)
+                        folium.Marker([lat_b, lng_b], popup=f"房屋 B：{addr_b}", icon=folium.Icon(color="blue", icon="home")).add_to(m_b)
+                        add_markers(m_b, info_b, "blue")
+                        html(m_b._repr_html_(), height=400)
 
                     # Gemini 分析
                     genai.configure(api_key=gemini_key)
