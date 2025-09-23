@@ -186,64 +186,57 @@ def render_analysis_page():
 
                 addr_a, addr_b = house_a["地址"], house_b["地址"]
 
-                radius = st.slider("搜尋半徑 (公尺)", min_value=100, max_value=500, value=500, step=50)
+                radius = st.slider("搜尋半徑 (公尺)", min_value=100, max_value=500, value=50, step=50)
 
                 st.subheader("選擇要比較的生活機能類別")
-selected_categories = []
-cols = st.columns(3)
-for idx, cat in enumerate(PLACE_TYPES.keys()):
-    if cols[idx % 3].checkbox(cat, value=True):
-        selected_categories.append(cat)
+                selected_categories = []
+                cols = st.columns(3)
+                for idx, cat in enumerate(PLACE_TYPES.keys()):
+                    if cols[idx % 3].checkbox(cat, value=True):
+                        selected_categories.append(cat)
 
-if st.button("開始比較"):
-    if not google_key or not gemini_key:
-        st.error("❌ 請先在側邊欄輸入 API Key")
-        st.stop()
+                if st.button("開始比較"):
+                    if not google_key or not gemini_key:
+                        st.error("❌ 請先在側邊欄輸入 API Key")
+                        st.stop()
 
-    lat_a, lng_a = geocode_address(addr_a, google_key)
-    lat_b, lng_b = geocode_address(addr_b, google_key)
-    if not lat_a or not lat_b:
-        st.error("❌ 無法解析其中一個地址")
-        st.stop()
+                    lat_a, lng_a = geocode_address(addr_a, google_key)
+                    lat_b, lng_b = geocode_address(addr_b, google_key)
+                    if not lat_a or not lat_b:
+                        st.error("❌ 無法解析其中一個地址")
+                        st.stop()
 
-    info_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius)
-    info_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius)
+                    info_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius)
+                    info_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius)
 
-    text_a = format_info(addr_a, info_a)
-    text_b = format_info(addr_b, info_b)
+                    text_a = format_info(addr_a, info_a)
+                    text_b = format_info(addr_b, info_b)
 
-    # --- 地圖左右顯示 ---
-    st.subheader("📍 房屋周邊地圖")
-    col_a, col_b = st.columns(2)
+                    # 地圖
+                    st.subheader("📍 房屋 A 周邊地圖")
+                    m_a = folium.Map(location=[lat_a, lng_a], zoom_start=15)
+                    folium.Marker([lat_a, lng_a], popup=f"房屋 A：{addr_a}", icon=folium.Icon(color="red", icon="home")).add_to(m_a)
+                    add_markers(m_a, info_a, "red")
+                    html(m_a._repr_html_(), height=400)
 
-    with col_a:
-        st.markdown("### 房屋 A")
-        m_a = folium.Map(location=[lat_a, lng_a], zoom_start=15)
-        folium.Marker([lat_a, lng_a], popup=f"房屋 A：{addr_a}", 
-                      icon=folium.Icon(color="red", icon="home")).add_to(m_a)
-        add_markers(m_a, info_a, "red")
-        html(m_a._repr_html_(), height=400)
+                    st.subheader("📍 房屋 B 周邊地圖")
+                    m_b = folium.Map(location=[lat_b, lng_b], zoom_start=15)
+                    folium.Marker([lat_b, lng_b], popup=f"房屋 B：{addr_b}", icon=folium.Icon(color="blue", icon="home")).add_to(m_b)
+                    add_markers(m_b, info_b, "blue")
+                    html(m_b._repr_html_(), height=400)
 
-    with col_b:
-        st.markdown("### 房屋 B")
-        m_b = folium.Map(location=[lat_b, lng_b], zoom_start=15)
-        folium.Marker([lat_b, lng_b], popup=f"房屋 B：{addr_b}", 
-                      icon=folium.Icon(color="blue", icon="home")).add_to(m_b)
-        add_markers(m_b, info_b, "blue")
-        html(m_b._repr_html_(), height=400)
+                    # Gemini 分析
+                    genai.configure(api_key=gemini_key)
+                    model = genai.GenerativeModel("gemini-2.0-flash")
+                    prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
+                    並列出優缺點與結論：
+                    {text_a}
+                    {text_b}
+                    """
+                    response = model.generate_content(prompt)
 
-    # Gemini 分析
-    genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
-    並列出優缺點與結論：
-    {text_a}
-    {text_b}
-    """
-    response = model.generate_content(prompt)
-
-    st.subheader("📊 Gemini 分析結果")
-    st.write(response.text)
+                    st.subheader("📊 Gemini 分析結果")
+                    st.write(response.text)
 
             else:
                 st.warning("⚠️ 請選擇兩個不同的房屋進行比較")
