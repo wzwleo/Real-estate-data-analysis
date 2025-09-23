@@ -186,7 +186,7 @@ def render_analysis_page():
 
                 addr_a, addr_b = house_a["地址"], house_b["地址"]
 
-                radius = st.slider("搜尋半徑 (公尺)", min_value=100, max_value=2000, value=500, step=50)
+                radius = st.slider("搜尋半徑 (公尺)", min_value=100, max_value=500, value=50, step=50)
 
                 st.subheader("選擇要比較的生活機能類別")
                 selected_categories = []
