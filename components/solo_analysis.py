@@ -1,7 +1,23 @@
 import streamlit as st
 import pandas as pd
-from page_modules.analysis_page import get_favorites_data  # 或實際存放 get_favorites_data 的模組
 
+def get_favorites_data():
+    """取得收藏房產的資料"""
+    if 'favorites' not in st.session_state or not st.session_state.favorites:
+        return pd.DataFrame()
+    
+    all_df = None
+    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+        all_df = st.session_state.all_properties_df
+    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+        all_df = st.session_state.filtered_df
+    
+    if all_df is None or all_df.empty:
+        return pd.DataFrame()
+    
+    fav_ids = st.session_state.favorites
+    fav_df = all_df[all_df['編號'].isin(fav_ids)].copy()
+    return fav_df
 
 def tab1_module():
     st.header("個別分析")
