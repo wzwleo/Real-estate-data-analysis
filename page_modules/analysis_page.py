@@ -348,3 +348,7 @@ def main():
         st.title("🔍 搜尋頁面")
         st.info("🚧 搜尋功能開發中...")
     elif st.session_state.current_page == "analysis
+
+
+if __name__ == "__main__":
+    main()
