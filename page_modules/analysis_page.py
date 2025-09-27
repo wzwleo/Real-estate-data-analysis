@@ -240,6 +240,9 @@ def render_favorites_list(fav_df):
                 st.markdown(f'[🔗 物件連結](https://www.sinyi.com.tw/buy/house/{row["編號"]}?breadcrumb=list)')
             st.markdown("---")
 
+def render_analysis_page():
+    st.title("📊 分析頁面")
+    st.info("此頁面保留原有收藏與 Gemini 分析功能。")
 
 # ===============================
 # 側邊欄與主程式
