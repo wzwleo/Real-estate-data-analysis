@@ -210,16 +210,7 @@ def render_analysis_page():
 
     # ---------------- 個別分析 ----------------
     with tab1:
-        if analysis_scope == "⭐收藏類別":
-            fav_df = get_favorites_data()
-            if fav_df.empty and st.session_state.favorites:
-                st.warning("⚠️ 找不到收藏房產的詳細資料，請先在搜尋頁面載入房產資料")
-            elif not st.session_state.favorites:
-                st.info("⭐ 你尚未收藏任何房產")
-            else:
-                render_favorites_list(fav_df)
-        else:
-            st.info("🚧 已售出房產分析功能開發中...")
+        tab1_module.render()
 
     # ---------------- 房屋比較 ----------------
     with tab2:
