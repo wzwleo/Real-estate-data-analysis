@@ -2,12 +2,11 @@ import streamlit as st
 import pandas as pd
 import requests
 import math
-import folium
 from streamlit.components.v1 import html
 import google.generativeai as genai
 
 # ===============================
-# 共用資料
+# 類別與顏色設定
 # ===============================
 PLACE_TYPES_MAP = {
     "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
@@ -25,6 +24,9 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
+# ===============================
+# 通用距離計算
+# ===============================
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -35,15 +37,14 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c
 
 # ===============================
-# 地址周邊查詢（半徑固定 500 公尺）
+# 地址周邊查詢
 # ===============================
 def render_address_search():
     st.title("🏙️ 地址周邊查詢（多類別按鈕 + 彩色標記 + 關鍵字顏色）")
 
     google_api_key = st.session_state.get("GOOGLE_MAPS_KEY", "")
     address = st.text_input("輸入地址")
-    radius = 500  # 🔒 固定 500 公尺
-    st.write("搜尋半徑固定：500 公尺")
+    radius = 500  # 🔒 固定半徑 500 公尺
     keyword = st.text_input("輸入關鍵字")
 
     st.subheader("選擇大類別（可多選）")
@@ -53,8 +54,7 @@ def render_address_search():
         color = CATEGORY_COLORS[cat]
         with cols[i]:
             st.markdown(
-                f'<span style="display:inline-block;width:12px;height:12px;'
-                f'border-radius:50%;background:{color};margin-right:4px"></span>',
+                f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:{color};margin-right:4px"></span>',
                 unsafe_allow_html=True,
             )
             if st.toggle(cat, key=f"cat_{cat}"):
@@ -62,8 +62,7 @@ def render_address_search():
 
     if keyword:
         st.markdown(
-            f'<span style="display:inline-block;width:12px;height:12px;'
-            f'border-radius:50%;background:{CATEGORY_COLORS["關鍵字"]};margin-right:4px"></span>'
+            f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:{CATEGORY_COLORS["關鍵字"]};margin-right:4px"></span>'
             f'**關鍵字搜尋結果顏色**',
             unsafe_allow_html=True,
         )
@@ -80,10 +79,8 @@ def render_address_search():
             return
 
         geo_url = "https://maps.googleapis.com/maps/api/geocode/json"
-        geo_res = requests.get(
-            geo_url,
-            params={"address": address, "key": google_api_key, "language": "zh-TW"}
-        ).json()
+        geo_res = requests.get(geo_url,
+            params={"address": address, "key": google_api_key, "language": "zh-TW"}).json()
         if geo_res.get("status") != "OK":
             st.error("無法解析該地址")
             return
@@ -101,17 +98,13 @@ def render_address_search():
                     "key": google_api_key,
                     "language": "zh-TW"
                 }
-                res = requests.get(
-                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                    params=params
-                ).json()
+                res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params).json()
                 for p in res.get("results", []):
                     p_lat = p["geometry"]["location"]["lat"]
                     p_lng = p["geometry"]["location"]["lng"]
                     dist = int(haversine(lat, lng, p_lat, p_lng))
                     if dist <= radius:
-                        all_places.append((cat, kw, p.get("name", "未命名"),
-                                           p_lat, p_lng, dist, p.get("place_id", "")))
+                        all_places.append((cat, kw, p.get("name", "未命名"), p_lat, p_lng, dist, p.get("place_id", "")))
 
         # 關鍵字搜尋
         if keyword:
@@ -122,19 +115,16 @@ def render_address_search():
                 "key": google_api_key,
                 "language": "zh-TW"
             }
-            res = requests.get(
-                "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                params=params
-            ).json()
+            res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params).json()
             for p in res.get("results", []):
                 p_lat = p["geometry"]["location"]["lat"]
                 p_lng = p["geometry"]["location"]["lng"]
                 dist = int(haversine(lat, lng, p_lat, p_lng))
                 if dist <= radius:
-                    all_places.append(("關鍵字", keyword, p.get("name", "未命名"),
-                                       p_lat, p_lng, dist, p.get("place_id", "")))
+                    all_places.append(("關鍵字", keyword, p.get("name", "未命名"), p_lat, p_lng, dist, p.get("place_id", "")))
 
         all_places.sort(key=lambda x: x[5])
+        st.write("搜尋半徑固定：500 公尺")
         st.subheader("查詢結果")
         if not all_places:
             st.write("範圍內無符合地點。")
@@ -146,11 +136,9 @@ def render_address_search():
         st.sidebar.subheader("Google 地圖連結")
         for cat, kw, name, _, _, dist, pid in all_places:
             if pid:
-                st.sidebar.markdown(
-                    f"- [{name} ({dist}m)](https://www.google.com/maps/place/?q=place_id:{pid})"
-                )
+                st.sidebar.markdown(f"- [{name} ({dist}m)](https://www.google.com/maps/place/?q=place_id:{pid})")
 
-        # 地圖標記
+        # Google Maps 標記與圓形範圍
         markers_js = ""
         for cat, kw, name, p_lat, p_lng, dist, pid in all_places:
             color = CATEGORY_COLORS.get(cat, "#000000")
@@ -214,7 +202,7 @@ def render_address_search():
         search_places()
 
 # ===============================
-# 房產收藏與分析
+# 房產收藏與分析（保留原有提示文字）
 # ===============================
 def get_favorites_data():
     if 'favorites' not in st.session_state or not st.session_state.favorites:
@@ -257,7 +245,7 @@ def render_analysis_page():
     st.info("此頁面保留原有收藏與 Gemini 分析功能。")
 
 # ===============================
-# 側邊欄與主頁面
+# 側邊欄與主程式
 # ===============================
 def render_sidebar():
     st.sidebar.title("📑 導航")
