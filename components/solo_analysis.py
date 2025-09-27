@@ -20,20 +20,14 @@ def get_favorites_data():
     return fav_df
 
 def tab1_module():
+    st.header("個別分析")
     fav_df = get_favorites_data()
-    
     if fav_df.empty:
-        st.header("個別分析")
-        st.info("⭐ 尚未有收藏房產，無法比較")
-        return
-
-    # 將收藏房屋拼成選單字串
-    options = fav_df['標題'] + " | " + fav_df['地址']
-    
-    # 在 header 旁邊放下拉選單
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.header("個別分析")
-    with col2:
-        selected_house = st.selectbox("選擇房屋", options, key="selected_house")
-
+            st.info("⭐ 尚未有收藏房產，無法比較")
+    else:
+        options = fav_df['標題'] + " | " + fav_df['地址']
+        col1, col2 = st.columns(2)
+        with col1:
+            choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
+        with col2:
+            choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
