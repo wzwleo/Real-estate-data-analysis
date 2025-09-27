@@ -83,145 +83,145 @@ class IncrementalPropertyScraper:
             return default
 
     def git_commit_city(self, city):
-    """提交特定城市的資料到 Git"""
-    try:
-        csv_file = f"./Data/{city}_buy_properties.csv"
-        if not os.path.exists(csv_file):
-            logger.warning(f"{city} 的 CSV 檔案不存在，跳過提交")
-            return False
-        
-        # 設定 Git 用戶資訊
-        subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-        subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-        
-        # 檢查檔案大小
-        file_size = os.path.getsize(csv_file) / (1024 * 1024)  # MB
-        logger.info(f"{city} 檔案大小: {file_size:.2f} MB")
-        
-        # *** 新增：先拉取遠端更新 ***
+        """提交特定城市的資料到 Git"""
         try:
-            logger.info("拉取遠端更新...")
-            subprocess.run(['git', 'fetch', 'origin'], check=True, timeout=60)
+            csv_file = f"./Data/{city}_buy_properties.csv"
+            if not os.path.exists(csv_file):
+                logger.warning(f"{city} 的 CSV 檔案不存在，跳過提交")
+                return False
             
-            # 檢查當前分支
-            result = subprocess.run(['git', 'branch', '--show-current'], 
-                                  capture_output=True, text=True, check=True)
-            current_branch = result.stdout.strip()
-            logger.info(f"當前分支: {current_branch}")
+            # 設定 Git 用戶資訊
+            subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+            subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
             
-            # 如果有遠端更新，先合併
+            # 檢查檔案大小
+            file_size = os.path.getsize(csv_file) / (1024 * 1024)  # MB
+            logger.info(f"{city} 檔案大小: {file_size:.2f} MB")
+            
+            # 先拉取遠端更新
             try:
-                subprocess.run(['git', 'merge', f'origin/{current_branch}'], 
-                             check=True, timeout=60)
-                logger.info("成功合併遠端更新")
-            except subprocess.CalledProcessError as e:
-                logger.warning(f"合併失敗，嘗試重置: {e}")
-                # 如果合併失敗，使用 rebase
-                subprocess.run(['git', 'rebase', f'origin/{current_branch}'], 
-                             check=True, timeout=60)
-                logger.info("成功 rebase 遠端更新")
+                logger.info("拉取遠端更新...")
+                subprocess.run(['git', 'fetch', 'origin'], check=True, timeout=60)
                 
-        except Exception as e:
-            logger.warning(f"拉取遠端更新時出現問題: {e}")
-            # 如果拉取失敗，繼續嘗試推送
-        
-        # 加入檔案到 Git
-        subprocess.run(['git', 'add', csv_file], check=True)
-        
-        # 檢查是否有變更
-        result = subprocess.run(['git', 'diff', '--cached', '--quiet'], capture_output=True)
-        if result.returncode == 0:
-            logger.info(f"{city} 沒有變更，跳過提交")
+                # 檢查當前分支
+                result = subprocess.run(['git', 'branch', '--show-current'], 
+                                      capture_output=True, text=True, check=True)
+                current_branch = result.stdout.strip()
+                logger.info(f"當前分支: {current_branch}")
+                
+                # 如果有遠端更新，先合併
+                try:
+                    subprocess.run(['git', 'merge', f'origin/{current_branch}'], 
+                                 check=True, timeout=60)
+                    logger.info("成功合併遠端更新")
+                except subprocess.CalledProcessError as e:
+                    logger.warning(f"合併失敗，嘗試重置: {e}")
+                    # 如果合併失敗，使用 rebase
+                    subprocess.run(['git', 'rebase', f'origin/{current_branch}'], 
+                                 check=True, timeout=60)
+                    logger.info("成功 rebase 遠端更新")
+                    
+            except Exception as e:
+                logger.warning(f"拉取遠端更新時出現問題: {e}")
+                # 如果拉取失敗，繼續嘗試推送
+            
+            # 加入檔案到 Git
+            subprocess.run(['git', 'add', csv_file], check=True)
+            
+            # 檢查是否有變更
+            result = subprocess.run(['git', 'diff', '--cached', '--quiet'], capture_output=True)
+            if result.returncode == 0:
+                logger.info(f"{city} 沒有變更，跳過提交")
+                return False
+            
+            # 提交
+            commit_message = f"Auto update {city} data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+            subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+            
+            # 推送 (嘗試 main 和 master)
+            for branch in ['main', 'master']:
+                try:
+                    logger.info(f"嘗試推送到 {branch} 分支...")
+                    subprocess.run(['git', 'push', 'origin', branch], check=True, timeout=120)
+                    logger.info(f"{city} 資料已成功推送到 {branch} 分支")
+                    return True
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                    logger.warning(f"推送到 {branch} 失敗: {e}")
+                    continue
+            
+            logger.error(f"{city} 所有分支推送都失敗")
             return False
-        
-        # 提交
-        commit_message = f"Auto update {city} data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
-        subprocess.run(['git', 'commit', '-m', commit_message], check=True)
-        
-        # 推送 (嘗試 main 和 master)
-        for branch in ['main', 'master']:
-            try:
-                logger.info(f"嘗試推送到 {branch} 分支...")
-                subprocess.run(['git', 'push', 'origin', branch], check=True, timeout=120)
-                logger.info(f"{city} 資料已成功推送到 {branch} 分支")
-                return True
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                logger.warning(f"推送到 {branch} 失敗: {e}")
-                continue
-        
-        logger.error(f"{city} 所有分支推送都失敗")
-        return False
-        
-    except Exception as e:
-        logger.error(f"Git 操作失敗 ({city}): {e}")
-        return False
+            
+        except Exception as e:
+            logger.error(f"Git 操作失敗 ({city}): {e}")
+            return False
 
     def scrape_city(self, city):
-    """爬取特定城市的房產資料"""
-    logger.info(f"開始抓取 {city}")
-    all_properties = []
-    page = 1
-    consecutive_failures = 0
-    max_failures = 3
-    
-    while consecutive_failures < max_failures:
-        url = f"https://www.sinyi.com.tw/buy/list/{city}/default-desc/{page}"
-        logger.info(f"正在抓取第 {page} 頁: {url}")
+        """爬取特定城市的房產資料"""
+        logger.info(f"開始抓取 {city}")
+        all_properties = []
+        page = 1
+        consecutive_failures = 0
+        max_failures = 3
         
-        try:
-            self.driver.get(url)
+        while consecutive_failures < max_failures:
+            url = f"https://www.sinyi.com.tw/buy/list/{city}/default-desc/{page}"
+            logger.info(f"正在抓取第 {page} 頁: {url}")
             
-            # 增加等待時間，應對載入較慢的情況
-            WebDriverWait(self.driver, 20).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "div.buy-list-item, div.no-result"))
-            )
-            
-            # 檢查是否顯示無結果頁面
-            no_result = self.driver.find_elements(By.CSS_SELECTOR, "div.no-result, .empty-result, .no-data")
-            if no_result:
-                logger.info(f"{city} 第 {page} 頁顯示無結果，該城市可能沒有房源")
-                break
-            
-            for i in range(3):
-                self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight/3);")
-                time.sleep(random.uniform(0.5, 1.5))
-            
-            soup = BeautifulSoup(self.driver.page_source, 'html.parser')
-            property_list = soup.find_all('div', class_='buy-list-item')
-            
-            if not property_list:
-                logger.info(f"{city} 第 {page} 頁沒有找到房源")
-                consecutive_failures += 1
-                if page == 1:
-                    # 如果第一頁就沒資料，可能該城市確實沒有房源
-                    logger.info(f"{city} 第一頁就沒有房源，可能該城市沒有待售物件")
-                    break
-                else:
-                    # 如果不是第一頁，可能已經到了最後一頁
-                    break
-            else:
-                page_properties = self.parse_properties(property_list)
-                all_properties.extend(page_properties)
+            try:
+                self.driver.get(url)
                 
-                logger.info(f"第 {page} 頁成功抓取 {len(page_properties)} 筆資料")
-                consecutive_failures = 0
-                page += 1
-            
-            time.sleep(random.uniform(2, 4))
-            
-        except TimeoutException:
-            logger.warning(f"{city} 第 {page} 頁載入超時")
-            consecutive_failures += 1
-            time.sleep(random.uniform(3, 6))
-        except Exception as e:
-            logger.error(f"{city} 第 {page} 頁抓取錯誤: {e}")
-            consecutive_failures += 1
-            time.sleep(random.uniform(3, 6))
-    
-    if not all_properties:
-        logger.info(f"{city} 確認沒有可用的房源資料")
-    
-    return all_properties
+                # 增加等待時間，應對載入較慢的情況
+                WebDriverWait(self.driver, 20).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.buy-list-item, div.no-result"))
+                )
+                
+                # 檢查是否顯示無結果頁面
+                no_result = self.driver.find_elements(By.CSS_SELECTOR, "div.no-result, .empty-result, .no-data")
+                if no_result:
+                    logger.info(f"{city} 第 {page} 頁顯示無結果，該城市可能沒有房源")
+                    break
+                
+                for i in range(3):
+                    self.driver.execute_script("window.scrollBy(0, document.body.scrollHeight/3);")
+                    time.sleep(random.uniform(0.5, 1.5))
+                
+                soup = BeautifulSoup(self.driver.page_source, 'html.parser')
+                property_list = soup.find_all('div', class_='buy-list-item')
+                
+                if not property_list:
+                    logger.info(f"{city} 第 {page} 頁沒有找到房源")
+                    consecutive_failures += 1
+                    if page == 1:
+                        # 如果第一頁就沒資料，可能該城市確實沒有房源
+                        logger.info(f"{city} 第一頁就沒有房源，可能該城市沒有待售物件")
+                        break
+                    else:
+                        # 如果不是第一頁，可能已經到了最後一頁
+                        break
+                else:
+                    page_properties = self.parse_properties(property_list)
+                    all_properties.extend(page_properties)
+                    
+                    logger.info(f"第 {page} 頁成功抓取 {len(page_properties)} 筆資料")
+                    consecutive_failures = 0
+                    page += 1
+                
+                time.sleep(random.uniform(2, 4))
+                
+            except TimeoutException:
+                logger.warning(f"{city} 第 {page} 頁載入超時")
+                consecutive_failures += 1
+                time.sleep(random.uniform(3, 6))
+            except Exception as e:
+                logger.error(f"{city} 第 {page} 頁抓取錯誤: {e}")
+                consecutive_failures += 1
+                time.sleep(random.uniform(3, 6))
+        
+        if not all_properties:
+            logger.info(f"{city} 確認沒有可用的房源資料")
+        
+        return all_properties
 
     def parse_properties(self, property_list):
         """解析房產列表"""
