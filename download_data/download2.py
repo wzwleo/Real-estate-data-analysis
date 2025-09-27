@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 # 目標城市列表
 cities = [
-    "Keelung-city", "Yilan-county"
+    "Hsinchu-city", "Hsinchu-county", "Taoyuan-city", "Miaoli-county",
 ]
 
 class IncrementalPropertyScraper:
