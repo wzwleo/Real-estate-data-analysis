@@ -34,8 +34,6 @@ def tab1_module():
         x=1
         options = fav_df['標題'] + " | " + fav_df['地址']
         col1, col2 = st.columns(2)
-        with col1:
-            choice_a = st.selectbox("選擇房屋 A", options, key="compare_ab")
         with col2:
             choice_b = st.selectbox("選擇房屋 B", options, key="compare_bb")
     
