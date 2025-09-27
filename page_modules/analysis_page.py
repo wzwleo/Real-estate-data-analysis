@@ -1,12 +1,10 @@
 import streamlit as st
-import pandas as pd
 import requests
 import math
 from streamlit.components.v1 import html
-import google.generativeai as genai
 
 # ===============================
-# 類別與顏色設定
+# 地址周邊查詢功能
 # ===============================
 PLACE_TYPES_MAP = {
     "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
@@ -24,9 +22,6 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
-# ===============================
-# 通用距離計算
-# ===============================
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -36,16 +31,13 @@ def haversine(lat1, lon1, lat2, lon2):
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-# ===============================
-# 地址周邊查詢
-# ===============================
 def render_address_search():
     st.title("🏙️ 地址周邊查詢（多類別按鈕 + 彩色標記 + 關鍵字顏色）")
 
     google_api_key = st.session_state.get("GOOGLE_MAPS_KEY", "")
     address = st.text_input("輸入地址")
-    radius = 500  # 🔒 固定半徑 500 公尺
     keyword = st.text_input("輸入關鍵字")
+    radius = 500  # 固定半徑 500 公尺
 
     st.subheader("選擇大類別（可多選）")
     selected_categories = []
@@ -124,7 +116,7 @@ def render_address_search():
                     all_places.append(("關鍵字", keyword, p.get("name", "未命名"), p_lat, p_lng, dist, p.get("place_id", "")))
 
         all_places.sort(key=lambda x: x[5])
-        st.write("搜尋半徑固定：500 公尺")
+        st.write(f"目前搜尋半徑：{radius} 公尺")
         st.subheader("查詢結果")
         if not all_places:
             st.write("範圍內無符合地點。")
@@ -138,7 +130,7 @@ def render_address_search():
             if pid:
                 st.sidebar.markdown(f"- [{name} ({dist}m)](https://www.google.com/maps/place/?q=place_id:{pid})")
 
-        # Google Maps 標記與圓形範圍
+        # 地圖標記
         markers_js = ""
         for cat, kw, name, p_lat, p_lng, dist, pid in all_places:
             color = CATEGORY_COLORS.get(cat, "#000000")
@@ -202,44 +194,8 @@ def render_address_search():
         search_places()
 
 # ===============================
-# 房產收藏與分析（保留原有提示文字）
+# 分析頁面
 # ===============================
-def get_favorites_data():
-    if 'favorites' not in st.session_state or not st.session_state.favorites:
-        return pd.DataFrame()
-    all_df = None
-    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-        all_df = st.session_state.all_properties_df
-    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-        all_df = st.session_state.filtered_df
-    if all_df is None or all_df.empty:
-        return pd.DataFrame()
-    fav_ids = st.session_state.favorites
-    return all_df[all_df['編號'].isin(fav_ids)].copy()
-
-def render_favorites_list(fav_df):
-    st.subheader("⭐ 我的收藏清單")
-    for idx, (_, row) in enumerate(fav_df.iterrows()):
-        with st.container():
-            col1, col2 = st.columns([8, 2])
-            with col1:
-                st.markdown(f"**#{idx+1} 🏠 {row['標題']}**")
-                st.write(f"**地址：** {row['地址']} | **屋齡：** {row['屋齡']} | **類型：** {row['類型']}")
-                st.write(f"**建坪：** {row['建坪']} | **格局：** {row['格局']} | **樓層：** {row['樓層']}")
-                if '車位' in row and pd.notna(row['車位']):
-                    st.write(f"**車位：** {row['車位']}")
-            with col2:
-                st.metric("總價", f"{row['總價(萬)']} 萬")
-                if pd.notna(row['建坪']) and row['建坪'] > 0:
-                    unit_price = (row['總價(萬)'] * 10000) / row['建坪']
-                    st.caption(f"單價: ${unit_price:,.0f}/坪")
-                property_id = row['編號']
-                if st.button("❌ 移除", key=f"remove_fav_{property_id}"):
-                    st.session_state.favorites.remove(property_id)
-                    st.rerun()
-                st.markdown(f'[🔗 物件連結](https://www.sinyi.com.tw/buy/house/{row["編號"]}?breadcrumb=list)')
-            st.markdown("---")
-
 def render_analysis_page():
     st.title("📊 分析頁面")
     st.info("此頁面保留原有收藏與 Gemini 分析功能。")
