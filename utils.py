@@ -3,19 +3,33 @@ import pandas as pd
 import math
 import streamlit as st
 
+import os
+
 def get_city_options(data_dir="./Data"):
     """
-    獲取城市選項
+    獲取城市選項，只顯示對照表內有定義的檔案
     """
-    # 讀取 CSV 檔
-    files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
-    # 中文對照表
+    if not os.path.exists(data_dir):
+        return {}
+
+    # 對照表：英文檔名 -> 中文名稱
     name_map = {
         "Taichung-city_buy_properties.csv": "台中市",
+
+        # 可以繼續加其他城市
     }
-    # 自動 fallback 顯示英文檔名（去掉 -city_buy_properties.csv）
-    options = {name_map.get(f, f.replace("-city_buy_properties.csv", "")): f for f in files}
+
+    # 讀取資料夾中的檔案
+    files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
+
+    # 只挑出有對照表的檔案
+    options = {name_map[f]: f for f in files if f in name_map}
+
+    # 排序（照中文名稱）
+    options = dict(sorted(options.items(), key=lambda x: x[0]))
+
     return options
+
 
 def filter_properties(df, filters):
     """
