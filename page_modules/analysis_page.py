@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import math
-from streamlit.components.v1 import html
 import google.generativeai as genai
 
 # ===========================
