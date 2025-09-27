@@ -2,14 +2,16 @@ import streamlit as st
 import pandas as pd
 
 def tab1_module():
-    """
-    個別分析的UI與邏輯
-    """
     st.header("個別分析")
-    st.write("這裡是個別分析的內容")
+    fav_df = get_favorites_data()
+    if fav_df.empty:
+            st.info("⭐ 尚未有收藏房產，無法比較")
+        else:
+            options = fav_df['標題'] + " | " + fav_df['地址']
+            col1, col2 = st.columns(2)
+            with col1:
+                choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
+            with col2:
+                choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
     
-    # 範例：選擇房屋編號
-    house_id = st.text_input("輸入房屋ID查詢")
-    if house_id:
-        st.write(f"你查詢的是房屋 ID: {house_id}")
-        # 這裡可以放你的分析邏輯，例如查詢資料庫、畫圖等
+
