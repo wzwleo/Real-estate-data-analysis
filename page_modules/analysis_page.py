@@ -237,7 +237,7 @@ def render_analysis_page():
             google_key = st.session_state.get("GOOGLE_MAPS_KEY","")
             gemini_key = st.session_state.get("GEMINI_KEY","")
 
-            radius = st.slider("搜尋半徑 (公尺)", 100, 500, 400, step=50)
+            radius = st.write("搜尋半徑500", 500)
             keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
 
             st.subheader("選擇要比較的生活機能類別")
