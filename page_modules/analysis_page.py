@@ -210,7 +210,7 @@ def render_analysis_page():
 
     # ---------------- 個別分析 ----------------
     with tab1:
-        tab1_module.render()
+        tab1_module()
 
     # ---------------- 房屋比較 ----------------
     with tab2:
