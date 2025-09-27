@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from main_test import get_favorites_data  # 或實際存放 get_favorites_data 的模組
+from page_modules.analysis_page import get_favorites_data  # 或實際存放 get_favorites_data 的模組
 
 
 def tab1_module():
