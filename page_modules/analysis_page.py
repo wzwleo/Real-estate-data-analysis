@@ -3,6 +3,7 @@ import pandas as pd
 import requests
 import math
 from streamlit.components.v1 import html
+from components.solo_analysis import tab1_module
 import google.generativeai as genai
 
 # ===========================
