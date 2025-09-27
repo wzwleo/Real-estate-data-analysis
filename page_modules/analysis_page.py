@@ -347,7 +347,8 @@ def main():
     elif st.session_state.current_page == "search":
         st.title("🔍 搜尋頁面")
         st.info("🚧 搜尋功能開發中...")
-    elif st.session_state.current_page == "analysis
+    elif st.session_state.current_page == "analysis":
+        render_analysis_page()
 
 
 if __name__ == "__main__":
