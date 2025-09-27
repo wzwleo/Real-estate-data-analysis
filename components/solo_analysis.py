@@ -37,6 +37,3 @@ def tab1_module():
     with col2:
         selected_house = st.selectbox("選擇房屋", options, key="selected_house")
 
-    # 顯示選中房屋的詳細資料
-    st.subheader("房屋資料")
-    st.table(fav_df[fav_df['標題'] + " | " + fav_df['地址'] == selected_house])
