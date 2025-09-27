@@ -210,6 +210,7 @@ def render_analysis_page():
 
     # ---------------- 個別分析 ----------------
     with tab1:
+        fav_df = get_favorites_data()
         tab1_module()
 
     # ---------------- 房屋比較 ----------------
