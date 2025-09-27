@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 
-def render():
+def tab1_module():
     """
     個別分析的UI與邏輯
     """
