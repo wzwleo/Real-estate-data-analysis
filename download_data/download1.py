@@ -30,12 +30,7 @@ logger = logging.getLogger(__name__)
 
 # 目標城市列表
 cities = [
-    "Taipei-city", "NewTaipei-city", "Keelung-city", "Yilan-county",
-    "Hsinchu-city", "Hsinchu-county", "Taoyuan-city", "Miaoli-county",
-    "Taichung-city", "Changhua-county", "Nantou-county", "Yunlin-county",
-    "Chiayi-city", "Chiayi-county", "Tainan-city", "Kaohsiung-city",
-    "Pingtung-county", "Penghu-county", "Taitung-county", "Hualien-county",
-    "Kinmen-county", "Lienchiang-county"
+    "Taipei-city", "NewTaipei-city", "Keelung-city", "Yilan-county"
 ]
 
 class IncrementalPropertyScraper:
@@ -355,3 +350,4 @@ if __name__ == "__main__":
         logger.error(f"程式執行出錯: {e}")
         scraper.cleanup()
         raise
+
