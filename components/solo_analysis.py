@@ -36,7 +36,7 @@ def tab1_module():
 
         # 顯示標題
         st.subheader(selected_row['標題'])
-        st.write(fav_df['地址'])
+        st.write("📍 地址：", selected_row.get("地址", "未提供"))
         
         
 
