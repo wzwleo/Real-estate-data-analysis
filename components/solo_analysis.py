@@ -45,11 +45,15 @@ def tab1_module():
             padding:10px;
             margin:5px 0;
             background-color:#1f1f1f;
+            display: flex;
+            gap: 20px;         /* 每個資訊之間的間距 */
+            align-items: center; /* 垂直置中對齊 */
         ">
-            📍 地址：{selected_row.get('地址','未提供')}<br>
-            💰 總價：{selected_row.get('總價','未提供')}<br>
-            🏠 坪數：{selected_row.get('建物坪數','未提供')}
+            <div>📍 地址：{selected_row.get('地址','未提供')}</div>
+            <div>💰 總價：{selected_row.get('總價','未提供')}</div>
+            <div>🏠 坪數：{selected_row.get('建物坪數','未提供')}</div>
         </div>
         """, unsafe_allow_html=True)
+
 
 
