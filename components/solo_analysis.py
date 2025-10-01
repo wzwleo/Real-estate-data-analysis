@@ -24,13 +24,12 @@ def tab1_module():
     if fav_df.empty:
             st.info("⭐ 尚未有收藏房產，無法比較")
     else:
-        # 篩選出選中的房子
-        selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
-        
         options = fav_df['標題']
         col1, col2 = st.columns([2, 1])
         with col2:
             choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+        # 篩選出選中的房子
+        selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
         with col1:
             st.subheader(selected_row['標題'])
         
