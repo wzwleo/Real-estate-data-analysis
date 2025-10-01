@@ -31,6 +31,11 @@ def tab1_module():
             st.header("個別分析")
         with col2:
             choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+        # 篩選出選中的房子
+        selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
+
+        # 顯示標題
+        st.subheader(selected_row['標題'])
         
         
 
