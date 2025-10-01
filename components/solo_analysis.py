@@ -29,10 +29,10 @@ def tab1_module():
         
         options = fav_df['標題']
         col1, col2 = st.columns([2, 1])
-        with col1:
-            st.subheader(selected_row['標題'])
         with col2:
             choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+        with col1:
+            st.subheader(selected_row['標題'])
         
         
 
