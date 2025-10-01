@@ -36,6 +36,7 @@ def tab1_module():
 
         # 顯示標題
         st.subheader(selected_row['標題'])
+        st.write(fav_df['地址'])
         
         
 
