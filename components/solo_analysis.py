@@ -38,5 +38,18 @@ def tab1_module():
         st.subheader(selected_row['標題'])
         st.write("📍 地址：", selected_row.get("地址", "未提供"))
         
-        
+        st.markdown(f"""
+        <div style="
+            border:2px solid #4CAF50;
+            border-radius:10px;
+            padding:10px;
+            margin:5px 0;
+            background-color:#f9f9f9;
+        ">
+            📍 地址：{selected_row.get('地址','未提供')}<br>
+            💰 總價：{selected_row.get('總價','未提供')}<br>
+            🏠 坪數：{selected_row.get('建物坪數','未提供')}
+        </div>
+        """, unsafe_allow_html=True)
+
 
