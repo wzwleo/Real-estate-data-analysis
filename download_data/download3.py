@@ -82,52 +82,87 @@ class IncrementalPropertyScraper:
         except:
             return default
 
-    def git_commit_city(self, city):
-        """提交特定城市的資料到 Git"""
-        try:
-            csv_file = f"./Data/{city}_buy_properties.csv"
-            if not os.path.exists(csv_file):
-                logger.warning(f"{city} 的 CSV 檔案不存在，跳過提交")
-                return False
-            
-            # 設定 Git 用戶資訊
-            subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
-            subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
-            
-            # 檢查檔案大小
-            file_size = os.path.getsize(csv_file) / (1024 * 1024)  # MB
-            logger.info(f"{city} 檔案大小: {file_size:.2f} MB")
-            
-            # 加入檔案到 Git
-            subprocess.run(['git', 'add', csv_file], check=True)
-            
-            # 檢查是否有變更
-            result = subprocess.run(['git', 'diff', '--cached', '--quiet'], capture_output=True)
-            if result.returncode == 0:
-                logger.info(f"{city} 沒有變更，跳過提交")
-                return False
-            
-            # 提交
-            commit_message = f"Auto update {city} data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
-            subprocess.run(['git', 'commit', '-m', commit_message], check=True)
-            
-            # 推送 (嘗試 main 和 master)
-            try:
-                subprocess.run(['git', 'push', 'origin', 'main'], check=True, timeout=60)
-                logger.info(f"{city} 資料已成功推送到 main 分支")
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-                try:
-                    subprocess.run(['git', 'push', 'origin', 'master'], check=True, timeout=60)
-                    logger.info(f"{city} 資料已成功推送到 master 分支")
-                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-                    logger.error(f"{city} 推送失敗: {e}")
-                    return False
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"Git 操作失敗 ({city}): {e}")
+    def git_commit_city(self, city, max_retries=3):
+        """提交特定城市的資料到 Git (帶重試機制)"""
+        csv_file = f"./Data/{city}_buy_properties.csv"
+        if not os.path.exists(csv_file):
+            logger.warning(f"{city} 的 CSV 檔案不存在，跳過提交")
             return False
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"嘗試推送 {city} (第 {attempt + 1}/{max_retries} 次)")
+                
+                # 設定 Git 用戶資訊
+                subprocess.run(['git', 'config', 'user.name', 'github-actions[bot]'], check=True)
+                subprocess.run(['git', 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com'], check=True)
+                
+                # 檢查檔案大小
+                file_size = os.path.getsize(csv_file) / (1024 * 1024)  # MB
+                logger.info(f"{city} 檔案大小: {file_size:.2f} MB")
+                
+                # 先 pull 最新的遠端變更
+                try:
+                    result = subprocess.run(
+                        ['git', 'pull', '--rebase', 'origin', 'main'],
+                        capture_output=True,
+                        text=True,
+                        timeout=60
+                    )
+                    if result.returncode != 0:
+                        # 如果 main 不存在，嘗試 master
+                        result = subprocess.run(
+                            ['git', 'pull', '--rebase', 'origin', 'master'],
+                            capture_output=True,
+                            text=True,
+                            timeout=60
+                        )
+                    logger.info(f"成功同步遠端變更: {result.stdout}")
+                except Exception as e:
+                    logger.warning(f"Pull 時發生警告: {e}")
+                
+                # 加入檔案到 Git
+                subprocess.run(['git', 'add', csv_file], check=True)
+                
+                # 檢查是否有變更
+                result = subprocess.run(['git', 'diff', '--cached', '--quiet'], capture_output=True)
+                if result.returncode == 0:
+                    logger.info(f"{city} 沒有變更，跳過提交")
+                    return True  # 沒有變更也視為成功
+                
+                # 提交
+                commit_message = f"Auto update {city} data: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                subprocess.run(['git', 'commit', '-m', commit_message], check=True)
+                
+                # 推送 (嘗試 main 和 master)
+                try:
+                    subprocess.run(['git', 'push', 'origin', 'main'], check=True, timeout=60)
+                    logger.info(f"✓ {city} 資料已成功推送到 main 分支")
+                    return True
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+                    try:
+                        subprocess.run(['git', 'push', 'origin', 'master'], check=True, timeout=60)
+                        logger.info(f"✓ {city} 資料已成功推送到 master 分支")
+                        return True
+                    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"推送失敗，等待後重試: {e}")
+                            time.sleep(random.uniform(5, 10))
+                            # 重置當前提交，準備重試
+                            subprocess.run(['git', 'reset', '--soft', 'HEAD~1'], check=False)
+                            continue
+                        else:
+                            logger.error(f"{city} 推送失敗 (已重試 {max_retries} 次): {e}")
+                            return False
+                
+            except Exception as e:
+                logger.error(f"Git 操作失敗 ({city}，第 {attempt + 1} 次): {e}")
+                if attempt < max_retries - 1:
+                    time.sleep(random.uniform(5, 10))
+                    continue
+                return False
+        
+        return False
 
     def scrape_city(self, city):
         """爬取特定城市的房產資料"""
