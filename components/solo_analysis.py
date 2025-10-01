@@ -44,7 +44,7 @@ def tab1_module():
             border-radius:10px;
             padding:10px;
             margin:5px 0;
-            background-color:#f9f9f9;
+            background-color:#1f1f1f;
         ">
             📍 地址：{selected_row.get('地址','未提供')}<br>
             💰 總價：{selected_row.get('總價','未提供')}<br>
