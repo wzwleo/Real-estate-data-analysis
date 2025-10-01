@@ -26,7 +26,7 @@ def tab1_module():
             st.info("⭐ 尚未有收藏房產，無法比較")
     else:
         options = fav_df['標題'] + " | " + fav_df['地址']
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns([2, 1])
         with col1:
             st.header("個別分析")
         with col2:
