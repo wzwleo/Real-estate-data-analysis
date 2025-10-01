@@ -45,6 +45,7 @@ def tab1_module():
             padding:10px;
             margin:5px 0;
             background-color:#1f1f1f;
+            font-size: 16px;
             display: flex;
             gap: 20px;         /* 每個資訊之間的間距 */
             align-items: center; /* 垂直置中對齊 */
