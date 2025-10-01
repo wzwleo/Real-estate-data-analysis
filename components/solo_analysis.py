@@ -31,4 +31,4 @@ def tab1_module():
             st.header("個別分析")
         with col2:
             choice = st.selectbox("選擇房屋", options, key="analysis_solo")
-        st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
+        st.subheader(fav_df['標題'])
