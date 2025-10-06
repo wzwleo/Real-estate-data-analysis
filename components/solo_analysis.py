@@ -101,7 +101,7 @@ def tab1_module():
                 text-align:left;
                 font-size:20px;
                 color:white;
-                min-height:210px;   /* 保證高度跟左邊一致 */
+                min-height:250px;   /* 保證高度跟左邊一致 */
                 display: flex;      /* 垂直置中 */
                 align-items: center;
                 justify-content: center; /* 水平置中 */
