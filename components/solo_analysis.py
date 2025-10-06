@@ -76,10 +76,25 @@ def tab1_module():
                 font-size:20px;
                 color:white;
             ">
-                <div>💰 總價：{formatted_price} 元</div>
                 <div>🏠 坪數：{area_text}</div>
             </div>
             """, unsafe_allow_html=True)
+        
+        with col2:
+            st.markdown(f"""
+            <div style="
+                border:2px solid #4CAF50;
+                border-radius:10px;
+                padding:10px;
+                background-color:#1f1f1f;
+                text-align:left;
+                font-size:20px;
+                color:white;
+            ">
+                <div>💰 總價：{formatted_price} 元</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
 
 
 
