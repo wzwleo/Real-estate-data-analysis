@@ -62,7 +62,7 @@ def tab1_module():
                 color:white;
             ">
                 <div>💰 總價：{selected_row.get('總價(萬)','未提供')}</div>
-                <div>🏠 坪數：{selected_row.get('建物坪數','未提供')}</div>
+                <div>🏠 坪數：{selected_row.get('主+陽','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
 
