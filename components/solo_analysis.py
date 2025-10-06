@@ -59,7 +59,11 @@ def tab1_module():
                 formatted_price = f"{int(raw_price)*10000:,}"  # 乘 10000，把萬轉成元，並加逗號
             except:
                 formatted_price = raw_price
-       
+        
+        # 先處理坪數文字
+        area = selected_row.get('主+陽', '未提供')
+        area_text = f"{area} 坪" if area != '未提供' else area
+        
         col1, col2 = st.columns([1, 1])
         with col1:
             st.markdown(f"""
@@ -73,7 +77,7 @@ def tab1_module():
                 color:white;
             ">
                 <div>💰 總價：{formatted_price} 元</div>
-                <div>🏠 坪數：{selected_row.get('主+陽','未提供')}</div>
+                <div>🏠 坪數：{area_text}</div>
             </div>
             """, unsafe_allow_html=True)
 
