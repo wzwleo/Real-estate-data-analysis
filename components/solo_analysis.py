@@ -79,6 +79,7 @@ def tab1_module():
             ">
                 <div> 類型：{selected_row.get('類型','未提供')}</div>
                 <div>🏠 坪數：{area_text}</div>
+                <div> 屋齡：{selected_row.get('屋齡','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
         
