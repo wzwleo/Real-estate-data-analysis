@@ -99,7 +99,7 @@ def tab1_module():
                 padding:10px;
                 background-color:#1f1f1f;
                 text-align:left;
-                font-size:20px;
+                font-size:30px;
                 color:white;
                 min-height:247px;   /* 保證高度跟左邊一致 */
                 display: flex;      /* 垂直置中 */
