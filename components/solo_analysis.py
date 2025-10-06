@@ -60,10 +60,14 @@ def tab1_module():
                 formatted_price = f"{int(raw_price)*10000:,}"  # 乘 10000，把萬轉成元，並加逗號
             except:
                 formatted_price = raw_price
+
+        # 先處理建坪文字
+        area = selected_row.get('建坪', '未提供')
+        area_text = f"{area} 坪" if area != '未提供' else area
         
         # 先處理坪數文字
-        area = selected_row.get('主+陽', '未提供')
-        area_text = f"{area} 坪" if area != '未提供' else area
+        Actual_space = selected_row.get('主+陽', '未提供')
+        Actual_space_text = f"{area} 坪" if area != '未提供' else area
         
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -78,8 +82,10 @@ def tab1_module():
                 color:white;
             ">
                 <div> 類型：{selected_row.get('類型','未提供')}</div>
-                <div>🏠 坪數：{area_text}</div>
+                <div>🏠 建坪：{area_text}</div>
+                <div>🏠 實際坪數：{Actual_space_text}</div>
                 <div> 屋齡：{selected_row.get('屋齡','未提供')}</div>
+                
             </div>
             """, unsafe_allow_html=True)
         
