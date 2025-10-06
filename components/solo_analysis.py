@@ -67,7 +67,7 @@ def tab1_module():
         
         # 先處理坪數文字
         Actual_space = selected_row.get('主+陽', '未提供')
-        Actual_space_text = f"{area} 坪" if area != '未提供' else area
+        Actual_space_text = f"{Actual_space} 坪" if area != '未提供' else area
         
         col1, col2 = st.columns([1, 1])
         with col1:
