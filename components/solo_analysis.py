@@ -72,7 +72,7 @@ def tab1_module():
                 font-size:20px;
                 color:white;
             ">
-                <div>💰 總價：{formatted_price} 元</div>
+                <div>💰 總價：{formatted_price}</div>
                 <div>🏠 坪數：{selected_row.get('主+陽','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
