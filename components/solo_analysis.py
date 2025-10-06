@@ -77,6 +77,7 @@ def tab1_module():
                 font-size:20px;
                 color:white;
             ">
+                <div> 類型：{selected_row.get('類型','未提供')}</div>
                 <div>🏠 坪數：{area_text}</div>
             </div>
             """, unsafe_allow_html=True)
