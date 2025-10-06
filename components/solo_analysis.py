@@ -113,7 +113,8 @@ def tab1_module():
             ">
                 <div>💰 總價：{formatted_price} 元</div>
                 <div style="font-size:14px; color:#cccccc; margin-top:5px;">
-                    每坪單價：{area_Price_per} 元/坪
+                    建坪單價：{area_Price_per} 元/坪
+                    嗨
                 </div>
             </div>
             """, unsafe_allow_html=True)
