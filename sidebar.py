@@ -5,7 +5,7 @@ def render_sidebar():
     渲染側邊欄導航和設置
     """
     # 側邊欄按鈕 - 每個都有唯一的 key
-    if st.sidebar.button("🏠 首頁3", use_container_width=True, key="home_button"):
+    if st.sidebar.button("🏠 首頁", use_container_width=True, key="home_button"):
         st.session_state.current_page = 'home'
         # 重置搜尋頁面
         if 'current_search_page' in st.session_state:
