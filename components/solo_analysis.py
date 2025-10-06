@@ -51,7 +51,7 @@ def tab1_module():
                  {selected_row.get('標題','未提供')}
             </div>
             <div style= "font-size:20px; font-weight:bold; color:#ffffff; text-align:center;">
-                 <div>{selected_row.get('地址','未提供')}</div>
+                 <div>📍{selected_row.get('地址','未提供')}</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
