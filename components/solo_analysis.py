@@ -101,7 +101,7 @@ def tab1_module():
                 text-align:center;
                 font-size:20px;
                 color:white;
-                min-height:210px;
+                min-height:247px;
                 display:flex;
                 flex-direction:column;  /* 垂直排列 */
                 justify-content:center;
