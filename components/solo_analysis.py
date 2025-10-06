@@ -47,8 +47,8 @@ def tab1_module():
             gap: 10px;                /* 上下間距 */
         ">
             <!-- 標題直排 -->
-            <div style="font-size:25px; font-weight:bold; color:#ffffff;">
-                🎯 {selected_row.get('標題')}
+            <div style="font-size:25px; font-weight:bold; color:#ffffff; text-align:center;">
+                🎯 {selected_row.get('標題','未提供')}
             </div>
             <div style="
                 display: flex;
