@@ -61,8 +61,9 @@ def tab1_module():
                 font-size:20px;
                 color:white;
             ">
-                <div>💰 總價：1988</div>
-                <div>🏠 坪數：50</div>
+                <div>📍 地址：{selected_row.get('地址','未提供')}</div>
+                <div>💰 總價：{selected_row.get('總價(萬)','未提供')}</div>
+                <div>🏠 坪數：{selected_row.get('建物坪數','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
 
