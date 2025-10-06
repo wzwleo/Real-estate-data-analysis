@@ -55,6 +55,20 @@ def tab1_module():
             </div>
         </div>
         """, unsafe_allow_html=True)
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.markdown(f"""
+            <div style="
+                border:2px solid #4CAF50;
+                border-radius:10px;
+                padding:10px;
+                margin:5px 0;
+                background-color:#1f1f1f;
+                display: flex;
+                flex-direction: column;   /* 上下排列 */
+                gap: 10px;                /* 上下間距 */
+            ">
+            </div>
 
 
 
