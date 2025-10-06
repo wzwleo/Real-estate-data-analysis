@@ -82,8 +82,8 @@ def tab1_module():
                 color:white;
             ">
                 <div> 類型：{selected_row.get('類型','未提供')}</div>
-                <div>🏠 建坪：{area_text}</div>
-                <div>🏠 實際坪數：{Actual_space_text}</div>
+                <div> 建坪：{area_text}</div>
+                <div> 實際坪數：{Actual_space_text}</div>
                 <div> 屋齡：{selected_row.get('屋齡','未提供')}</div>
                 
             </div>
