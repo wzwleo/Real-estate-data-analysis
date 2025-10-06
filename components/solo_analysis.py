@@ -50,8 +50,6 @@ def tab1_module():
             <div style="font-size:25px; font-weight:bold; color:#ffffff;">
                 🎯 {selected_row.get('標題')}
             </div>
-        
-            <!-- 詳細資訊橫排 -->
             <div style="
                 display: flex;
                 gap: 20px;
