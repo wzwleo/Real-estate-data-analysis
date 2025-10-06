@@ -68,6 +68,11 @@ def tab1_module():
         # 先處理坪數文字
         Actual_space = selected_row.get('主+陽', '未提供')
         Actual_space_text = f"{Actual_space} 坪" if area != '未提供' else area
+
+        #建坪單價/實際單價
+        total_price = int(raw_price) * 10000
+        area_Price_per = f"{int(total_price)/area:,}"
+        Actual_space_Price_per = f"{int(total_price)/Actual_space:,}"
         
         col1, col2 = st.columns([1, 1])
         with col1:
@@ -108,7 +113,7 @@ def tab1_module():
             ">
                 <div>💰 總價：{formatted_price} 元</div>
                 <div style="font-size:14px; color:#cccccc; margin-top:5px;">
-                    每坪單價：19 元/坪
+                    每坪單價：{area_Price_per} 元/坪
                 </div>
             </div>
             """, unsafe_allow_html=True)
