@@ -50,9 +50,6 @@ def tab1_module():
             <div style= "font-size:35px; font-weight:bold; color:#ffffff; text-align:center;">
                  {selected_row.get('標題','未提供')}
             </div>
-            <div style= "font-size:18px; font-weight:bold; color:#ffffff; text-align:center;">
-                 <div>📍 地址：{selected_row.get('地址','未提供')}</div>
-            </div>
             <!-- 詳細資訊橫排 -->
             <div style="
                 display: flex;
