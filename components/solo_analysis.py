@@ -84,8 +84,10 @@ def tab1_module():
                 <div> 類型：{selected_row.get('類型','未提供')}</div>
                 <div> 建坪：{area_text}</div>
                 <div> 實際坪數：{Actual_space_text}</div>
+                <div> 格局：{selected_row.get('格局','未提供')}</div>
+                <div> 樓層：{selected_row.get('樓層','未提供')}</div>
                 <div> 屋齡：{selected_row.get('屋齡','未提供')}</div>
-                
+                <div> 車位：{selected_row.get('車位','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
         
