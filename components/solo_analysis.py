@@ -49,6 +49,7 @@ def tab1_module():
         </div>
         """, unsafe_allow_html=True)
 
+        st.write()
         # 取得總價，並處理格式
         raw_price = selected_row.get('總價(萬)')
         if raw_price is None or raw_price == '' or raw_price == '未提供':
