@@ -40,21 +40,15 @@ def tab1_module():
             border:2px solid #4CAF50;
             border-radius:10px;
             padding:10px;
-            margin:5px 0;
             background-color:#1f1f1f;
-            display: flex;
-            flex-direction: column;   /* 上下排列 */
-            gap: 10px;                /* 上下間距 */
+            text-align:center;
+            color:white;
         ">
-            <!-- 標題直排 -->
-            <div style= "font-size:40px; font-weight:bold; color:#ffffff; text-align:center;">
-                 {selected_row.get('標題','未提供')}
-            </div>
-            <div style= "font-size:20px; font-weight:bold; color:#ffffff; text-align:center;">
-                 <div>📍{selected_row.get('地址','未提供')}</div>
-            </div>
+            <div style="font-size:40px; font-weight:bold;">{selected_row.get('標題','未提供')}</div>
+            <div style="font-size:20px;">📍 {selected_row.get('地址','未提供')}</div>
         </div>
         """, unsafe_allow_html=True)
+
         col1, col2 = st.columns([1, 1])
         with col1:
             st.markdown(f"""
@@ -68,8 +62,10 @@ def tab1_module():
                 flex-direction: column;   /* 上下排列 */
                 gap: 10px;                /* 上下間距 */
             ">
+                <div>💰 總價：1988</div>
+                <div>🏠 坪數：50</div>
             </div>
-
+            """, unsafe_allow_html=True)
 
 
 
