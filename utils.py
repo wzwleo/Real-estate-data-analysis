@@ -14,7 +14,10 @@ def get_city_options(data_dir="./Data"):
 
     # 對照表：英文檔名 -> 中文名稱
     name_map = {
-        "Taichung-city_buy_properties.csv": "台中市",
+        "Taichung-city_buy_properties.csv": "台中市","Taipei-city": 台北市, 
+        "NewTaipei-city": 新北市, "Keelung-city": 基隆市, 
+        "Yilan-county": 宜蘭縣
+        
 
         # 可以繼續加其他城市
     }
