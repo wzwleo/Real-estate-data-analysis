@@ -34,10 +34,7 @@ def tab1_module():
         # 篩選出選中的房子
         selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
 
-        # 顯示標題
-        st.subheader(selected_row['標題'])
-        st.write("📍 地址：", selected_row.get("地址", "未提供"))
-        
+        # 顯示卡片，標題直排，詳細資訊橫排
         st.markdown(f"""
         <div style="
             border:2px solid #4CAF50;
@@ -45,16 +42,30 @@ def tab1_module():
             padding:10px;
             margin:5px 0;
             background-color:#1f1f1f;
-            font-size: 25px;
             display: flex;
-            gap: 20px;         /* 每個資訊之間的間距 */
-            align-items: center; /* 垂直置中對齊 */
+            flex-direction: column;   /* 上下排列 */
+            gap: 10px;                /* 上下間距 */
         ">
-            <div>📍 地址：{selected_row.get('地址','未提供')}</div>
-            <div>💰 總價：{selected_row.get('總價(萬)','未提供')}</div>
-            <div>🏠 坪數：{selected_row.get('建物坪數','未提供')}</div>
+            <!-- 標題直排 -->
+            <div style="font-size:25px; font-weight:bold; color:#ffffff;">
+                🎯 {selected_row.get('標題','未提供')}
+            </div>
+        
+            <!-- 詳細資訊橫排 -->
+            <div style="
+                display: flex;
+                gap: 20px;
+                align-items: center;
+                font-size: 18px;
+                color:#ffffff;
+            ">
+                <div>📍 地址：{selected_row.get('地址','未提供')}</div>
+                <div>💰 總價：{selected_row.get('總價(萬)','未提供')}</div>
+                <div>🏠 坪數：{selected_row.get('建物坪數','未提供')}</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
+
 
 
 
