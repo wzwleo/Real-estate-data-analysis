@@ -71,8 +71,8 @@ def tab1_module():
 
         #建坪單價/實際單價
         total_price = int(raw_price) * 10000
-        area_Price_per = f"{int(total_price)/area:,}"
-        Actual_space_Price_per = f"{int(total_price)/Actual_space:,}"
+        area_Price_per = f"{int(total_price)/area:,.0f}"
+        Actual_space_Price_per = f"{int(total_price)/Actual_space:,.0f}"
         
         col1, col2 = st.columns([1, 1])
         with col1:
