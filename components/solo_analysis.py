@@ -57,7 +57,7 @@ def tab1_module():
                 border-radius:10px;
                 padding:10px;
                 background-color:#1f1f1f;
-                text-align:center;
+                text-align:left;
                 font-size:20px;
                 color:white;
             ">
