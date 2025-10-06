@@ -51,7 +51,6 @@ def tab1_module():
                  {selected_row.get('標題','未提供')}
             </div>
             
-            <!-- 詳細資訊橫排 -->
             <div style="
                 display: flex;
                 gap: 20px;
