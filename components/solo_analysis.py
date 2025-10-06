@@ -53,18 +53,6 @@ def tab1_module():
             <div style= "font-size:20px; font-weight:bold; color:#ffffff; text-align:center;">
                  <div>📍 地址：{selected_row.get('地址','未提供')}</div>
             </div>
-            <!-- 詳細資訊橫排 -->
-            <div style="
-                display: flex;
-                gap: 20px;
-                align-items: center;
-                font-size: 18px;
-                color:#ffffff;
-            ">
-                <div>📍 地址：{selected_row.get('地址','未提供')}</div>
-                <div>💰 總價：{selected_row.get('總價(萬)','未提供')}</div>
-                <div>🏠 坪數：{selected_row.get('建物坪數','未提供')}</div>
-            </div>
         </div>
         """, unsafe_allow_html=True)
 
