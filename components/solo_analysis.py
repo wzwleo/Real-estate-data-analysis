@@ -98,15 +98,18 @@ def tab1_module():
                 border-radius:10px;
                 padding:10px;
                 background-color:#1f1f1f;
-                text-align:left;
-                font-size:30px;
+                text-align:center;
+                font-size:20px;
                 color:white;
-                min-height:247px;   /* 保證高度跟左邊一致 */
-                display: flex;      /* 垂直置中 */
-                align-items: center;
-                justify-content: center; /* 水平置中 */
+                min-height:210px;
+                display:flex;
+                flex-direction:column;  /* 垂直排列 */
+                justify-content:center;
             ">
                 <div>💰 總價：{formatted_price} 元</div>
+                <div style="font-size:14px; color:#cccccc; margin-top:5px;">
+                    每坪單價：19 元/坪
+                </div>
             </div>
             """, unsafe_allow_html=True)
             
