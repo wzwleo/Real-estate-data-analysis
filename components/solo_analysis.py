@@ -48,7 +48,7 @@ def tab1_module():
         ">
             <!-- 標題直排 -->
             <div style="font-size:25px; font-weight:bold; color:#ffffff;">
-                🎯 {selected_row.get('標題','未提供')}
+                🎯 {selected_row.get('標題')}
             </div>
         
             <!-- 詳細資訊橫排 -->
