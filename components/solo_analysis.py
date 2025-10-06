@@ -51,10 +51,6 @@ def tab1_module():
                  {selected_row.get('標題','未提供')}
             </div>
             
-            <div style= "font-size:18px; font-weight:bold; color:#ffffff; text-align:center;">
-                 <div>📍 地址：{selected_row.get('地址','未提供')}</div>
-            </div>
-            
             <div style="
                 display: flex;
                 gap: 20px;
