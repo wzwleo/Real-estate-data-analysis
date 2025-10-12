@@ -8,4 +8,3 @@ selenium
 beautifulsoup4
 pandas
 webdriver-manager
-faiss
