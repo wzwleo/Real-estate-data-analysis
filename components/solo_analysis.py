@@ -120,6 +120,9 @@ def tab1_module():
                 </div>
             </div>
             """, unsafe_allow_html=True)
+
+        gemini_key = st.session_state.get("GEMINI_KEY","")
+        
         # 置中長條按鈕（純 Streamlit）
         col1, col2, col3 = st.columns([1, 2, 1])  # 中間欄較寬
         with col2:
