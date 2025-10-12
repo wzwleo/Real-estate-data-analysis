@@ -119,11 +119,11 @@ def tab1_module():
                     實際單價：{Actual_space_Price_per} 元/坪
                 </div>
             </div>
-         col1, col2, col3 = st.columns([1, 1, 1])
-         with col2:
+            """, unsafe_allow_html=True)
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col2:
             if st.button("開始分析", key="solo_analysis_button"):
                 st.success("我要開始分析囉")
-            """, unsafe_allow_html=True)
             
 
 
