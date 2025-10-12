@@ -153,8 +153,8 @@ def tab1_module():
             屋齡：{selected_row.get('屋齡','未提供')}
             樓層：{selected_row.get('樓層','未提供')}
             車位：{selected_row.get('車位','未提供')}
-            建坪單價：{area_price_per} 元/坪
-            實際單價：{actual_price_per} 元/坪
+            建坪單價：{area_Price_per} 元/坪
+            實際單價：{Actual_space_Price_per} 元/坪
 
             請生成具參考價值的分析摘要，建議字數約 100-200 字。
             """
