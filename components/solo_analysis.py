@@ -121,6 +121,17 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
         st.write("\n")
+        # 置中長條按鈕（純 Streamlit）
+        col1, col2, col3 = st.columns([1, 2, 1])  # 中間欄較寬
+        with col2:
+            st.write("")  # 增加一點空白
+            st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
+            analyze_clicked = st.button("🚀 開始分析", use_container_width=True, key="solo_analysis_button")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if analyze_clicked:
+            st.success("我要開始分析囉")
+
 
 
             
