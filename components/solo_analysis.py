@@ -141,7 +141,7 @@ def tab1_module():
                 model = genai.GenerativeModel("gemini-2.0-flash")
         
                 prompt = f"""
-                請針對以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
+                請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
         
                 標題：{selected_row.get('標題','未提供')}
                 地址：{selected_row.get('地址','未提供')}
