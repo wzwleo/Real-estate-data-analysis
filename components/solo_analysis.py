@@ -67,7 +67,7 @@ def tab1_module():
         
         # 先處理坪數文字
         Actual_space = selected_row.get('主+陽', '未提供')
-        Actual_space_text = f"{Actual_space} 坪" if area != '未提供' else area
+        Actual_space_text = f"{Actual_space} 坪" if Actual_space != '未提供' else Actual_space
 
         #建坪單價/實際單價
         total_price = int(raw_price) * 10000
