@@ -133,7 +133,42 @@ def tab1_module():
             st.markdown("</div>", unsafe_allow_html=True)
 
         if analyze_clicked:
-            st.success("我要開始分析囉")
+            if not gemini_key:
+                st.error("❌ 右側 gemini API Key 有誤")
+                st.stop()
+        try:
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+
+            prompt = f"""
+            請針對以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
+
+            標題：{selected_row.get('標題','未提供')}
+            地址：{selected_row.get('地址','未提供')}
+            類型：{selected_row.get('類型','未提供')}
+            總價：{formatted_price} 元
+            建坪：{area_text}
+            實際坪數：{actual_space_text}
+            格局：{selected_row.get('格局','未提供')}
+            屋齡：{selected_row.get('屋齡','未提供')}
+            樓層：{selected_row.get('樓層','未提供')}
+            車位：{selected_row.get('車位','未提供')}
+            建坪單價：{area_price_per} 元/坪
+            實際單價：{actual_price_per} 元/坪
+
+            請生成具參考價值的分析摘要，建議字數約 100-200 字。
+            """
+
+            with st.spinner("Gemini 正在分析中..."):
+                response = model.generate_content(prompt)
+
+            st.success("✅ 分析完成")
+            st.markdown("### 🔍 Gemini AI 分析結果")
+            st.markdown(response.text)
+
+        except Exception as e:
+            st.error(f"❌ 分析過程發生錯誤：{e}")
+
 
 
 
