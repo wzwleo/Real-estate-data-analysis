@@ -121,41 +121,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
         st.write("\n")
-        # 分析按鈕（置中、長條）
-        st.markdown("""
-        <style>
-        .center-button-container {
-            display: flex;
-            justify-content: center;
-            margin-top: 20px;
-        }
-        .stButton>button {
-            width: 60%;
-            height: 60px;
-            background-color: #4CAF50;
-            color: white;
-            font-size: 22px;
-            font-weight: bold;
-            border-radius: 10px;
-            border: 2px solid #4CAF50;
-            transition: all 0.3s;
-        }
-        .stButton>button:hover {
-            background-color: #45a049;
-            transform: scale(1.03);
-        }
-        </style>
-        <div class="center-button-container">
-        """, unsafe_allow_html=True)
 
-        # Streamlit 按鈕（放進上面的樣式容器中）
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🚀 開始分析", key="solo_analysis_button"):
-                st.success("我要開始分析囉")
-        
-        # 結束 HTML 容器
-        st.markdown("</div>", unsafe_allow_html=True)
 
             
 
