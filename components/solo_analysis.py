@@ -148,7 +148,7 @@ def tab1_module():
             類型：{selected_row.get('類型','未提供')}
             總價：{formatted_price} 元
             建坪：{area_text}
-            實際坪數：{actual_space_text}
+            實際坪數：{Actual_space_text}
             格局：{selected_row.get('格局','未提供')}
             屋齡：{selected_row.get('屋齡','未提供')}
             樓層：{selected_row.get('樓層','未提供')}
