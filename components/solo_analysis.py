@@ -120,6 +120,7 @@ def tab1_module():
                 </div>
             </div>
             """, unsafe_allow_html=True)
+        st.write("\n")
         col1, col2, col3 = st.columns([1, 1, 1])
         with col2:
             if st.button("開始分析", key="solo_analysis_button"):
