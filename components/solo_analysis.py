@@ -12,6 +12,9 @@ name_map = {
 
     # 可以繼續加其他城市
 }
+# 建立反向對照表:中文 -> 英文檔名
+reverse_name_map = {v: k for k, v in name_map.items()}
+
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -153,7 +156,12 @@ def tab1_module():
                 
                 address = selected_row.get('地址', '未提供')
                 city = address[:3]  # 取前三個字
-                st.write(city)
+                # 轉換成英文檔名
+                english_filename = reverse_name_map.get(city, None)
+                
+                if english_filename:
+                    st.write(f"城市: {city}")
+                    st.write(f"對應檔名: {english_filename}")
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
