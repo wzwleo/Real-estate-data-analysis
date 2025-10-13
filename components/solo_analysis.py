@@ -159,9 +159,7 @@ def tab1_module():
                 # 轉換成英文檔名
                 english_filename = reverse_name_map.get(city, None)
                 
-                if english_filename:
-                    st.write(f"城市: {city}")
-                    st.write(f"對應檔名: {english_filename}")
+                st.write(f"對應檔名: {english_filename}")
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
