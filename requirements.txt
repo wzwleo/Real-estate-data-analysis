@@ -8,4 +8,4 @@ selenium
 beautifulsoup4
 pandas
 webdriver-manager
-faiss
+faiss-cpu==1.7.4
