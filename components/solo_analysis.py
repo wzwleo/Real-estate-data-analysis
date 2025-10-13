@@ -144,7 +144,7 @@ def tab1_module():
                 
                 address = selected_row.get('地址')
                 city = address[:3]  # 取前三個字
-                print(city)
+                st.write(city)
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
