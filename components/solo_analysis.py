@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
-import faiss
 
 def get_favorites_data():
     """取得收藏房產的資料"""
