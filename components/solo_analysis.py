@@ -4,6 +4,15 @@ import google.generativeai as genai
 import hnswlib
 from sentence_transformers import SentenceTransformer
 
+# 對照表：英文檔名 -> 中文名稱
+name_map = {
+    "Taichung-city_buy_properties.csv": "台中市",
+    "Taipei-city_buy_properties.csv": "台北市"
+    
+
+    # 可以繼續加其他城市
+}
+
 def get_favorites_data():
     """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
@@ -142,7 +151,9 @@ def tab1_module():
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
                 
-                
+                address = selected_row.get('地址', '未提供')
+                city = address[:3]  # 取前三個字
+                st.write(city)
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
