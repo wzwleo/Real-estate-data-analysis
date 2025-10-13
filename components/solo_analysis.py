@@ -4,6 +4,29 @@ import google.generativeai as genai
 import hnswlib
 from sentence_transformers import SentenceTransformer
 
+# 對照表：英文檔名 -> 中文名稱
+name_map = {
+    "Taichung-city_buy_properties.csv": "台中市",
+    "Taipei-city_buy_properties.csv": "台北市"
+    
+
+    # 可以繼續加其他城市
+}
+
+# 反轉對照表：中文名稱 -> 英文檔名
+reverse_name_map = {v: k for k, v in name_map.items()}
+
+def get_city_filename(address):
+    """
+    根據地址前三個字，回傳對應的英文檔名
+    """
+    prefix = address[:3]  # 取前三個字
+    for city_name, filename in reverse_name_map.items():
+        if prefix in city_name:
+            return filename
+    # 找不到就回 None
+    return None
+
 def get_favorites_data():
     """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
@@ -142,9 +165,10 @@ def tab1_module():
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
                 
-                address = selected_row.get('地址')
-                city = address[:3]  # 取前三個字
-                st.write(city)
+                # 使用範例
+                address = selected_row.get('地址', '未提供')
+                city_filename = get_city_filename(address)
+                st.write(city_filename)
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
@@ -164,7 +188,7 @@ def tab1_module():
         
                 請生成具參考價值的分析摘要，建議字數約 100-200 字。
                 """
-        
+                
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
         
