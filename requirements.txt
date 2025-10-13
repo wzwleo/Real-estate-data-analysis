@@ -8,4 +8,5 @@ selenium
 beautifulsoup4
 pandas
 webdriver-manager
-
+hnswlib
+sentence-transformers>=2.2.2
