@@ -157,13 +157,14 @@ def tab1_module():
                 
                 # 轉換成英文檔名
                 english_filename = reverse_name_map.get(city)
-                
-                st.write(f"對應檔名: {english_filename}")
                 file_path = os.path.join("./Data", english_filename)
                 
                 # 讀取 CSV 檔案
                 df = pd.read_csv(file_path)
-                st.dataframe(df)
+                house_title = {selected_row.get('標題')}
+                # 根據標題篩選房型
+                selected_row = df[df['標題'] == house_title].iloc[0]
+                st.write(selected_row)
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
