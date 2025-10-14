@@ -177,32 +177,69 @@ def tab1_module():
                 texts = df.apply(row_to_text, axis=1).tolist()
                 embeddings = embed_model.encode(texts, show_progress_bar=True)
                 embeddings = np.array(embeddings).astype('float32')
+
+                dimension = embeddings.shape[1]
+                num_elements = len(embeddings)
                 
+                # 初始化索引
+                index = hnswlib.Index(space='l2', dim=dimension)
+                
+                # 建立索引（ef_construction 越大越精確但越慢）
+                index.init_index(max_elements=num_elements, ef_construction=200, M=16)
+
+                index.add_items(embeddings, np.arange(num_elements))
+                
+                # 設定查詢參數（ef 越大越精確）
+                index.set_ef(50)
+
+                # 找到選中房屋的索引
+                selected_idx = df[df['標題'] == house_title].index[0]
+                selected_text = row_to_text(selected_row)
+                query_vec = embeddings[selected_idx:selected_idx+1]
+                
+                # 查詢相似房屋（包含自己，所以查 11 筆）
+                top_k = 11
+                labels, distances = index.knn_query(query_vec, k=top_k)
+
+                # 取得相似房屋資料（過濾掉自己）
+                relevant_data = []
+                for i, (idx, dist) in enumerate(zip(labels[0], distances[0])):
+                    if idx != selected_idx:
+                        house_data = df.iloc[idx].to_dict()
+                        relevant_data.append(house_data)
+                
+                # 準備文字輸入
+                selected_text_display = f"{selected_row['標題']} - {selected_text}"
+                relevant_text = "\n".join([f"{r['標題']} - {row_to_text(r)}" for r in relevant_data])
+                
+                # 組合提示詞
                 prompt = f"""
-                請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
-        
-                標題：{selected_row.get('標題','未提供')}
-                地址：{selected_row.get('地址','未提供')}
-                類型：{selected_row.get('類型','未提供')}
-                總價：{formatted_price} 元
-                建坪：{area_text}
-                實際坪數：{Actual_space_text}
-                格局：{selected_row.get('格局','未提供')}
-                屋齡：{selected_row.get('屋齡','未提供')}
-                樓層：{selected_row.get('樓層','未提供')}
-                車位：{selected_row.get('車位','未提供')}
-                建坪單價：{area_Price_per} 元/坪
-                實際單價：{Actual_space_Price_per} 元/坪
-        
-                請生成具參考價值的分析摘要，建議字數約 100-200 字。
+                請根據以下房屋資料生成中文市場分析：
+                
+                單筆房型：
+                {selected_text_display}
+                
+                相似房屋資料：
+                {relevant_text}
+                
+                請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
                 """
+                
+                response = model_gen.generate_content(prompt)
                 
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
         
                 st.success("✅ 分析完成")
-                st.markdown("### 🔍 Gemini AI 分析結果")
+                st.markdown("\n" + "="*50)
+                st.markdown("🧠 **Gemini 市場分析結果**")
+                st.markdown("="*50 + "\n")
+                
+                st.markdown(f"🏘️ **單筆房型:** {selected_text_display}\n")
+                
+                # 顯示 Gemini 分析結果
                 st.markdown(response.text)
+
         
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
