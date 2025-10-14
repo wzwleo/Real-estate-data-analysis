@@ -238,18 +238,15 @@ def tab1_module():
                 
                 with st.expander("相似房型資料"):
                     if relevant_data:
-                        for i, house in enumerate(relevant_data):
-                            st.markdown(f"**{i+1}. {house['標題']}**")
-                            st.write(f"📍 地址: {house.get('地址','未提供')}")
-                            st.write(f"建坪: {house.get('建坪','未提供')} 坪")
-                            st.write(f"主+陽: {house.get('主+陽','未提供')} 坪")
-                            st.write(f"總價: {house.get('總價(萬)','未提供')} 萬")
-                            st.write(f"屋齡: {house.get('屋齡','未提供')}")
-                            st.write(f"類型: {house.get('類型','未提供')}")
-                            st.write(f"格局: {house.get('格局','未提供')}")
-                            st.write(f"樓層: {house.get('樓層','未提供')}")
-                            st.write(f"車位: {house.get('車位','未提供')}")
-                            st.markdown("---")
+                        # 將 list of dict 轉成 DataFrame
+                        similar_df = pd.DataFrame(relevant_data)
+                        
+                        # 可以選擇只顯示特定欄位，或重新命名欄位
+                        display_cols = ['標題', '地址', '建坪', '主+陽', '總價(萬)', '屋齡', '類型', '格局', '樓層', '車位']
+                        similar_df = similar_df[display_cols]
+                        
+                        # 顯示 DataFrame
+                        st.dataframe(similar_df)
                     else:
                         st.write("沒有找到相似房型")
 
