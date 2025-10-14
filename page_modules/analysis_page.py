@@ -5,6 +5,12 @@ import math
 from streamlit.components.v1 import html
 from components.solo_analysis import tab1_module
 import google.generativeai as genai
+from page_modules.analysis_page import render_analysis_page
+from page_modules.home_page import render_home_page
+from page_modules.search_page import render_search_page
+from page_modules.sidebar import render_sidebar
+from page_modules.utils import some_util_function  # 如果有需要
+
 
 # ===========================
 # 收藏與分析功能
