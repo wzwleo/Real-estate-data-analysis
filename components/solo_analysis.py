@@ -4,6 +4,7 @@ import google.generativeai as genai
 import hnswlib
 from sentence_transformers import SentenceTransformer
 import os
+import numpy as np
 
 # 在檔案開頭,name_map 下方加入反向對照表
 name_map = {
