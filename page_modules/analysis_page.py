@@ -1,43 +1,33 @@
-import streamlit as st
-import pandas as pd
-import requests
 import math
+import json
+import requests
+import streamlit as st
+from string import Template
 from streamlit.components.v1 import html
 from components.solo_analysis import tab1_module
 import google.generativeai as genai
-from page_modules.analysis_page import render_analysis_page
-from page_modules.home_page import render_home_page
-from page_modules.search_page import render_search_page
-from page_modules.sidebar import render_sidebar
-from page_modules.utils import some_util_function  # 如果有需要
-
+import pandas as pd
 
 # ===========================
 # 收藏與分析功能
 # ===========================
 def get_favorites_data():
-    """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
         return pd.DataFrame()
-
     all_df = None
     if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
         all_df = st.session_state.all_properties_df
     elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
         all_df = st.session_state.filtered_df
-
     if all_df is None or all_df.empty:
         return pd.DataFrame()
-
     fav_ids = st.session_state.favorites
     fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
 
 
 def render_favorites_list(fav_df):
-    """渲染收藏清單"""
     st.subheader("⭐ 我的收藏清單")
-
     for idx, (_, row) in enumerate(fav_df.iterrows()):
         with st.container():
             col1, col2 = st.columns([8, 2])
@@ -47,23 +37,18 @@ def render_favorites_list(fav_df):
                 st.write(f"**建坪：** {row['建坪']} | **格局：** {row['格局']} | **樓層：** {row['樓層']}")
                 if '車位' in row and pd.notna(row['車位']):
                     st.write(f"**車位：** {row['車位']}")
-
             with col2:
                 st.metric("總價", f"{row['總價(萬)']} 萬")
                 if pd.notna(row['建坪']) and row['建坪'] > 0:
                     unit_price = (row['總價(萬)'] * 10000) / row['建坪']
                     st.caption(f"單價: ${unit_price:,.0f}/坪")
-
                 property_id = row['編號']
                 if st.button("❌ 移除", key=f"remove_fav_{property_id}"):
                     st.session_state.favorites.discard(property_id)
                     st.rerun()
-
                 property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
                 st.markdown(f'[🔗 物件連結]({property_url})')
-
             st.markdown("---")
-
 
 # ===========================
 # Google Places 關鍵字搜尋與地圖顯示
@@ -85,19 +70,24 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
-
 def haversine(lat1, lon1, lat2, lon2):
-    """計算兩點距離（公尺）"""
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     d_phi = math.radians(lat2 - lat1)
     d_lambda = math.radians(lon2 - lon1)
-    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    a = math.sin(d_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(d_lambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
+def _get_server_key():
+    server_key = st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
+    if "GMAPS_SERVER_KEY" not in st.session_state and server_key:
+        st.warning("⚠️ 建議改用 GMAPS_SERVER_KEY（伺服器用）與 GMAPS_BROWSER_KEY（前端用）分離金鑰。")
+    return server_key
+
+def _get_browser_key():
+    return st.session_state.get("GMAPS_BROWSER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
 
 def geocode_address(address: str, api_key: str):
-    """使用 Geocoding Web Service（只用 Server Key）"""
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {"address": address, "key": api_key, "language": "zh-TW"}
     try:
@@ -109,13 +99,10 @@ def geocode_address(address: str, api_key: str):
     if status == "OK" and r.get("results"):
         loc = r["results"][0]["geometry"]["location"]
         return loc["lat"], loc["lng"]
-    else:
-        st.warning(f"Geocoding error: {status} / {r.get('error_message','')}")
-        return None, None
-
+    st.warning(f"Geocoding error: {status} / {r.get('error_message','')}")
+    return None, None
 
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
-    """Nearby Search，加入去重與錯誤提示"""
     results, seen = [], set()
 
     def call(params, tag_cat, tag_kw):
@@ -148,11 +135,11 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 if pid in seen:
                     continue
                 seen.add(pid)
-                p_lat = p["geometry"]["location"]["lat"]
-                p_lng = p["geometry"]["location"]["lng"]
-                dist = int(haversine(lat, lng, p_lat, p_lng))
+                loc = p["geometry"]["location"]
+                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
                 if dist <= radius:
-                    results.append((cat, kw, p.get("name", "未命名"), p_lat, p_lng, dist, pid))
+                    results.append((cat, kw, p.get("name","未命名"),
+                                    loc["lat"], loc["lng"], dist, pid))
 
     # 額外關鍵字搜尋
     if extra_keyword:
@@ -168,107 +155,86 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             if pid in seen:
                 continue
             seen.add(pid)
-            p_lat = p["geometry"]["location"]["lat"]
-            p_lng = p["geometry"]["location"]["lng"]
-            dist = int(haversine(lat, lng, p_lat, p_lng))
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             if dist <= radius:
-                results.append(("關鍵字", extra_keyword, p.get("name", "未命名"), p_lat, p_lng, dist, pid))
+                results.append(("關鍵字", extra_keyword, p.get("name","未命名"),
+                                loc["lat"], loc["lng"], dist, pid))
 
     results.sort(key=lambda x: x[5])
     return results
 
-
 def render_map(lat, lng, places, radius, title="房屋"):
-    """前端 JS 地圖：只用 Browser Key"""
-    browser_key = st.session_state.get('GMAPS_BROWSER_KEY', '')
-    markers_js = ""
+    """
+    用 string.Template 注入，避免 f-string 大括號造成 SyntaxError
+    """
+    browser_key = _get_browser_key()
+    # 將資料打包成 JSON（前端再渲染）
+    data = []
     for cat, kw, name, p_lat, p_lng, dist, pid in places:
-        color = CATEGORY_COLORS.get(cat, "#000000")
-        gmap_url = f"https://www.google.com/maps/place/?q=place_id:{pid}" if pid else ""
-        info = f'{cat}-{kw}: <a href="{gmap_url}" target="_blank">{name}</a><br>距離中心 {dist} 公尺'
-        markers_js += f"""
-        new google.maps.Marker({{
-            position: {{lat: {p_lat}, lng: {p_lng}}},
-            map: map,
-            title: "{cat}-{name}",
-            icon: {{
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 7,
-                fillColor: "{color}",
-                fillOpacity: 1,
-                strokeColor: "white",
-                strokeWeight: 1
-            }}
-        }}).addListener("click", function() {{
-            new google.maps.InfoWindow({{content: `{info}`}}).open(map, this);
-        }});
-        """
-    circle_js = f"""
-        new google.maps.Circle({{
-            strokeColor: "#FF0000",
-            strokeOpacity: 0.8,
-            strokeWeight: 2,
-            fillColor: "#FF0000",
-            fillOpacity: 0.1,
-            map: map,
-            center: center,
-            radius: {radius}
-        }});
-    """
-    map_html = f"""
-    <div id="map" style="height:400px;"></div>
-    <script>
-    function initMap() {{
-        var center = {{lat: {lat}, lng: {lng}}};
-        var map = new google.maps.Map(document.getElementById('map'), {{
-            zoom: 16,
-            center: center
-        }});
-        new google.maps.Marker({{
-            position: center,
-            map: map,
-            title: "{title}",
-            icon: {{ url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png" }}
-        }});
-        {circle_js}
-        {markers_js}
-    }}
-    </script>
-    <script src="https://maps.googleapis.com/maps/api/js?key={browser_key}&callback=initMap" async defer></script>
-    """
+        data.append({
+            "cat": cat, "kw": kw, "name": name, "lat": p_lat, "lng": p_lng,
+            "dist": dist, "pid": pid, "color": CATEGORY_COLORS.get(cat, "#000000")
+        })
+    data_json = json.dumps(data, ensure_ascii=False)
+
+    tpl = Template("""
+<div id="map" style="height:400px;"></div>
+<script>
+function initMap() {
+  var center = {lat: $LAT, lng: $LNG};
+  var map = new google.maps.Map(document.getElementById('map'), {zoom: 16, center: center});
+  new google.maps.Marker({position: center, map: map, title: "$TITLE"});
+  var data = $DATA_JSON;
+  data.forEach(function(p){
+    var gmapUrl = p.pid ? ("https://www.google.com/maps/place/?q=place_id:" + p.pid) : "";
+    var info = p.cat + "-" + p.kw + ": <a href=\\"" + gmapUrl + "\\" target=\\"_blank\\">" + p.name + "</a><br>距離中心 " + p.dist + " 公尺";
+    var marker = new google.maps.Marker({
+      position: {lat: p.lat, lng: p.lng},
+      map: map,
+      title: p.cat + "-" + p.name
+    });
+    marker.addListener("click", function(){
+      new google.maps.InfoWindow({content: info}).open(map, marker);
+    });
+  });
+  new google.maps.Circle({
+    strokeColor:"#FF0000", strokeOpacity:0.8, strokeWeight:2,
+    fillColor:"#FF0000", fillOpacity:0.1, map: map, center: center, radius: $RADIUS
+  });
+}
+</script>
+<script src="https://maps.googleapis.com/maps/api/js?key=$BROWSER_KEY&callback=initMap" async defer></script>
+""")
+    map_html = tpl.substitute(
+        LAT=lat, LNG=lng, TITLE=title, DATA_JSON=data_json,
+        RADIUS=radius, BROWSER_KEY=browser_key
+    )
     html(map_html, height=400)
 
-
 def format_places(places):
-    """格式化地點資訊，用於 Gemini 分析"""
-    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid])
-
+    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
 
 # ===========================
-# 分析頁面
+# 分析頁面（唯一對外匯出）
 # ===========================
 def render_analysis_page():
     st.title("📊 分析頁面")
-
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
     col1, col2, col3, col4 = st.columns([1,1,1,1])
     with col4:
-        analysis_scope = st.selectbox(
-            "選擇分析範圍",
-            ["⭐收藏類別", "已售出房產"],
-            key="analysis_scope"
-        )
+        st.selectbox("選擇分析範圍", ["⭐收藏類別", "已售出房產"], key="analysis_scope")
 
     tab1, tab2, tab3 = st.tabs(["個別分析","房屋比較","市場趨勢分析"])
 
-    # ---------------- 個別分析 ----------------
+    # 個別分析
     with tab1:
-        fav_df = get_favorites_data()
+        _ = get_favorites_data()
         tab1_module()
 
-    # ---------------- 房屋比較 ----------------
+    # 房屋比較
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
         fav_df = get_favorites_data()
@@ -277,13 +243,11 @@ def render_analysis_page():
         else:
             options = fav_df['標題'] + " | " + fav_df['地址']
             c1, c2 = st.columns(2)
-            with c1:
-                choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
-            with c2:
-                choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
+            with c1: choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
+            with c2: choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
 
-            google_server_key = st.session_state.get("GMAPS_SERVER_KEY","")
-            gemini_key = st.session_state.get("GEMINI_KEY","")
+            server_key = _get_server_key()
+            gemini_key = st.session_state.get("GEMINI_KEY", "")
 
             st.write("搜尋半徑 500 公尺")
             radius = 500
@@ -298,34 +262,26 @@ def render_analysis_page():
                         selected_categories.append(cat)
 
             if st.button("開始比較"):
-                # 檢查 Key
-                if not st.session_state.get("GMAPS_BROWSER_KEY"):
-                    st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**（用於前端地圖）")
-                    st.stop()
-                if not google_server_key or not gemini_key:
-                    st.error("❌ 請在側邊欄填入 Google Maps **Server Key** 與 Gemini API Key")
-                    st.stop()
+                if not _get_browser_key():
+                    st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**（前端地圖）"); st.stop()
+                if not server_key or not gemini_key:
+                    st.error("❌ 請在側邊欄填入 Google Maps **Server Key** 與 Gemini API Key"); st.stop()
                 if choice_a == choice_b:
-                    st.warning("⚠️ 請選擇兩個不同房屋")
-                    st.stop()
+                    st.warning("⚠️ 請選擇兩個不同房屋"); st.stop()
 
                 house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
                 house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
-
-                lat_a, lng_a = geocode_address(house_a["地址"], google_server_key)
-                lat_b, lng_b = geocode_address(house_b["地址"], google_server_key)
+                lat_a, lng_a = geocode_address(house_a["地址"], server_key)
+                lat_b, lng_b = geocode_address(house_b["地址"], server_key)
                 if lat_a is None or lat_b is None:
-                    st.error("❌ 無法解析地址（請檢查 Server Key 的 API 限制與來源限制是否正確）")
-                    st.stop()
+                    st.error("❌ 無法解析地址（請檢查 Server Key 的 API/來源限制）"); st.stop()
 
-                places_a = query_google_places_keyword(lat_a, lng_a, google_server_key, selected_categories, radius, extra_keyword=keyword)
-                places_b = query_google_places_keyword(lat_b, lng_b, google_server_key, selected_categories, radius, extra_keyword=keyword)
+                places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
+                places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
 
-                col_map1, col_map2 = st.columns(2)
-                with col_map1:
-                    render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
-                with col_map2:
-                    render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
+                m1, m2 = st.columns(2)
+                with m1: render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
+                with m2: render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
 
                 # Gemini 分析
                 genai.configure(api_key=gemini_key)
@@ -336,82 +292,11 @@ def render_analysis_page():
 房屋 B：
 {format_places(places_b)}
 請列出優缺點與結論。"""
-                response = model.generate_content(prompt)
+                resp = model.generate_content(prompt)
                 st.subheader("📊 Gemini 分析結果")
-                st.write(response.text)
+                st.write(resp.text)
 
-    # ---------------- 市場趨勢 ----------------
+    # 市場趨勢
     with tab3:
         st.subheader("📈 市場趨勢分析")
         st.info("🚧 市場趨勢分析功能開發中...")
-
-
-# ===========================
-# 側邊欄與狀態同步
-# ===========================
-def ensure_data_sync():
-    if ('filtered_df' in st.session_state and
-        not st.session_state.filtered_df.empty and
-        'all_properties_df' not in st.session_state):
-        st.session_state.all_properties_df = st.session_state.filtered_df.copy()
-    if 'favorites' not in st.session_state:
-        st.session_state.favorites = set()
-
-
-def render_sidebar():
-    st.sidebar.title("📑 導航")
-    page = st.sidebar.radio(
-        "選擇頁面",
-        ["🏠 首頁", "🔍 搜尋頁面", "📊 分析頁面"],
-        key="nav_radio"
-    )
-
-    if page == "🏠 首頁":
-        st.session_state.current_page = 'home'
-    elif page == "🔍 搜尋頁面":
-        st.session_state.current_page = 'search'
-    elif page == "📊 分析頁面":
-        st.session_state.current_page = 'analysis'
-
-    st.sidebar.title("⚙️ 設置")
-    # —— Browser / Server 金鑰 —— 
-    st.session_state["GMAPS_BROWSER_KEY"] = st.sidebar.text_input(
-        "Google Maps Browser Key（前端地圖用）",
-        type="password",
-        value=st.session_state.get("GMAPS_BROWSER_KEY", "")
-    )
-    st.session_state["GMAPS_SERVER_KEY"] = st.sidebar.text_input(
-        "Google Maps Server Key（後端 Web Service 用）",
-        type="password",
-        value=st.session_state.get("GMAPS_SERVER_KEY", "")
-    )
-    st.session_state["GEMINI_KEY"] = st.sidebar.text_input(
-        "Gemini API Key",
-        type="password",
-        value=st.session_state.get("GEMINI_KEY", "")
-    )
-
-
-# ===========================
-# 主程式
-# ===========================
-def main():
-    st.set_page_config(page_title="房產分析系統", layout="wide")
-    if "current_page" not in st.session_state:
-        st.session_state.current_page = "home"
-
-    render_sidebar()
-    ensure_data_sync()
-
-    if st.session_state.current_page == "home":
-        st.title("🏠 首頁")
-        st.write("歡迎使用房產分析系統")
-    elif st.session_state.current_page == "search":
-        st.title("🔍 搜尋頁面")
-        st.info("🚧 搜尋功能開發中...")
-    elif st.session_state.current_page == "analysis":
-        render_analysis_page()
-
-
-if __name__ == "__main__":
-    main()
