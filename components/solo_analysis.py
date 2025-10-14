@@ -237,7 +237,22 @@ def tab1_module():
                 st.markdown(response.text)
                 
                 with st.expander("相似房型資料"):
-                    st.write("嗨")
+                    if relevant_data:
+                        for i, house in enumerate(relevant_data):
+                            st.markdown(f"**{i+1}. {house['標題']}**")
+                            st.write(f"📍 地址: {house.get('地址','未提供')}")
+                            st.write(f"建坪: {house.get('建坪','未提供')} 坪")
+                            st.write(f"主+陽: {house.get('主+陽','未提供')} 坪")
+                            st.write(f"總價: {house.get('總價(萬)','未提供')} 萬")
+                            st.write(f"屋齡: {house.get('屋齡','未提供')}")
+                            st.write(f"類型: {house.get('類型','未提供')}")
+                            st.write(f"格局: {house.get('格局','未提供')}")
+                            st.write(f"樓層: {house.get('樓層','未提供')}")
+                            st.write(f"車位: {house.get('車位','未提供')}")
+                            st.markdown("---")
+                    else:
+                        st.write("沒有找到相似房型")
+
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
 
