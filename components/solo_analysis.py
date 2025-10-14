@@ -225,7 +225,6 @@ def tab1_module():
                 請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
                 """
                 
-                response = model.generate_content(prompt)
                 
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
