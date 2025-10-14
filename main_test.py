@@ -1,4 +1,3 @@
-@@ -1,33 +1,351 @@
 import streamlit as st
 from sidebar import render_sidebar
 from page_modules.home_page import render_home_page
