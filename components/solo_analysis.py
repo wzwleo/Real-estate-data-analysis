@@ -214,9 +214,10 @@ def tab1_module():
                 
                 # 組合提示詞
                 prompt = f"""
+                你是一位台灣不動產市場專家，具有多年房屋估價與市場分析經驗。
                 請根據以下房屋資料生成中文市場分析：
                 
-                單筆房型：
+                目標房型：
                 {selected_text_display}
                 
                 相似房屋資料：
@@ -230,11 +231,7 @@ def tab1_module():
                     response = model.generate_content(prompt)
         
                 st.success("✅ 分析完成")
-                st.markdown("\n" + "="*50)
-                st.markdown("🧠 **Gemini 市場分析結果**")
-                st.markdown("="*50 + "\n")
-                
-                st.markdown(f"🏘️ **單筆房型:** {selected_text_display}\n")
+                st.markdown("### 🧠 **Gemini 市場分析結果**")
                 
                 # 顯示 Gemini 分析結果
                 st.markdown(response.text)
