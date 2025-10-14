@@ -1,6 +1,17 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
+import hnswlib
+from sentence_transformers import SentenceTransformer
+
+# 在檔案開頭,name_map 下方加入反向對照表
+name_map = {
+    "Taichung-city_buy_properties.csv": "台中市",
+    "Taipei-city_buy_properties.csv": "台北市"
+}
+
+# 建立反向對照表:中文 -> 英文檔名
+reverse_name_map = {v: k for k, v in name_map.items()}
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -139,6 +150,14 @@ def tab1_module():
             try:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
+
+                address = selected_row.get('地址')
+                city = address[:3]
+                
+                # 轉換成英文檔名
+                english_filename = reverse_name_map.get(city)
+                
+                st.write(f"城市: {city}")
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
