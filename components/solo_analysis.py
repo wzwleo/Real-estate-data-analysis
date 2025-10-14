@@ -164,7 +164,18 @@ def tab1_module():
                 house_title = str(selected_row.get('標題','')).strip()
                 # 根據標題篩選房型
                 selected_row = df[df['標題'] == house_title].iloc[0]
-                st.write(selected_row)
+
+                model = SentenceTransformer('all-MiniLM-L6-v2')
+                def row_to_text(row):
+                    """將每列資料轉為文字描述"""
+                    return (
+                        f"地址:{row['地址']}, 建坪:{row['建坪']}, 主+陽:{row['主+陽']}, "
+                        f"總價:{row['總價(萬)']}萬, 屋齡:{row['屋齡']}, 類型:{row['類型']}, "
+                        f"格局:{row['格局']}, 樓層:{row['樓層']}, 車位:{row['車位']}"
+                    )
+                texts = df.apply(row_to_text, axis=1).tolist()
+                embeddings = model.encode(texts, show_progress_bar=True)
+                embeddings = np.array(embeddings).astype('float32')
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
