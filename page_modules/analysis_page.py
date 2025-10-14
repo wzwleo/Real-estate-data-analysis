@@ -57,14 +57,14 @@ def render_favorites_list(fav_df):
             st.markdown("---")
 
 # ===========================
-# Google Places 搜尋與地圖顯示
+# Google Places 關鍵字搜尋與地圖顯示
 # ===========================
 PLACE_TYPES = {
-    "教育": {"types": ["school", "library"], "keywords": ["圖書館", "幼兒園", "小學", "中學", "大學"]},
-    "健康與保健": {"types": ["hospital", "pharmacy", "dentist", "doctor"], "keywords": ["牙醫", "醫師", "藥局", "醫院"]},
-    "購物": {"types": ["supermarket", "convenience_store", "department_store"], "keywords": ["便利商店", "超市", "百貨公司"]},
-    "交通運輸": {"types": ["bus_station", "subway_station", "train_station"], "keywords": ["公車站", "地鐵站", "火車站"]},
-    "餐飲": {"types": ["restaurant"], "keywords": ["餐廳"]}
+    "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
+    "健康與保健": ["牙醫", "醫師", "藥局", "醫院"],
+    "購物": ["便利商店", "超市", "百貨公司"],
+    "交通運輸": ["公車站", "地鐵站", "火車站"],
+    "餐飲": ["餐廳"]
 }
 
 CATEGORY_COLORS = {
@@ -93,37 +93,26 @@ def geocode_address(address: str, api_key: str):
         return loc["lat"], loc["lng"]
     return None, None
 
-def query_google_places(lat, lng, api_key, selected_categories, radius=500, extra_keyword="", use_type_search=True):
+def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results = []
+    # 類別關鍵字搜尋
     for cat in selected_categories:
-        items = PLACE_TYPES[cat]
-        search_list = items["types"] if use_type_search else items["keywords"]
-
-        for kw in search_list:
+        for kw in PLACE_TYPES[cat]:
             params = {
                 "location": f"{lat},{lng}",
                 "radius": radius,
+                "keyword": kw,
                 "key": api_key,
                 "language": "zh-TW"
             }
-            if use_type_search:
-                params["type"] = kw
-            else:
-                params["keyword"] = kw
-
-            try:
-                res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
-            except Exception as e:
-                st.warning(f"Google Places API 錯誤: {e}")
-                continue
-
+            res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
             for p in res.get("results", []):
                 p_lat = p["geometry"]["location"]["lat"]
                 p_lng = p["geometry"]["location"]["lng"]
                 dist = int(haversine(lat, lng, p_lat, p_lng))
                 if dist <= radius:
                     results.append((cat, kw, p.get("name","未命名"), p_lat, p_lng, dist, p.get("place_id","")))
-
+    # 額外關鍵字搜尋
     if extra_keyword:
         params = {
             "location": f"{lat},{lng}",
@@ -139,16 +128,8 @@ def query_google_places(lat, lng, api_key, selected_categories, radius=500, extr
             dist = int(haversine(lat, lng, p_lat, p_lng))
             if dist <= radius:
                 results.append(("關鍵字", extra_keyword, p.get("name","未命名"), p_lat, p_lng, dist, p.get("place_id","")))
-
-    # 去重 & 排序
-    seen = set()
-    deduped = []
-    for r in results:
-        if r[6] not in seen:  # place_id 去重
-            deduped.append(r)
-            seen.add(r[6])
-    deduped.sort(key=lambda x: x[5])
-    return deduped
+    results.sort(key=lambda x: x[5])
+    return results
 
 def render_map(lat, lng, places, radius, title="房屋"):
     markers_js = ""
@@ -252,7 +233,6 @@ def render_analysis_page():
             st.write("搜尋半徑 500 公尺")
             radius = 500
             keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
-            use_type_search = st.checkbox("使用官方 type 搜尋（精準度較高）", value=True)
 
             st.subheader("選擇要比較的生活機能類別")
             selected_categories = []
@@ -278,8 +258,8 @@ def render_analysis_page():
                     st.error("❌ 無法解析地址")
                     st.stop()
 
-                places_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=use_type_search)
-                places_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=use_type_search)
+                places_a = query_google_places_keyword(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword)
+                places_b = query_google_places_keyword(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword)
 
                 col_map1, col_map2 = st.columns(2)
                 with col_map1:
@@ -363,6 +343,8 @@ def main():
         st.info("🚧 搜尋功能開發中...")
     elif st.session_state.current_page == "analysis":
         render_analysis_page()
+
+
 
 if __name__ == "__main__":
     main()
