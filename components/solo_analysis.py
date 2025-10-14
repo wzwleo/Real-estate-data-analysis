@@ -227,7 +227,6 @@ def tab1_module():
                     請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
                     """
                 
-                
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
         
@@ -236,8 +235,9 @@ def tab1_module():
                 
                 # 顯示 Gemini 分析結果
                 st.markdown(response.text)
-
-        
+                
+                with st.expander("相似房型資料"):
+                    st.write("嗨")
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
 
