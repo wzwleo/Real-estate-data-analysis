@@ -3,6 +3,7 @@ import pandas as pd
 import google.generativeai as genai
 import hnswlib
 from sentence_transformers import SentenceTransformer
+import os
 
 # 在檔案開頭,name_map 下方加入反向對照表
 name_map = {
@@ -158,6 +159,16 @@ def tab1_module():
                 english_filename = reverse_name_map.get(city)
                 
                 st.write(f"對應檔名: {english_filename}")
+
+                # 組出完整路徑
+                file_path = os.path.join(".Data", english_filename)
+                
+                if os.path.exists(file_path):
+                    df = pd.read_csv(file_path, encoding="utf-8-sig")
+                    st.success(f"✅ 已載入 {len(df)} 筆資料")
+                    st.dataframe(df.head())
+                else:
+                    st.error(f"❌ 找不到檔案：{file_path}")
                 
                 prompt = f"""
                 請就已有的以下房屋資料進行分析，並以中文簡潔說明市場價值與優缺點：
