@@ -57,14 +57,14 @@ def render_favorites_list(fav_df):
             st.markdown("---")
 
 # ===========================
-# Google Places 關鍵字搜尋與地圖顯示
+# Google Places 搜尋與地圖顯示
 # ===========================
 PLACE_TYPES = {
-    "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
-    "健康與保健": ["牙醫", "醫師", "藥局", "醫院"],
-    "購物": ["便利商店", "超市", "百貨公司"],
-    "交通運輸": ["公車站", "地鐵站", "火車站"],
-    "餐飲": ["餐廳"]
+    "教育": ["library", "幼兒園", "小學", "school", "中學", "university"],
+    "健康與保健": ["dentist", "doctor", "pharmacy", "hospital"],
+    "購物": ["convenience_store", "supermarket", "shopping_mall"],
+    "交通運輸": ["bus_station", "subway_station", "train_station"],
+    "餐飲": ["restaurant"]
 }
 
 CATEGORY_COLORS = {
@@ -93,18 +93,21 @@ def geocode_address(address: str, api_key: str):
         return loc["lat"], loc["lng"]
     return None, None
 
-def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
+def query_google_places(lat, lng, api_key, selected_categories, radius=500, extra_keyword="", use_type_search=True):
     results = []
-    # 類別關鍵字搜尋
     for cat in selected_categories:
-        for kw in PLACE_TYPES[cat]:
+        search_list = PLACE_TYPES[cat]
+        for kw in search_list:
             params = {
                 "location": f"{lat},{lng}",
                 "radius": radius,
-                "keyword": kw,
                 "key": api_key,
                 "language": "zh-TW"
             }
+            if use_type_search and kw.isascii():  # 官方 type 搜尋 (英文)
+                params["type"] = kw
+            else:
+                params["keyword"] = kw
             res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
             for p in res.get("results", []):
                 p_lat = p["geometry"]["location"]["lat"]
@@ -233,6 +236,7 @@ def render_analysis_page():
             st.write("搜尋半徑 500 公尺")
             radius = 500
             keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
+            use_type_search = st.checkbox("使用官方 type 搜尋（精準度較高）", value=True)
 
             st.subheader("選擇要比較的生活機能類別")
             selected_categories = []
@@ -258,8 +262,8 @@ def render_analysis_page():
                     st.error("❌ 無法解析地址")
                     st.stop()
 
-                places_a = query_google_places_keyword(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword)
-                places_b = query_google_places_keyword(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword)
+                places_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=use_type_search)
+                places_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=use_type_search)
 
                 col_map1, col_map2 = st.columns(2)
                 with col_map1:
@@ -343,8 +347,6 @@ def main():
         st.info("🚧 搜尋功能開發中...")
     elif st.session_state.current_page == "analysis":
         render_analysis_page()
-
-
 
 if __name__ == "__main__":
     main()
