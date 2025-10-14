@@ -109,7 +109,7 @@ def tab1_module():
                 <div> 車位：{selected_row.get('車位','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
-        
+            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
@@ -136,14 +136,6 @@ def tab1_module():
             """, unsafe_allow_html=True)
 
         gemini_key = st.session_state.get("GEMINI_KEY","")
-        
-        # 置中長條按鈕（純 Streamlit）
-        col1, col2, col3 = st.columns([1, 2, 1])  # 中間欄較寬
-        with col2:
-            st.write("")  # 增加一點空白
-            st.markdown("<div style='text-align:center;'>", unsafe_allow_html=True)
-            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
-            st.markdown("</div>", unsafe_allow_html=True)
 
         if analyze_clicked:
             if not gemini_key:
