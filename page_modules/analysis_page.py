@@ -24,7 +24,7 @@ def get_favorites_data():
         return pd.DataFrame()
     
     fav_ids = st.session_state.favorites
-    fav_df = all_df[all_df['編號'].isin(fav_ids)].copy()
+    fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
 
 
@@ -49,7 +49,7 @@ def render_favorites_list(fav_df):
 
                 property_id = row['編號']
                 if st.button("❌ 移除", key=f"remove_fav_{property_id}"):
-                    st.session_state.favorites.remove(property_id)
+                    st.session_state.favorites.discard(property_id)
                     st.rerun()
 
                 property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
@@ -87,7 +87,11 @@ def haversine(lat1, lon1, lat2, lon2):
 def geocode_address(address: str, api_key: str):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {"address": address, "key": api_key, "language": "zh-TW"}
-    r = requests.get(url, params=params, timeout=10).json()
+    try:
+        r = requests.get(url, params=params, timeout=10).json()
+    except Exception as e:
+        st.error(f"地址解析失敗: {e}")
+        return None, None
     if r.get("status") == "OK" and r["results"]:
         loc = r["results"][0]["geometry"]["location"]
         return loc["lat"], loc["lng"]
@@ -105,7 +109,10 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 "key": api_key,
                 "language": "zh-TW"
             }
-            res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
+            try:
+                res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
+            except:
+                continue
             for p in res.get("results", []):
                 p_lat = p["geometry"]["location"]["lat"]
                 p_lng = p["geometry"]["location"]["lng"]
@@ -121,7 +128,10 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             "key": api_key,
             "language": "zh-TW"
         }
-        res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
+        try:
+            res = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params=params, timeout=10).json()
+        except:
+            res = {"results":[]}
         for p in res.get("results", []):
             p_lat = p["geometry"]["location"]["lat"]
             p_lng = p["geometry"]["location"]["lng"]
@@ -189,6 +199,9 @@ def render_map(lat, lng, places, radius, title="房屋"):
     """
     html(map_html, height=400)
 
+def format_places(places):
+    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
+
 # ===========================
 # 分析頁面
 # ===========================
@@ -250,8 +263,8 @@ def render_analysis_page():
                     st.warning("⚠️ 請選擇兩個不同房屋")
                     st.stop()
 
-                house_a = fav_df[options==choice_a].iloc[0]
-                house_b = fav_df[options==choice_b].iloc[0]
+                house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
+                house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
                 lat_a, lng_a = geocode_address(house_a["地址"], google_key)
                 lat_b, lng_b = geocode_address(house_b["地址"], google_key)
                 if not lat_a or not lat_b:
@@ -271,12 +284,11 @@ def render_analysis_page():
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
                 prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
-                並列出優缺點與結論：
-                房屋 A：
-                {places_a}
-                房屋 B：
-                {places_b}
-                """
+房屋 A：
+{format_places(places_a)}
+房屋 B：
+{format_places(places_b)}
+請列出優缺點與結論。"""
                 response = model.generate_content(prompt)
                 st.subheader("📊 Gemini 分析結果")
                 st.write(response.text)
@@ -343,7 +355,6 @@ def main():
         st.info("🚧 搜尋功能開發中...")
     elif st.session_state.current_page == "analysis":
         render_analysis_page()
-
 
 
 if __name__ == "__main__":
