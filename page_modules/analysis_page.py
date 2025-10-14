@@ -288,59 +288,64 @@ def render_analysis_page():
         tab1_module()
 
     # ---------------- 房屋比較 ----------------
-    with tab2:
-        st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
-        fav_df = get_favorites_data()
-        if fav_df.empty:
-            st.info("⭐ 尚未有收藏房產，無法比較")
-        else:
-            options = (fav_df['標題'] + " | " + fav_df['地址']).tolist()
-            col1, col2 = st.columns(2)
-            with col1:
-                choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
-            with col2:
-                choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
+  # ---------------- 房屋比較 ----------------
+with tab2:
+    st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
+    fav_df = get_favorites_data()
+    if fav_df.empty:
+        st.info("⭐ 尚未有收藏房產，無法比較")
+    else:
+        options = fav_df['標題'] + " | " + fav_df['地址']
+        col1, col2 = st.columns(2)
+        with col1:
+            choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
+        with col2:
+            choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
 
-            google_key = st.session_state.get("GOOGLE_MAPS_KEY","")
-            gemini_key = st.session_state.get("GEMINI_KEY",
-                                              "")
+        google_key = st.session_state.get("GOOGLE_MAPS_KEY","")
+        gemini_key = st.session_state.get("GEMINI_KEY","")
 
-            st.write("搜尋半徑 500 公尺")
-            radius = 500
-            keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
+        st.write("搜尋半徑 500 公尺")
+        radius = 500
+        keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
 
-            st.subheader("選擇要比較的生活機能類別")
-            selected_categories = []
-            cols = st.columns(len(PLACE_TYPES))
-            for i, cat in enumerate(PLACE_TYPES.keys()):
-                with cols[i]:
-                    if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
-                        selected_categories.append(cat)
+        # ---- 搜尋方式切換按鈕 ----
+        if "use_type_search" not in st.session_state:
+            st.session_state.use_type_search = True  # 預設使用 type 搜尋
 
-            use_type = st.checkbox("使用 Google 官方 type 搜尋（較精準）", value=False)
+        toggle_col1, toggle_col2 = st.columns([1, 3])
+        with toggle_col1:
+            search_mode = "Google 官方 type" if st.session_state.use_type_search else "關鍵字"
+            if st.button(f"🔄 搜尋方式: {search_mode}"):
+                st.session_state.use_type_search = not st.session_state.use_type_search
+                st.experimental_rerun()  # 點擊後立即切換模式
 
-            if st.button("開始比較"):
-                if not google_key or not gemini_key:
-                    st.error("❌ 請先在側邊欄輸入 API Key")
-                    st.stop()
-                if choice_a == choice_b:
-                    st.warning("⚠️ 請選擇兩個不同房屋")
-                    st.stop()
+        st.subheader("選擇要比較的生活機能類別")
+        selected_categories = []
+        cols = st.columns(len(PLACE_TYPES))
+        for i, cat in enumerate(PLACE_TYPES.keys()):
+            with cols[i]:
+                if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
+                    selected_categories.append(cat)
 
-                # 修正選擇比對取行的方式
-                title_a = choice_a.split(" | ")[0]
-                title_b = choice_b.split(" | ")[0]
-                house_a = fav_df[fav_df['標題'] == title_a].iloc[0]
-                house_b = fav_df[fav_df['標題'] == title_b].iloc[0]
+        if st.button("開始比較"):
+            if not google_key or not gemini_key:
+                st.error("❌ 請先在側邊欄輸入 API Key")
+                st.stop()
+            if choice_a == choice_b:
+                st.warning("⚠️ 請選擇兩個不同房屋")
+                st.stop()
 
-                lat_a, lng_a = geocode_address(house_a["地址"], google_key)
-                lat_b, lng_b = geocode_address(house_b["地址"], google_key)
-                if not lat_a or not lat_b:
-                    st.error("❌ 無法解析地址")
-                    st.stop()
+            house_a = fav_df[options==choice_a].iloc[0]
+            house_b = fav_df[options==choice_b].iloc[0]
+            lat_a, lng_a = geocode_address(house_a["地址"], google_key)
+            lat_b, lng_b = geocode_address(house_b["地址"], google_key)
+            if not lat_a or not lat_b:
+                st.error("❌ 無法解析地址")
+                st.stop()
 
-                places_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=use_type)
-                places_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=use_type)
+            places_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=st.session_state.use_type_search)
+            places_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=st.session_state.use_type_search)
 
                 col_map1, col_map2 = st.columns(2)
                 with col_map1:
