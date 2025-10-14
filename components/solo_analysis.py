@@ -109,6 +109,7 @@ def tab1_module():
                 <div> 車位：{selected_row.get('車位','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
+            st.write("\n")
             analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
