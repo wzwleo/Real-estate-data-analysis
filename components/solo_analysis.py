@@ -59,7 +59,7 @@ def tab1_module():
             color:white;
         ">
             <div style="font-size:40px; font-weight:bold;">{selected_row.get('標題','未提供')}</div>
-            <div style="font-size:20px;">📍嗨 {selected_row.get('地址','未提供')}</div>
+            <div style="font-size:20px;">📍 {selected_row.get('地址','未提供')}</div>
         </div>
         """, unsafe_allow_html=True)
 
