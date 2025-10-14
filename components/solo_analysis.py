@@ -135,7 +135,10 @@ def tab1_module():
                 </div>
             </div>
             """, unsafe_allow_html=True)
-
+            
+            st.write("\n")
+            chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
+            
         gemini_key = st.session_state.get("GEMINI_KEY","")
 
         if analyze_clicked:
