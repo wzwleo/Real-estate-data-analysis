@@ -51,27 +51,45 @@ def render_favorites_list(fav_df):
                 property_id = row['編號']
                 if st.button("❌ 移除", key=f"remove_fav_{property_id}"):
                     st.session_state.favorites.remove(property_id)
-                    st.rerun()
+                    st.experimental_rerun()
 
                 property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
                 st.markdown(f'[🔗 物件連結]({property_url})')
             st.markdown("---")
 
-
 # ===========================
 # Google Places 關鍵字與 type 搜尋與地圖顯示
 # ===========================
 PLACE_TYPES = {
-    "教育": {"keywords": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"], "types": ["library", "school", "university"]},
-    "健康與保健": {"keywords": ["牙醫", "醫師", "藥局", "醫院"], "types": ["dentist", "doctor", "pharmacy", "hospital"]},
-    "購物": {"keywords": ["便利商店", "超市", "百貨公司"], "types": ["convenience_store", "supermarket", "shopping_mall"]},
-    "交通運輸": {"keywords": ["公車站", "地鐵站", "火車站"], "types": ["bus_station", "subway_station", "train_station"]},
-    "餐飲": {"keywords": ["餐廳"], "types": ["restaurant"]}
+    "教育": {
+        "keywords": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
+        "types": ["library", "school", "university"]
+    },
+    "健康與保健": {
+        "keywords": ["牙醫", "醫師", "藥局", "醫院"],
+        "types": ["dentist", "doctor", "pharmacy", "hospital"]
+    },
+    "購物": {
+        "keywords": ["便利商店", "超市", "百貨公司"],
+        "types": ["convenience_store", "supermarket", "shopping_mall"]
+    },
+    "交通運輸": {
+        "keywords": ["公車站", "地鐵站", "火車站"],
+        "types": ["bus_station", "subway_station", "train_station"]
+    },
+    "餐飲": {
+        "keywords": ["餐廳"],
+        "types": ["restaurant"]
+    }
 }
 
 CATEGORY_COLORS = {
-    "教育": "#1E90FF", "健康與保健": "#32CD32", "購物": "#FF8C00",
-    "交通運輸": "#800080", "餐飲": "#FF0000", "關鍵字": "#000000"
+    "教育": "#1E90FF",
+    "健康與保健": "#32CD32",
+    "購物": "#FF8C00",
+    "交通運輸": "#800080",
+    "餐飲": "#FF0000",
+    "關鍵字": "#000000"
 }
 
 def haversine(lat1, lon1, lat2, lon2):
@@ -111,7 +129,13 @@ def query_google_places(lat, lng, api_key, selected_categories, radius=500, extr
         config = PLACE_TYPES.get(cat, {})
         if use_type_search:
             for t in config.get("types", []):
-                params = {"location": f"{lat},{lng}", "radius": radius, "type": t, "key": api_key, "language": "zh-TW"}
+                params = {
+                    "location": f"{lat},{lng}",
+                    "radius": radius,
+                    "type": t,
+                    "key": api_key,
+                    "language": "zh-TW"
+                }
                 res = safe_google_request("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params)
                 for p in res.get("results", []):
                     p_lat = p["geometry"]["location"]["lat"]
@@ -121,7 +145,13 @@ def query_google_places(lat, lng, api_key, selected_categories, radius=500, extr
                         results.append((cat, t, p.get("name", "未命名"), p_lat, p_lng, dist, p.get("place_id", "")))
         else:
             for kw in config.get("keywords", []):
-                params = {"location": f"{lat},{lng}", "radius": radius, "keyword": kw, "key": api_key, "language": "zh-TW"}
+                params = {
+                    "location": f"{lat},{lng}",
+                    "radius": radius,
+                    "keyword": kw,
+                    "key": api_key,
+                    "language": "zh-TW"
+                }
                 res = safe_google_request("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params)
                 for p in res.get("results", []):
                     p_lat = p["geometry"]["location"]["lat"]
@@ -131,7 +161,13 @@ def query_google_places(lat, lng, api_key, selected_categories, radius=500, extr
                         results.append((cat, kw, p.get("name", "未命名"), p_lat, p_lng, dist, p.get("place_id", "")))
 
     if extra_keyword:
-        params = {"location": f"{lat},{lng}", "radius": radius, "keyword": extra_keyword, "key": api_key, "language": "zh-TW"}
+        params = {
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "keyword": extra_keyword,
+            "key": api_key,
+            "language": "zh-TW"
+        }
         res = safe_google_request("https://maps.googleapis.com/maps/api/place/nearbysearch/json", params)
         for p in res.get("results", []):
             p_lat = p["geometry"]["location"]["lat"]
@@ -212,7 +248,6 @@ def render_map(lat, lng, places, radius, title="房屋"):
     """
     html(map_html, height=400)
 
-
 # ===========================
 # 分析頁面
 # ===========================
@@ -221,6 +256,8 @@ def render_analysis_page():
 
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
+    if 'use_type_search' not in st.session_state:
+        st.session_state.use_type_search = True
 
     col1, col2, col3, col4 = st.columns([1,1,1,1])
     with col4:
@@ -251,23 +288,19 @@ def render_analysis_page():
             with col2:
                 choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
 
-            google_key = st.session_state.get("GOOGLE_MAPS_KEY", "")
-            gemini_key = st.session_state.get("GEMINI_KEY", "")
+            google_key = st.session_state.get("GOOGLE_MAPS_KEY","")
+            gemini_key = st.session_state.get("GEMINI_KEY","")
 
             st.write("搜尋半徑 500 公尺")
             radius = 500
             keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
 
             # 搜尋方式切換
-            if "use_type_search" not in st.session_state:
-                st.session_state.use_type_search = True  # 預設使用 type 搜尋
-
             toggle_col1, toggle_col2 = st.columns([1, 3])
             with toggle_col1:
                 search_mode = "Google 官方 type" if st.session_state.use_type_search else "關鍵字"
                 if st.button(f"🔄 搜尋方式: {search_mode}"):
                     st.session_state.use_type_search = not st.session_state.use_type_search
-                    st.experimental_rerun()  # 點擊後立即切換模式
 
             st.subheader("選擇要比較的生活機能類別")
             selected_categories = []
@@ -285,18 +318,16 @@ def render_analysis_page():
                     st.warning("⚠️ 請選擇兩個不同房屋")
                     st.stop()
 
-                house_a = fav_df[options == choice_a].iloc[0]
-                house_b = fav_df[options == choice_b].iloc[0]
+                house_a = fav_df[options==choice_a].iloc[0]
+                house_b = fav_df[options==choice_b].iloc[0]
                 lat_a, lng_a = geocode_address(house_a["地址"], google_key)
                 lat_b, lng_b = geocode_address(house_b["地址"], google_key)
                 if not lat_a or not lat_b:
                     st.error("❌ 無法解析地址")
                     st.stop()
 
-                places_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius,
-                                               extra_keyword=keyword, use_type_search=st.session_state.use_type_search)
-                places_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius,
-                                               extra_keyword=keyword, use_type_search=st.session_state.use_type_search)
+                places_a = query_google_places(lat_a, lng_a, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=st.session_state.use_type_search)
+                places_b = query_google_places(lat_b, lng_b, google_key, selected_categories, radius, extra_keyword=keyword, use_type_search=st.session_state.use_type_search)
 
                 col_map1, col_map2 = st.columns(2)
                 with col_map1:
@@ -307,13 +338,7 @@ def render_analysis_page():
                 # Gemini 分析
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
-                prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
-並列出優缺點與結論：
-房屋 A：
-{places_a}
-房屋 B：
-{places_b}
-"""
+                prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，\n並列出優缺點與結論：\n房屋 A：\n{places_a}\n房屋 B：\n{places_b}\n"""
                 try:
                     response = model.generate_content(prompt)
                     st.subheader("📊 Gemini 分析結果")
@@ -325,7 +350,6 @@ def render_analysis_page():
     with tab3:
         st.subheader("📈 市場趨勢分析")
         st.info("🚧 市場趨勢分析功能開發中...")
-
 
 # ===========================
 # 側邊欄與狀態同步
@@ -365,7 +389,6 @@ def render_sidebar():
         value=st.session_state.get("GOOGLE_MAPS_KEY", "")
     )
 
-
 # ===========================
 # 主程式
 # ===========================
@@ -381,11 +404,4 @@ def main():
         st.title("🏠 首頁")
         st.write("歡迎使用房產分析系統")
     elif st.session_state.current_page == "search":
-        st.title("🔍 搜尋頁面")
-        st.info("🚧 搜尋功能開發中...")
-    elif st.session_state.current_page == "analysis":
-        render_analysis_page()
-
-
-if __name__ == "__main__":
-    main()
+        st.title("🔍 搜尋頁
