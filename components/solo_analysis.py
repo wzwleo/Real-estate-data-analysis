@@ -166,7 +166,7 @@ def tab1_module():
                 # 根據標題篩選房型
                 selected_row = df[df['標題'] == house_title].iloc[0]
 
-                model = SentenceTransformer('all-MiniLM-L6-v2')
+                embed_model = SentenceTransformer('all-MiniLM-L6-v2')
                 def row_to_text(row):
                     """將每列資料轉為文字描述"""
                     return (
@@ -175,7 +175,7 @@ def tab1_module():
                         f"格局:{row['格局']}, 樓層:{row['樓層']}, 車位:{row['車位']}"
                     )
                 texts = df.apply(row_to_text, axis=1).tolist()
-                embeddings = model.encode(texts, show_progress_bar=True)
+                embeddings = embed_model.encode(texts, show_progress_bar=True)
                 embeddings = np.array(embeddings).astype('float32')
                 
                 prompt = f"""
