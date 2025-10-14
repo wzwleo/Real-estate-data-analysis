@@ -161,7 +161,7 @@ def tab1_module():
                 
                 # 讀取 CSV 檔案
                 df = pd.read_csv(file_path)
-                house_title = {selected_row.get('標題')}
+                house_title = str(selected_row.get('標題','')).strip()
                 # 根據標題篩選房型
                 selected_row = df[df['標題'] == house_title].iloc[0]
                 st.write(selected_row)
