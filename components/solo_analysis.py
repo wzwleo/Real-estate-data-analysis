@@ -249,7 +249,7 @@ def tab1_module():
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
         if chart_clicked:
-            st.write("嗨")
+            st.write("施工中...")
 
 
 
