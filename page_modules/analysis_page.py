@@ -56,11 +56,11 @@ def render_favorites_list(fav_df):
 # Google Places 關鍵字與 type 搜尋
 # ===========================
 PLACE_TYPES = {
-    "教育": {"keywords": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"], "types": ["library", "school", "university"]},
-    "健康與保健": {"keywords": ["牙醫", "醫師", "藥局", "醫院"], "types": ["dentist", "doctor", "pharmacy", "hospital"]},
-    "購物": {"keywords": ["便利商店", "超市", "百貨公司"], "types": ["convenience_store", "supermarket", "shopping_mall"]},
-    "交通運輸": {"keywords": ["公車站", "地鐵站", "火車站"], "types": ["bus_station", "subway_station", "train_station"]},
-    "餐飲": {"keywords": ["餐廳"], "types": ["restaurant"]}
+    "教育": {"keywords": ["library","school","university"], "types": ["library","school","university"]},
+    "健康與保健": {"keywords": ["dentist","doctor","pharmacy","hospital"], "types": ["dentist","doctor","pharmacy","hospital"]},
+    "購物": {"keywords": ["convenience store","supermarket","shopping mall"], "types": ["convenience_store","supermarket","shopping_mall"]},
+    "交通運輸": {"keywords": ["bus station","subway station","train station"], "types": ["bus_station","subway_station","train_station"]},
+    "餐飲": {"keywords": ["restaurant"], "types": ["restaurant"]}
 }
 
 CATEGORY_COLORS = {
