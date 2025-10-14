@@ -25,7 +25,6 @@ def get_favorites_data():
     fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
 
-
 def render_favorites_list(fav_df):
     st.subheader("⭐ 我的收藏清單")
     for idx, (_, row) in enumerate(fav_df.iterrows()):
@@ -51,7 +50,7 @@ def render_favorites_list(fav_df):
             st.markdown("---")
 
 # ===========================
-# Google Places 關鍵字搜尋與地圖顯示
+# Google Places 搜尋與地圖顯示
 # ===========================
 PLACE_TYPES = {
     "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
@@ -120,7 +119,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             return []
         return data.get("results", [])
 
-    # 類別關鍵字搜尋
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             params = {
@@ -141,7 +139,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     results.append((cat, kw, p.get("name","未命名"),
                                     loc["lat"], loc["lng"], dist, pid))
 
-    # 額外關鍵字搜尋
     if extra_keyword:
         params = {
             "location": f"{lat},{lng}",
@@ -165,11 +162,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     return results
 
 def render_map(lat, lng, places, radius, title="房屋"):
-    """
-    用 string.Template 注入，避免 f-string 大括號造成 SyntaxError
-    """
     browser_key = _get_browser_key()
-    # 將資料打包成 JSON（前端再渲染）
     data = []
     for cat, kw, name, p_lat, p_lng, dist, pid in places:
         data.append({
@@ -192,6 +185,13 @@ function initMap() {
     var marker = new google.maps.Marker({
       position: {lat: p.lat, lng: p.lng},
       map: map,
+      icon: {
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 6,
+        fillColor: p.color,
+        fillOpacity: 1,
+        strokeWeight: 1
+      },
       title: p.cat + "-" + p.name
     });
     marker.addListener("click", function(){
@@ -216,7 +216,7 @@ def format_places(places):
     return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
 
 # ===========================
-# 分析頁面（唯一對外匯出）
+# 分析頁面主函式
 # ===========================
 def render_analysis_page():
     st.title("📊 分析頁面")
@@ -283,7 +283,6 @@ def render_analysis_page():
                 with m1: render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
                 with m2: render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
 
-                # Gemini 分析
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
                 prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
@@ -296,7 +295,6 @@ def render_analysis_page():
                 st.subheader("📊 Gemini 分析結果")
                 st.write(resp.text)
 
-    # 市場趨勢
     with tab3:
         st.subheader("📈 市場趨勢分析")
         st.info("🚧 市場趨勢分析功能開發中...")
