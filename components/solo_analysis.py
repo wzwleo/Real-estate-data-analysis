@@ -249,7 +249,71 @@ def tab1_module():
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
         if chart_clicked:
-            st.write("施工中...")
+            try:
+                address = selected_row.get('地址')
+                city = address[:3]
+                
+                # 轉換成英文檔名
+                english_filename = reverse_name_map.get(city)
+                file_path = os.path.join("./Data", english_filename)
+                
+                # 讀取 CSV 檔案
+                df = pd.read_csv(file_path)
+
+                # 2️⃣ 從地址擷取「區域」
+                df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0]
+            
+                # 3️⃣ 排除建坪 ≤ 0.1 的資料
+                df = df[df['建坪'] > 0.1].copy()
+                st.info(f"✅ 排除建坪 ≤ 0.1 的資料後，剩餘 {len(df)} 筆資料")
+            
+                # 4️⃣ 計算地坪單價（萬/坪）
+                df['地坪單價(萬/坪)'] = df['總價(萬)'] / df['建坪']
+            
+                # 5️⃣ 類別篩選
+                unique_types = df['類型'].dropna().unique()
+                selected_type = st.selectbox("選擇房屋類型（全部請選空白）", options=[""] + list(unique_types))
+                if selected_type:
+                    df = df[df['類型'].str.contains(selected_type, na=False)]
+                    st.info(f"✅ 已篩選房屋類型：{selected_type}，剩餘 {len(df)} 筆資料")
+            
+                # 6️⃣ 各區平均地坪單價
+                avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
+            
+                # 7️⃣ 畫出柱狀圖
+                fig = px.bar(
+                    avg_price,
+                    x='區域',
+                    y='地坪單價(萬/坪)',
+                    color='區域',
+                    text=avg_price['地坪單價(萬/坪)'].round(1).astype(str) + " 萬/坪",
+                    title='各區平均地坪單價柱狀圖（圖表不排序）'
+                )
+                fig.update_traces(textposition='outside')
+                fig.update_layout(
+                    xaxis_title='行政區',
+                    yaxis_title='平均地坪單價 (萬/坪)',
+                    title_x=0.5,
+                    showlegend=False,
+                    template='plotly_white'
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            
+                # 8️⃣ 區域查詢
+                query_area = st.text_input("請輸入要查看的行政區名稱（例如：西屯）")
+                sort_choice = st.radio("排序方式", ["由高到低", "由低到高"], index=0)
+            
+                if query_area:
+                    ascending = True if sort_choice == "由低到高" else False
+                    filtered_df = df[df['區域'].str.contains(query_area, na=False)].copy()
+                    if len(filtered_df) > 0:
+                        filtered_df = filtered_df.sort_values(by='地坪單價(萬/坪)', ascending=ascending)
+                        st.success(f"📍 找到 {len(filtered_df)} 筆屬於「{query_area}」的資料（已依地坪單價排序）")
+                        st.dataframe(filtered_df[['標題', '地址', '屋齡', '類型', '建坪', '總價(萬)', '地坪單價(萬/坪)']].reset_index(drop=True))
+                    else:
+                        st.warning(f"⚠️ 找不到包含「{query_area}」的區域資料，請確認輸入是否正確。")
+            except Exception as e:
+                st.error(f"❌ 圖表生成過程發生錯誤：{e}")
 
 
 
