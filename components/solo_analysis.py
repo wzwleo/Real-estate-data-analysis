@@ -251,6 +251,9 @@ def tab1_module():
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
         if chart_clicked:
+            if not gemini_key:
+                st.error("❌ 右側 gemini API Key 有誤")
+                st.stop()
             try:
                 address = selected_row.get('地址')
                 city = address[:3]
@@ -272,7 +275,6 @@ def tab1_module():
                 df['地坪單價(萬/坪)'] = df['總價(萬)'] / df['建坪']
             
                 # 5️⃣ 類別篩選
-                unique_types = df['類型'].dropna().unique()
                 selected_type = f"{selected_row.get('類型')}"
                 if selected_type:
                     df = df[df['類型'].str.contains(selected_type, na=False)]
@@ -301,8 +303,9 @@ def tab1_module():
                 st.plotly_chart(fig, use_container_width=True)
                 avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
                       for _, row in avg_price.iterrows()])
-                st.write(avg_text)
                 
+
+            
             except Exception as e:
                 st.error(f"❌ 圖表生成過程發生錯誤：{e}")
 
