@@ -136,6 +136,13 @@ def handle_search_submit(selected_label, options, housetype_change,
             # 讀取 CSV 檔案
             df = pd.read_csv(file_path)
             
+            # 屋齡預處理：將 "預售" 視為 0，其餘轉為數字
+            if '屋齡' in df.columns:
+                df['屋齡'] = (
+                    df['屋齡']
+                    .replace('預售', '0')            # 預售視為 0
+                )
+            
             # 準備篩選條件
             filters = {
                 'housetype': housetype_change,
