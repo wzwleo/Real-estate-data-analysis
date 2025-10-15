@@ -87,7 +87,7 @@ def haversine(lat1, lon1, lat2, lon2):
 def _get_server_key():
     server_key = st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
     if "GMAPS_SERVER_KEY" not in st.session_state and server_key:
-        st.warning("⚠️ 建議改用 GMAPS_SERVER_KEY（伺服器）與 GMAPS_BROWSER_KEY（前端）分離金鑰。")
+        st.warning("⚠️地圖加載 需要時間 請耐心等待")
     return server_key
 
 
