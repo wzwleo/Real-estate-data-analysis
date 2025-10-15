@@ -123,7 +123,7 @@ def _normalize_parsed_req(parsed: dict):
         "房間數": "rooms", "rooms": "rooms", "房間": "rooms", "臥室": "rooms",
         "廳數": "living_rooms", "廳": "living_rooms", "living_rooms": "living_rooms",
         "衛數": "bathrooms", "衛": "bathrooms", "bathrooms": "bathrooms",
-        "樓層": "floor", "floor": "floor"
+        #"樓層": "floor", "floor": "floor"
     }
 
     for k, v in parsed.items():
