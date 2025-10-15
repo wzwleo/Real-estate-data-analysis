@@ -297,7 +297,8 @@ def tab1_module():
                     template='plotly_white'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-            
+                st.write(avg_price)
+                
             except Exception as e:
                 st.error(f"❌ 圖表生成過程發生錯誤：{e}")
 
