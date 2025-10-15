@@ -138,7 +138,7 @@ def tab1_module():
             
             st.write("\n")
             chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
-            
+        
         gemini_key = st.session_state.get("GEMINI_KEY","")
         
         if analyze_clicked:
@@ -250,9 +250,17 @@ def tab1_module():
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
         if chart_clicked:
-            if not gemini_key:
-                st.error("❌ 右側 gemini API Key 有誤")
-                st.stop()
+            house_input_text_chart = f"""
+            地址：{selected_row.get('地址','未提供')}
+            建坪：{area_text}
+            建坪單價：{area_Price_per} 元/坪
+            類型：{selected_row.get('類型','未提供')}
+            格局：{selected_row.get('格局','未提供')}
+            樓層：{selected_row.get('樓層','未提供')}
+            屋齡：{selected_row.get('屋齡','未提供')}
+            車位：{selected_row.get('車位','未提供')}
+            """
+            
             try:
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
@@ -280,7 +288,7 @@ def tab1_module():
                 selected_type = f"{selected_row.get('類型')}"
                 if selected_type:
                     df = df[df['類型'].str.contains(selected_type, na=False)]
-            
+                    
                 # 6️⃣ 各區平均地坪單價
                 avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
                 avg_price['區域'] = avg_price['區域'] + '區'
@@ -301,41 +309,37 @@ def tab1_module():
                     showlegend=False,
                     template='plotly_white'
                 )
-                
-                avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']} 萬/坪" 
-                      for _, row in avg_price.iterrows()])
-                # 生成可給 Gemini 的文字
-                gemini_input_text_chart = f"""
-                地址：{selected_row.get('地址','未提供')}
-                建坪：{area_text}
-                建坪單價：{area_Price_per} 元/坪
-                類型：{selected_row.get('類型','未提供')}
-                格局：{selected_row.get('格局','未提供')}
-                樓層：{selected_row.get('樓層','未提供')}
-                屋齡：{selected_row.get('屋齡','未提供')}
-                車位：{selected_row.get('車位','未提供')}
-                """
-                
-                prompt = f"""
-                你是一位台灣不動產市場專家，請針對下列目標房屋的建坪單價和區域平均建坪單價資訊，提供簡短的價格評估：
-                目標房屋：
-                {gemini_input_text_chart}
-                
-                區域平均建坪單價：
-                {avg_text}
-                
-                指出是否高於或低於平均水平。
-                """
-                
-                with st.spinner("Gemini 正在分析中..."):
-                    response = model.generate_content(prompt)
-        
-                st.success("✅ 分析完成")
-                st.markdown("### 📊 **Gemini 圖表分析解果**")
                 st.plotly_chart(fig, use_container_width=True)
-                # 顯示 Gemini 分析結果
-                st.markdown(response.text)
-            
+                if st.buttom("請AI分析", key="bar_chart_analysis")
+                    if not gemini_key:
+                        st.error("❌ 右側 gemini API Key 有誤")
+                        st.stop()
+                    try:    
+                        avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']} 萬/坪" 
+                              for _, row in avg_price.iterrows()])
+                        # 生成可給 Gemini 的文字
+                        
+                        prompt = f"""
+                        你是一位台灣不動產市場專家，請針對下列目標房屋的建坪單價和區域平均建坪單價資訊，提供簡短的價格評估：
+                        目標房屋：
+                        {gemini_input_text_chart}
+                        
+                        區域平均建坪單價：
+                        {avg_text}
+                        
+                        指出是否高於或低於平均水平。
+                        """
+                        
+                        with st.spinner("Gemini 正在分析中..."):
+                            response = model.generate_content(prompt)
+                
+                        st.success("✅ 分析完成")
+                        st.markdown("### 📊 **Gemini 建坪圖表分析解果**")
+                        # 顯示 Gemini 分析結果
+                        st.markdown(response.text)
+                        
+                    except Exception as e:
+                        st.error(f"❌ 分析過程發生錯誤：{e}")
             except Exception as e:
                 st.error(f"❌ 圖表生成過程發生錯誤：{e}")
 
