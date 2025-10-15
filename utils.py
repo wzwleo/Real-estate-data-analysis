@@ -70,7 +70,7 @@ def filter_properties(df, filters):
             if '車位' in filtered_df.columns:
                 filtered_df = filtered_df[
                     (filtered_df['車位'].notna()) & 
-                    (filtered_df['車位'] != "無") & 
+                    (filtered_df['車位'] != "無車位") & 
                     (filtered_df['車位'] != 0)
                 ]
         elif filters['car_grip'] == "不要":
