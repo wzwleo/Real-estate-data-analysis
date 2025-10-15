@@ -347,11 +347,20 @@ def tab1_module():
                 avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
                       for _, row in avg_price.iterrows()])
                 # 生成可給 Gemini 的文字
-                gemini_input_text = house_to_text(selected_row)
+                gemini_input_text_chart = house_to_text(selected_row)
                 
-                # 可直接在 Streamlit 中顯示或餵給 Gemini
-                st.text_area("房屋資料文字描述（可用於 Gemini 分析）", gemini_input_text, height=300)
-
+                prompt = f"""
+                請幫我分析此房產：
+                {gemini_input_text_chart}
+                """
+                
+                with st.spinner("Gemini 正在分析中..."):
+                    response = model.generate_content(prompt)
+        
+                st.success("✅ 分析完成")
+                st.markdown("### 📊 **Gemini 圖表分析解果**")
+                # 顯示 Gemini 分析結果
+                st.markdown(response.text)
             
             except Exception as e:
                 st.error(f"❌ 圖表生成過程發生錯誤：{e}")
