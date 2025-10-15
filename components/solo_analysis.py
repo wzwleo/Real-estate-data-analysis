@@ -273,7 +273,7 @@ def tab1_module():
             
                 # 5️⃣ 類別篩選
                 unique_types = df['類型'].dropna().unique()
-                selected_type = st.selectbox("選擇房屋類型（全部請選空白）", options=[""] + list(unique_types))
+                selected_type = f"{selected_row.get('類型')}"
                 if selected_type:
                     df = df[df['類型'].str.contains(selected_type, na=False)]
                     st.info(f"✅ 已篩選房屋類型：{selected_type}，剩餘 {len(df)} 筆資料")
