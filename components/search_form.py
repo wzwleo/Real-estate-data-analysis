@@ -56,20 +56,22 @@ def render_search_form():
 
 
 def _extract_json_text(text: str):
-    """嘗試從回傳文字抓出第一個 JSON 物件或陣列字串，若找不到傳回 None"""
+    """嘗試從回傳文字抓出第一個 JSON 物件或陣列字串"""
     if not text:
         return None
-    # 先找 { ... } 或 [ ... ]
-    m = re.search(r'(\{(?:[^{}]|(?R))*\}|\[(?:[^\[\]]|(?R))*\])', text, re.DOTALL)
-    if m:
-        return m.group(1)
-    # 若沒找到，用簡單策略把中文標點換成英文，再看能否解析整段
-    text2 = text.replace('：', ':').replace('，', ',').replace('、', ',')
-    try:
-        json.loads(text2)
-        return text2
-    except:
-        return None
+    # 只抓最外層 {} 或 []
+    # 注意這個簡單版本不支援完全任意深度嵌套，但通常 Gemini 回傳沒問題
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        return text[start:end+1]
+    # 嘗試陣列形式
+    start = text.find('[')
+    end = text.rfind(']')
+    if start != -1 and end != -1 and end > start:
+        return text[start:end+1]
+    return None
+
 
 def _normalize_value(val):
     """把單一欄位的解析結果轉成整數或區間 dict"""
