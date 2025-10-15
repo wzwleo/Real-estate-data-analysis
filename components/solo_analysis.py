@@ -12,9 +12,52 @@ name_map = {
     "Taichung-city_buy_properties.csv": "台中市",
     "Taipei-city_buy_properties.csv": "台北市"
 }
-
 # 建立反向對照表:中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
+
+# 整理為 Gemini 可讀文字
+def house_to_text(row):
+    # 處理欄位缺值
+    def val(col):
+        v = row.get(col, "未提供")
+        return str(v) if v not in [None, ""] else "未提供"
+
+    # 建坪與實際坪數
+    area = val("建坪")
+    actual_space = val("主+陽")
+
+    # 總價與單價計算
+    try:
+        total_price = int(row.get("總價(萬)", 0)) * 10000
+    except:
+        total_price = "未提供"
+
+    try:
+        area_price_per = f"{total_price / float(area):,.0f}" if area != "未提供" else "未提供"
+    except:
+        area_price_per = "未提供"
+
+    try:
+        actual_price_per = f"{total_price / float(actual_space):,.0f}" if actual_space != "未提供" else "未提供"
+    except:
+        actual_price_per = "未提供"
+
+    # 整理成文字
+    text = f"""
+房屋標題: {val('標題')}
+地址: {val('地址')}
+類型: {val('類型')}
+建坪: {area} 坪
+實際坪數: {actual_space} 坪
+格局: {val('格局')}
+樓層: {val('樓層')}
+屋齡: {val('屋齡')}
+車位: {val('車位')}
+總價: {total_price} 元
+建坪單價: {area_price_per} 元/坪
+實際單價: {actual_price_per} 元/坪
+"""
+    return text.strip()
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -303,7 +346,11 @@ def tab1_module():
                 st.plotly_chart(fig, use_container_width=True)
                 avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
                       for _, row in avg_price.iterrows()])
+                # 生成可給 Gemini 的文字
+                gemini_input_text = house_to_text(selected_row)
                 
+                # 可直接在 Streamlit 中顯示或餵給 Gemini
+                st.text_area("房屋資料文字描述（可用於 Gemini 分析）", gemini_input_text, height=300)
 
             
             except Exception as e:
