@@ -302,7 +302,7 @@ def tab1_module():
                     template='plotly_white'
                 )
                 
-                avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
+                avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']} 萬/坪" 
                       for _, row in avg_price.iterrows()])
                 # 生成可給 Gemini 的文字
                 gemini_input_text_chart = f"""
