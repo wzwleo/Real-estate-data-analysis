@@ -160,15 +160,7 @@ def filter_properties(df, filters):
     if "bathrooms" in filters:
         bath = filters["bathrooms"]
         df = df[df['衛數'] >= bath]
-    if "floor" in filters:
-        floor = filters["floor"]
-        if isinstance(floor, dict):
-            if "min" in floor:
-                df = df[df['樓層'] >= floor["min"]]
-            if "max" in floor:
-                df = df[df['樓層'] <= floor["max"]]
-        else:
-            df = df[df['樓層'] == floor]
+    
 
     return df
 
