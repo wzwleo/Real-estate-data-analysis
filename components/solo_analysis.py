@@ -5,6 +5,7 @@ import hnswlib
 from sentence_transformers import SentenceTransformer
 import os
 import numpy as np
+import plotly.express as px
 
 # 在檔案開頭,name_map 下方加入反向對照表
 name_map = {
