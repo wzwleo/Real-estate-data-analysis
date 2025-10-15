@@ -126,8 +126,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         completed += 1
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-
-  def call(params, tag_cat, tag_kw):
+def call(params, tag_cat, tag_kw):
     """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
     for attempt in range(5):  # 改成 5 次
         try:
