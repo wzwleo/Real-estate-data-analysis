@@ -298,7 +298,9 @@ def tab1_module():
                     template='plotly_white'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                st.write(avg_price)
+                avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
+                      for _, row in avg_price.iterrows()])
+                st.write(avg_text)
                 
             except Exception as e:
                 st.error(f"❌ 圖表生成過程發生錯誤：{e}")
