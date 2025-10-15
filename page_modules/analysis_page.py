@@ -127,29 +127,32 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-    def call(params, tag_cat, tag_kw):
-        """自動處理重試與延遲"""
-        for attempt in range(3):
-            try:
-                data = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                                    params=params, timeout=10).json()
-            except Exception as e:
-                st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
-                return []
-            st_code = data.get("status")
-            if st_code == "OK":
-                return data.get("results", [])
-            elif st_code == "ZERO_RESULTS":
-                st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
-                return []
-            elif st_code == "OVER_QUERY_LIMIT":
-                st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
-                time.sleep(1)
-                continue
-            else:
-                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
-                return []
-        return []
+  def call(params, tag_cat, tag_kw):
+    """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
+    for attempt in range(5):  # 改成 5 次
+        try:
+            data = requests.get(
+                "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+                params=params, timeout=10
+            ).json()
+        except Exception as e:
+            st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
+            return []
+        st_code = data.get("status")
+        if st_code == "OK":
+            return data.get("results", [])
+        elif st_code == "ZERO_RESULTS":
+            st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
+            return []
+        elif st_code == "OVER_QUERY_LIMIT":
+            st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
+            time.sleep(5)  # 改成 5 秒間隔
+            continue
+        else:
+            st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
+            return []
+    return []
+
 
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
