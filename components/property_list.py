@@ -45,7 +45,7 @@ def render_property_card(row, current_page, idx):
             display_age = "預售" if row['屋齡'] == 0 else f"{row['屋齡']}年"
             
             st.subheader(f"#{global_idx} 🏠 {row['標題']}")    
-            st.write(f"**地址：** {row['地址']} | **屋齡：** {row['屋齡']}年 | **類型：** {row['類型']}")
+            st.write(f"**地址：** {row['地址']} | **屋齡：** {display_age} | **類型：** {row['類型']}")
             st.write(f"**建坪：** {row['建坪']} | **主+陽：** {row['主+陽']} | **格局：** {row['格局']} | **樓層：** {row['樓層']}")
             # 如果有車位資訊就顯示
             if '車位' in row and pd.notna(row['車位']):
