@@ -310,7 +310,7 @@ def tab1_module():
                     template='plotly_white'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                if st.buttom("請AI分析", key="bar_chart_analysis")
+                if st.button("請AI分析", key="bar_chart_analysis")
                     if not gemini_key:
                         st.error("❌ 右側 gemini API Key 有誤")
                         st.stop()
