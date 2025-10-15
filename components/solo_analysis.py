@@ -141,7 +141,7 @@ def tab1_module():
             chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
             
         gemini_key = st.session_state.get("GEMINI_KEY","")
-
+        selected_text_display = f"{selected_row['標題']} - {selected_text}"
         if analyze_clicked:
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
@@ -208,7 +208,6 @@ def tab1_module():
                             relevant_data.append(house_data)
                     
                     # 準備文字輸入
-                    selected_text_display = f"{selected_row['標題']} - {selected_text}"
                     relevant_text = "\n".join([f"{r['標題']} - {row_to_text(r)}" for r in relevant_data])
                     
                     # 組合提示詞
