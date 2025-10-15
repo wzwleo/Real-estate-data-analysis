@@ -90,6 +90,8 @@ def render_search_form():
                 
         with col3:
             car_grip = st.selectbox("🅿️車位選擇", ["不限", "需要","不要"], key="car_grip")
+            if car_grip == "不要"
+                car_grip = "無車位"
         
         st.subheader("🛠️特殊要求")
         Special_Requests = st.text_area("請輸入您的需求", placeholder="輸入文字...")
