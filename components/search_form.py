@@ -53,99 +53,73 @@ def render_search_form():
     return None
 
 
-def handle_search_submit(selected_label, options, housetype_change, budget_min, budget_max,
-                         age_min, age_max, area_min, area_max, car_grip, Special_Requests):
-    """ 處理搜尋表單提交 """
-    valid_input = True
-    if budget_min > budget_max and budget_max > 0:
-        st.error("❌ 請修正預算範圍設定")
-        valid_input = False
-    if age_min > age_max:
-        st.error("❌ 請修正屋齡範圍設定")
-        valid_input = False
-    if area_min > area_max:
-        st.error("❌ 請修正建坪範圍設定")
-        valid_input = False
+import streamlit as st
+import google.generativeai as genai
+import json
+import re
+from utils import filter_properties, load_data
 
-    if not valid_input:
-        return False
+def handle_search_submit(filters, Special_Requests):
+    gemini_key = st.session_state.get("GEMINI_KEY", "")
+    parsed_req = {}
 
-    st.session_state.current_search_page = 1
-    selected_file = options[selected_label]
-    file_path = os.path.join("./Data", selected_file)
+    # === Step 1: 如果使用者輸入了特殊要求，呼叫 Gemini ===
+    if Special_Requests and gemini_key:
+        try:
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
 
-    try:
-        df = pd.read_csv(file_path)
+            prompt = f"""
+            你是一位房產資料分析助理。
+            使用者輸入的需求是：「{Special_Requests}」。
+            請解析成純 JSON 格式，不要任何說明文字。
+            若無法判斷某項，該欄位請省略。
+            JSON 結構如下：
+            {{
+              "房間數": 整數或 {{ "min": 最小值, "max": 最大值 }},
+              "廳數": 整數或 {{ "min": 最小值, "max": 最大值 }},
+              "衛數": 整數或 {{ "min": 最小值, "max": 最大值 }},
+              "樓層": 整數或 {{ "min": 最小值, "max": 最大值 }}
+            }}
+            範例：
+            {{
+              "房間數": 2,
+              "廳數": 1,
+              "衛數": 1,
+              "樓層": {{"min": 1, "max": 5}}
+            }}
+            """
 
-        # 先處理基本篩選
-        filters = {
-            'housetype': housetype_change,
-            'budget_min': budget_min,
-            'budget_max': budget_max,
-            'age_min': age_min,
-            'age_max': age_max,
-            'area_min': area_min,
-            'area_max': area_max,
-            'car_grip': car_grip
-        }
+            response = model.generate_content(prompt)
+            text = response.text.strip()
 
-        # 處理特殊要求 -> Gemini AI
-        gemini_key = st.session_state.get("GEMINI_KEY", "")
-        parsed_req = {}
-        if Special_Requests.strip() and gemini_key:
-            try:
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
-                prompt = f"""
-                將以下房產需求文字解析成結構化條件（JSON格式）：
-                {Special_Requests}
-                輸出欄位包含：房間數、廳數、衛數、樓層。
-                範例：
-                {{
-                  "房間數": 2,
-                  "廳數": 1,
-                  "衛數": 1,
-                  "樓層": {{"min": 1, "max": 5}}
-                }}
-                """
-                response = model.generate_content(prompt)
-                import json
-                parsed_req = json.loads(response.text)
-            except Exception as e:
-                st.error(f"❌ Gemini 解析特殊要求失敗: {e}")
+            # === Step 2: 嘗試抓出 JSON 部分 ===
+            match = re.search(r"\{[\s\S]*\}", text)
+            if match:
+                json_text = match.group()
+                json_text = json_text.replace("：", ":")  # 修正中文冒號
+                parsed_req = json.loads(json_text)
+            else:
+                st.warning("⚠️ Gemini 回傳格式不含 JSON，已略過智能解析。")
 
-        # 合併到篩選條件
-        if parsed_req.get("房間數"):
-            filters["rooms"] = parsed_req["房間數"]
-        if parsed_req.get("廳數"):
-            filters["living_rooms"] = parsed_req["廳數"]
-        if parsed_req.get("衛數"):
-            filters["bathrooms"] = parsed_req["衛數"]
-        if parsed_req.get("樓層"):
-            filters["floor"] = parsed_req["樓層"]
+        except Exception as e:
+            st.error(f"❌ Gemini 解析特殊要求失敗: {e}")
+            st.write("🪄 原始回傳內容：")
+            st.code(locals().get("text", "(無內容)"), language="json")
 
-        # 執行篩選
-        filtered_df = filter_properties(df, filters)
-        st.session_state.filtered_df = filtered_df
-        st.session_state.search_params = {
-            'city': selected_label,
-            'housetype': housetype_change,
-            'budget_range': f"{budget_min}-{budget_max}萬" if budget_max < 1000000 else f"{budget_min}萬以上",
-            'age_range': f"{age_min}-{age_max}年" if age_max < 100 else f"{age_min}年以上",
-            'area_range': f"{area_min}-{area_max}坪" if area_max < 1000 else f"{area_min}坪以上",
-            'car_grip': car_grip,
-            'original_count': len(df),
-            'filtered_count': len(filtered_df)
-        }
+    # === Step 3: 載入資料並篩選 ===
+    df = load_data()
+    filters.update({
+        "rooms": parsed_req.get("房間數"),
+        "living_rooms": parsed_req.get("廳數"),
+        "bathrooms": parsed_req.get("衛數"),
+        "floor": parsed_req.get("樓層"),
+    })
 
-        if len(filtered_df) == 0:
-            st.warning("😅 沒有找到符合條件的房產，請調整篩選條件後重新搜尋")
-        else:
-            st.success(f"✅ 從 {len(df)} 筆資料中篩選出 {len(filtered_df)} 筆符合條件的房產")
-        return True
+    filtered_df = filter_properties(df, filters)
+    st.session_state["filtered_df"] = filtered_df
 
-    except FileNotFoundError:
-        st.error(f"❌ 找不到檔案: {file_path}")
-    except Exception as e:
-        st.error(f"❌ 讀取 CSV 發生錯誤: {e}")
-    return False
+    if not filtered_df.empty:
+        st.success(f"✅ 找到 {len(filtered_df)} 筆符合條件的房產。")
+    else:
+        st.warning("😅 沒有找到符合條件的房產，請嘗試修改條件。")
