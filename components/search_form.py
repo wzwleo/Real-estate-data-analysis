@@ -4,7 +4,7 @@ import json
 import pandas as pd
 import streamlit as st
 import google.generativeai as genai
-from utils import filter_properties  # 確認你已改寫 filter_properties() 支援 rooms/living_rooms/bathrooms/floor
+from utils import get_city_options, filter_properties 
 
 def render_search_form():
     """ 渲染搜尋表單並處理提交邏輯 """
