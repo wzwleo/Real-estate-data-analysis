@@ -127,91 +127,105 @@ def _normalize_parsed_req(parsed: dict):
     return out
 
 
-def handle_search_submit(selected_label, options, housetype_change,
-                        budget_min, budget_max, age_min, age_max,
-                        area_min, area_max, car_grip):
-    """
-    處理搜尋表單提交（使用浮點數進行篩選，避免型別錯誤）
-    """
-    # 驗證輸入
-    valid_input = True
+def handle_search_submit(selected_label, options, housetype_change, budget_min, budget_max,
+                         age_min, age_max, area_min, area_max, car_grip, Special_Requests):
+    """處理搜尋表單提交（CSV 解析 + Gemini 特殊要求 + 篩選）"""
+    
+    # 驗證基本輸入
     if budget_min > budget_max and budget_max > 0:
         st.error("❌ 請修正預算範圍設定")
-        valid_input = False
+        return False
     if age_min > age_max:
         st.error("❌ 請修正屋齡範圍設定")
-        valid_input = False
+        return False
     if area_min > area_max:
         st.error("❌ 請修正建坪範圍設定")
-        valid_input = False
-    
-    if valid_input:
-        # 重置搜尋頁面到第一頁
-        st.session_state.current_search_page = 1
-        selected_file = options[selected_label]
-        file_path = os.path.join("./Data", selected_file)
-        
-        try:
-            # 讀取 CSV 檔案
-            df = pd.read_csv(file_path)
-            
-            # 屋齡預處理：將 "預售" 視為 0，其餘轉為浮點數
-            if '屋齡' in df.columns:
-                df['屋齡'] = (
-                    df['屋齡']
-                    .astype(str)
-                    .str.replace('年', '', regex=False)
-                    .replace('預售', '0')
-                )
-                df['屋齡'] = pd.to_numeric(df['屋齡'], errors='coerce').fillna(0).astype(float)
-            
-            # 建坪處理：確保為浮點數
-            if '建坪' in df.columns:
-                df['建坪'] = pd.to_numeric(df['建坪'], errors='coerce').fillna(0).astype(float)
-            
-            # 總價處理：確保為浮點數
-            if '總價(萬)' in df.columns:
-                df['總價(萬)'] = pd.to_numeric(df['總價(萬)'], errors='coerce').fillna(0).astype(float)
-            
-            # 準備篩選條件
-            filters = {
-                'housetype': housetype_change,
-                'budget_min': float(budget_min),
-                'budget_max': float(budget_max),
-                'age_min': float(age_min),
-                'age_max': float(age_max),
-                'area_min': float(area_min),
-                'area_max': float(area_max),
-                'car_grip': car_grip
+        return False
+
+    st.session_state.current_search_page = 1
+    selected_file = options[selected_label]
+    file_path = os.path.join("./Data", selected_file)
+
+    try:
+        df = pd.read_csv(file_path)
+
+        # 解析格局
+        def parse_layout(layout_str):
+            if not isinstance(layout_str, str):
+                return {"房間數": None, "廳數": None, "衛數": None}
+            m = re.match(r'(\d+)房(\d+)廳(\d+)衛', layout_str)
+            if m:
+                return {"房間數": int(m.group(1)), "廳數": int(m.group(2)), "衛數": int(m.group(3))}
+            nums = re.findall(r'(\d+)', layout_str)
+            return {
+                "房間數": int(nums[0]) if len(nums) > 0 else None,
+                "廳數": int(nums[1]) if len(nums) > 1 else None,
+                "衛數": int(nums[2]) if len(nums) > 2 else None
             }
-            
-            # 執行篩選
-            filtered_df = filter_properties(df, filters)
-            
-            # 儲存篩選後的資料到 session state
-            st.session_state.filtered_df = filtered_df
-            st.session_state.search_params = {
-                'city': selected_label,
-                'housetype': housetype_change,
-                'budget_range': f"{budget_min}-{budget_max}萬" if budget_max < 1000000 else f"{budget_min}萬以上",
-                'age_range': f"{age_min}-{age_max}年" if age_max < 100 else f"{age_min}年以上",
-                'area_range': f"{area_min}-{area_max}坪" if area_max < 1000 else f"{area_min}坪以上",
-                'car_grip': car_grip,
-                'original_count': len(df),
-                'filtered_count': len(filtered_df)
-            }
-            
-            # 顯示篩選結果統計
-            if len(filtered_df) == 0:
-                st.warning("😅 沒有找到符合條件的房產，請調整篩選條件後重新搜尋")
-            else:
-                st.success(f"✅ 從 {len(df)} 筆資料中篩選出 {len(filtered_df)} 筆符合條件的房產")
-            
-            return True
-                
-        except FileNotFoundError:
-            st.error(f"❌ 找不到檔案: {file_path}")
-        except Exception as e:
-            st.error(f"❌ 讀取 CSV 發生錯誤: {e}")
-    
+
+        parsed_layout = df['格局'].apply(parse_layout)
+        df['房間數'] = parsed_layout.apply(lambda x: x['房間數'])
+        df['廳數'] = parsed_layout.apply(lambda x: x['廳數'])
+        df['衛數'] = parsed_layout.apply(lambda x: x['衛數'])
+
+        # 一般篩選條件
+        filters = {
+            'housetype': housetype_change,
+            'budget_min': budget_min,
+            'budget_max': budget_max,
+            'age_min': age_min,
+            'age_max': age_max,
+            'area_min': area_min,
+            'area_max': area_max,
+            'car_grip': car_grip
+        }
+
+        # Gemini 特殊要求解析
+        parsed_req = {}
+        gemini_key = st.session_state.get("GEMINI_KEY", "")
+        if Special_Requests.strip() and gemini_key:
+            try:
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                prompt = f"""
+                請將下列房產需求解析為純 JSON：
+                \"\"\"{Special_Requests}\"\"\"
+                JSON 欄位請包含：房間數、廳數、衛數、樓層。
+                """
+                response = model.generate_content(prompt)
+                resp_text = (response.text or "").strip()
+                with st.expander("🔎 Gemini 回傳（debug）", expanded=False):
+                    st.code(resp_text)
+                parsed_obj = json.loads(_extract_json_text(resp_text) or "{}")
+                parsed_req = _normalize_parsed_req(parsed_obj)
+            except Exception as e:
+                st.error(f"❌ Gemini 解析失敗: {e}")
+                parsed_req = {}
+
+        filters.update(parsed_req)
+
+        # 篩選
+        filtered_df = filter_properties(df, filters)
+        st.session_state.filtered_df = filtered_df
+        st.session_state.search_params = {
+            'city': selected_label,
+            'housetype': housetype_change,
+            'budget_range': f"{budget_min}-{budget_max}萬" if budget_max < 1000000 else f"{budget_min}萬以上",
+            'age_range': f"{age_min}-{age_max}年" if age_max < 100 else f"{age_min}年以上",
+            'area_range': f"{area_min}-{area_max}坪" if area_max < 1000 else f"{area_min}坪以上",
+            'car_grip': car_grip,
+            'original_count': len(df),
+            'filtered_count': len(filtered_df)
+        }
+
+        if len(filtered_df) == 0:
+            st.warning("😅 沒有找到符合條件的房產，請調整篩選條件")
+        else:
+            st.success(f"✅ 從 {len(df)} 筆資料中篩選出 {len(filtered_df)} 筆符合條件的房產")
+        return True
+
+    except FileNotFoundError:
+        st.error(f"❌ 找不到檔案: {file_path}")
+    except Exception as e:
+        st.error(f"❌ 讀取 CSV 發生錯誤: {e}")
     return False
