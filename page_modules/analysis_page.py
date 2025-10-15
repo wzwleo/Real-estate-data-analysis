@@ -53,7 +53,7 @@ def render_favorites_list(fav_df):
 
 
 # ===========================
-# Google Places 搜尋與地圖顯示
+# Google Places 設定
 # ===========================
 PLACE_TYPES = {
     "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
@@ -72,7 +72,9 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
-
+# ===========================
+# 工具函式
+# ===========================
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -85,7 +87,7 @@ def haversine(lat1, lon1, lat2, lon2):
 def _get_server_key():
     server_key = st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
     if "GMAPS_SERVER_KEY" not in st.session_state and server_key:
-        st.warning("⚠️ API 請求過多，可能出現問題需要時間")
+        st.warning("⚠️ 建議改用 GMAPS_SERVER_KEY（伺服器）與 GMAPS_BROWSER_KEY（前端）分離金鑰。")
     return server_key
 
 
@@ -105,28 +107,35 @@ def geocode_address(address: str, api_key: str):
     if status == "OK" and r.get("results"):
         loc = r["results"][0]["geometry"]["location"]
         return loc["lat"], loc["lng"]
-    st.warning(f"Geocoding error: {status} / {r.get('error_message','')}")
+    st.warning(f"Geocoding error: {status}")
     return None, None
 
 
 # ===========================
-# 改良版：具延遲與重試的 Places 查詢
+# 改良版 Google Places + 進度條
 # ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
+    total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
+    progress = st.progress(0)
+    progress_text = st.empty()
+    completed = 0
+
+    def update_progress(task_desc):
+        nonlocal completed
+        completed += 1
+        progress.progress(min(completed / total_tasks, 1.0))
+        progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
     def call(params, tag_cat, tag_kw):
-        """內部呼叫 API 並自動處理延遲與重試"""
-        for attempt in range(3):  # 最多重試 3 次
+        """自動處理重試與延遲"""
+        for attempt in range(3):
             try:
-                data = requests.get(
-                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                    params=params, timeout=10
-                ).json()
+                data = requests.get("https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+                                    params=params, timeout=10).json()
             except Exception as e:
-                st.warning(f"Places request failed ({tag_cat}-{tag_kw}): {e}")
+                st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
                 return []
-
             st_code = data.get("status")
             if st_code == "OK":
                 return data.get("results", [])
@@ -135,16 +144,16 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 return []
             elif st_code == "OVER_QUERY_LIMIT":
                 st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
-                time.sleep(1)  # 延遲 1 秒再重試
+                time.sleep(1)
                 continue
             else:
-                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code} / {data.get('error_message','')}")
+                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
                 return []
-        return []  # 超過重試次數仍失敗
+        return []
 
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
-            st.write(f"🔍 正在查詢 {cat}-{kw} ...")
+            update_progress(f"查詢 {cat}-{kw}")
             params = {
                 "location": f"{lat},{lng}",
                 "radius": radius,
@@ -160,13 +169,12 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 loc = p["geometry"]["location"]
                 dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
                 if dist <= radius:
-                    results.append((cat, kw, p.get("name","未命名"),
-                                    loc["lat"], loc["lng"], dist, pid))
-            time.sleep(0.2)  # ✅ 每次請求間隔 0.2 秒（避免 OVER_QUERY_LIMIT）
+                    results.append((cat, kw, p.get("name","未命名"), loc["lat"], loc["lng"], dist, pid))
+            time.sleep(0.3)
 
     # 額外關鍵字
     if extra_keyword:
-        st.write(f"🔍 額外搜尋關鍵字: {extra_keyword}")
+        update_progress(f"額外關鍵字: {extra_keyword}")
         params = {
             "location": f"{lat},{lng}",
             "radius": radius,
@@ -184,12 +192,17 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             if dist <= radius:
                 results.append(("關鍵字", extra_keyword, p.get("name","未命名"),
                                 loc["lat"], loc["lng"], dist, pid))
-        time.sleep(0.2)
+        time.sleep(0.3)
 
+    progress.progress(1.0)
+    progress_text.text("✅ 查詢完成！")
     results.sort(key=lambda x: x[5])
     return results
 
 
+# ===========================
+# 地圖渲染
+# ===========================
 def render_map(lat, lng, places, radius, title="房屋"):
     browser_key = _get_browser_key()
     data = []
@@ -209,8 +222,7 @@ function initMap() {
   new google.maps.Marker({position: center, map: map, title: "$TITLE"});
   var data = $DATA_JSON;
   data.forEach(function(p){
-    var gmapUrl = p.pid ? ("https://www.google.com/maps/place/?q=place_id:" + p.pid) : "";
-    var info = p.cat + "-" + p.kw + ": <a href=\\"" + gmapUrl + "\\" target=\\"_blank\\">" + p.name + "</a><br>距離中心 " + p.dist + " 公尺";
+    var info = p.cat + "-" + p.kw + ": " + p.name + "<br>距離中心 " + p.dist + " 公尺";
     var marker = new google.maps.Marker({
       position: {lat: p.lat, lng: p.lng},
       map: map,
@@ -242,93 +254,83 @@ function initMap() {
     html(map_html, height=400)
 
 
-def format_places(places):
-    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
-
-
 # ===========================
-# 分析頁面主函式
+# 分析主頁
 # ===========================
 def render_analysis_page():
     st.title("📊 分析頁面")
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
-    col1, col2, col3, col4 = st.columns([1,1,1,1])
-    with col4:
-        st.selectbox("選擇分析範圍", ["⭐收藏類別", "已售出房產"], key="analysis_scope")
+    tab1, tab2, _ = st.tabs(["個別分析","房屋比較","市場趨勢分析"])
 
-    tab1, tab2, tab3 = st.tabs(["個別分析","房屋比較","市場趨勢分析"])
-
-    # 個別分析
     with tab1:
         _ = get_favorites_data()
         tab1_module()
 
-    # 房屋比較
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
         fav_df = get_favorites_data()
         if fav_df.empty:
             st.info("⭐ 尚未有收藏房產，無法比較")
-        else:
-            options = fav_df['標題'] + " | " + fav_df['地址']
-            c1, c2 = st.columns(2)
-            with c1: choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
-            with c2: choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
+            return
 
-            server_key = _get_server_key()
-            gemini_key = st.session_state.get("GEMINI_KEY", "")
+        options = fav_df['標題'] + " | " + fav_df['地址']
+        c1, c2 = st.columns(2)
+        with c1: choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
+        with c2: choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
 
-            st.write("搜尋半徑 500 公尺")
-            radius = 500
-            keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
+        server_key = _get_server_key()
+        gemini_key = st.session_state.get("GEMINI_KEY", "")
+        radius = 500
+        keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
 
-            st.subheader("選擇要比較的生活機能類別")
-            selected_categories = []
-            cols = st.columns(len(PLACE_TYPES))
-            for i, cat in enumerate(PLACE_TYPES.keys()):
-                with cols[i]:
-                    if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
-                        selected_categories.append(cat)
+        st.subheader("選擇要比較的生活機能類別")
+        selected_categories = []
+        cols = st.columns(len(PLACE_TYPES))
+        for i, cat in enumerate(PLACE_TYPES.keys()):
+            with cols[i]:
+                if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
+                    selected_categories.append(cat)
 
-            if st.button("開始比較"):
-                if not _get_browser_key():
-                    st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**（前端地圖）"); st.stop()
-                if not server_key or not gemini_key:
-                    st.error("❌ 請在側邊欄填入 Google Maps **Server Key** 與 Gemini API Key"); st.stop()
-                if choice_a == choice_b:
-                    st.warning("⚠️ 請選擇兩個不同房屋"); st.stop()
+        if st.button("開始比較"):
+            if not _get_browser_key():
+                st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**"); st.stop()
+            if not server_key or not gemini_key:
+                st.error("❌ 請在側邊欄填入 Server Key 與 Gemini Key"); st.stop()
+            if choice_a == choice_b:
+                st.warning("⚠️ 請選擇兩個不同房屋"); st.stop()
 
-                house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
-                house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
-                lat_a, lng_a = geocode_address(house_a["地址"], server_key)
-                lat_b, lng_b = geocode_address(house_b["地址"], server_key)
-                if lat_a is None or lat_b is None:
-                    st.error("❌ 無法解析地址（請檢查 Server Key 的 API/來源限制）"); st.stop()
+            house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
+            house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
+            lat_a, lng_a = geocode_address(house_a["地址"], server_key)
+            lat_b, lng_b = geocode_address(house_b["地址"], server_key)
+            if lat_a is None or lat_b is None:
+                st.error("❌ 地址解析失敗，請檢查 Server Key 限制。")
+                return
 
-                with st.spinner("正在查詢房屋A的周邊..."):
-                    places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
-                time.sleep(1.0)  # ✅ 房屋A與房屋B之間延遲，防止速率超限
-                with st.spinner("正在查詢房屋B的周邊..."):
-                    places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
+            with st.spinner("正在查詢房屋 A 周邊..."):
+                places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
+            time.sleep(1)
+            with st.spinner("正在查詢房屋 B 周邊..."):
+                places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
 
-                m1, m2 = st.columns(2)
-                with m1: render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
-                with m2: render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
+            col1, col2 = st.columns(2)
+            with col1: render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
+            with col2: render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
 
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
-                prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能，
 房屋 A：
 {format_places(places_a)}
 房屋 B：
 {format_places(places_b)}
 請列出優缺點與結論。"""
-                resp = model.generate_content(prompt)
-                st.subheader("📊 Gemini 分析結果")
-                st.write(resp.text)
+            resp = model.generate_content(prompt)
+            st.subheader("📊 Gemini 分析結果")
+            st.write(resp.text)
 
-    with tab3:
-        st.subheader("📈 市場趨勢分析")
-        st.info("🚧 市場趨勢分析功能開發中...")
+
+def format_places(places):
+    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
