@@ -280,7 +280,6 @@ def tab1_module():
                 selected_type = f"{selected_row.get('類型')}"
                 if selected_type:
                     df = df[df['類型'].str.contains(selected_type, na=False)]
-                    st.info(f"✅ 分析完成")
             
                 # 6️⃣ 各區平均地坪單價
                 avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
@@ -302,7 +301,7 @@ def tab1_module():
                     showlegend=False,
                     template='plotly_white'
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                
                 avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
                       for _, row in avg_price.iterrows()])
                 # 生成可給 Gemini 的文字
@@ -333,6 +332,7 @@ def tab1_module():
         
                 st.success("✅ 分析完成")
                 st.markdown("### 📊 **Gemini 圖表分析解果**")
+                st.plotly_chart(fig, use_container_width=True)
                 # 顯示 Gemini 分析結果
                 st.markdown(response.text)
             
