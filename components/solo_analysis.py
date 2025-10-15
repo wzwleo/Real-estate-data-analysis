@@ -279,7 +279,8 @@ def tab1_module():
             
                 # 6️⃣ 各區平均地坪單價
                 avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
-            
+                avg_price['區域'] = avg_price['區域'] + '區'
+                
                 # 7️⃣ 畫出柱狀圖
                 fig = px.bar(
                     avg_price,
@@ -297,7 +298,6 @@ def tab1_module():
                     template='plotly_white'
                 )
                 st.plotly_chart(fig, use_container_width=True)
-                avg_price['區域'] = avg_price['區域'] + '區'
                 st.write(avg_price)
                 
             except Exception as e:
