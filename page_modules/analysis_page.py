@@ -348,4 +348,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-解釋程式功能
