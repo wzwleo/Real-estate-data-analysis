@@ -52,7 +52,7 @@ def render_search_form():
                 max_value=100,
                 value=100,  # 預設值
                 step=1      # 每次 + 或 - 的數值
-                .replace('預售', '0') 
+            
             )
             age_min = st.number_input(
                 "屋齡下限",
@@ -60,7 +60,7 @@ def render_search_form():
                 max_value=100,
                 value=0,  # 預設值
                 step=1      # 每次 + 或 - 的數值
-                .replace('預售', '0') 
+                
             )
             
             # 驗證屋齡範圍
