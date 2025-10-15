@@ -80,7 +80,6 @@ def haversine(lat1, lon1, lat2, lon2):
 def _get_server_key():
     server_key = st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
     if "GMAPS_SERVER_KEY" not in st.session_state and server_key:
-        st.warning("")
     return server_key
 
 def _get_browser_key():
