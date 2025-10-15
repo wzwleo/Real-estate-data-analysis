@@ -1,4 +1,3 @@
-
 import os
 import pandas as pd
 import math
@@ -110,31 +109,3 @@ def display_pagination(df, items_per_page=10):
     current_page_data = df.iloc[start_idx:end_idx]
     
     return current_page_data, st.session_state.current_search_page, total_pages, total_items
-def filter_properties(df, filters):
-    # 既有篩選條件（預算、建坪、屋齡、車位、房型）
-    # ...
-
-    # Gemini AI 特殊要求
-    if "rooms" in filters:
-        rooms = filters["rooms"]
-        if isinstance(rooms, dict):  # 區間
-            df = df[(df['房間數'] >= rooms.get("min", 0)) & (df['房間數'] <= rooms.get("max", 100))]
-        else:
-            df = df[df['房間數'] >= rooms]  # 以上
-    if "living_rooms" in filters:
-        living = filters["living_rooms"]
-        df = df[df['廳數'] >= living]
-    if "bathrooms" in filters:
-        bath = filters["bathrooms"]
-        df = df[df['衛數'] >= bath]
-    if "floor" in filters:
-        floor = filters["floor"]
-        if isinstance(floor, dict):
-            if "min" in floor:
-                df = df[df['樓層'] >= floor["min"]]
-            if "max" in floor:
-                df = df[df['樓層'] <= floor["max"]]
-        else:
-            df = df[df['樓層'] == floor]
-
-    return df
