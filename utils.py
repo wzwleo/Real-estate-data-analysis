@@ -33,60 +33,86 @@ def get_city_options(data_dir="./Data"):
     return options
 
 
-def filter_properties(df, filters):
-    """
-    根據篩選條件過濾房產資料（支援模糊搜尋類型）
-    """
-    filtered_df = df.copy()
-    
-    try:
-        # 🔑 房產類型篩選（模糊搜尋）
-        if filters['housetype'] != "不限":
-            if '類型' in filtered_df.columns:
-                filtered_df = filtered_df[
-                    filtered_df['類型'].astype(str).str.contains(filters['housetype'], case=False, na=False)
-                ]
-        
-        # 預算篩選（總價萬元）
-        if filters['budget_min'] > 0:
-            filtered_df = filtered_df[filtered_df['總價(萬)'] >= filters['budget_min']]
-        if filters['budget_max'] < 1000000:
-            filtered_df = filtered_df[filtered_df['總價(萬)'] <= filters['budget_max']]
-        
-        # 屋齡篩選
-        if filters['age_min'] > 0:
-            filtered_df = filtered_df[filtered_df['屋齡'] >= filters['age_min']]
-        if filters['age_max'] < 100:
-            filtered_df = filtered_df[filtered_df['屋齡'] <= filters['age_max']]
-        
-        # 建坪篩選
-        if filters['area_min'] > 0:
-            filtered_df = filtered_df[filtered_df['建坪'] >= filters['area_min']]
-        if filters['area_max'] < 1000:
-            filtered_df = filtered_df[filtered_df['建坪'] <= filters['area_max']]
-        
-        # 車位篩選
-        if filters['car_grip'] == "需要":
-            if '車位' in filtered_df.columns:
-                filtered_df = filtered_df[
-                    (filtered_df['車位'].notna()) & 
-                    (filtered_df['車位'] != "無") & 
-                    (filtered_df['車位'] != 0)
-                ]
-        elif filters['car_grip'] == "不要":
-            if '車位' in filtered_df.columns:
-                filtered_df = filtered_df[
-                    (filtered_df['車位'].isna()) | 
-                    (filtered_df['車位'] == "無") | 
-                    (filtered_df['車位'] == 0)
-                ]
-        
-    except Exception as e:
-        st.error(f"篩選過程中發生錯誤: {e}")
-        return df
-    
-    return filtered_df
+def filter_properties(df: pd.DataFrame, filters: dict):
+    """依據篩選條件過濾房產資料"""
+    filtered = df.copy()
 
+    # 🔹 通用數值欄位處理，避免比較錯誤
+    numeric_cols = ['總價(萬)', '屋齡', '建坪', '主+陽', '樓層', '房數', '廳數', '衛數']
+    for col in numeric_cols:
+        if col in filtered.columns:
+            filtered[col] = pd.to_numeric(filtered[col], errors='coerce')
+
+    # 🔹 房產類型
+    if filters.get('housetype') and filters['housetype'] != "不限":
+        filtered = filtered[filtered['型態'].str.contains(filters['housetype'], na=False)]
+
+    # 🔹 預算範圍
+    if 'budget_min' in filters:
+        filtered = filtered[filtered['總價(萬)'] >= filters['budget_min']]
+    if 'budget_max' in filters and filters['budget_max'] > 0:
+        filtered = filtered[filtered['總價(萬)'] <= filters['budget_max']]
+
+    # 🔹 屋齡
+    if 'age_min' in filters:
+        filtered = filtered[filtered['屋齡'] >= filters['age_min']]
+    if 'age_max' in filters and filters['age_max'] < 100:
+        filtered = filtered[filtered['屋齡'] <= filters['age_max']]
+
+    # 🔹 建坪
+    if 'area_min' in filters:
+        filtered = filtered[filtered['建坪'] >= filters['area_min']]
+    if 'area_max' in filters and filters['area_max'] < 1000:
+        filtered = filtered[filtered['建坪'] <= filters['area_max']]
+
+    # 🔹 車位條件
+    if filters.get('car_grip') == "需要":
+        filtered = filtered[filtered['車位'].notna()]
+    elif filters.get('car_grip') == "不要":
+        filtered = filtered[filtered['車位'].isna()]
+
+    # ------------------------------
+    # 🧠 Gemini AI 擴充條件支援
+    # ------------------------------
+    # 房間數
+    if 'rooms' in filters:
+        filtered = filtered[filtered['房數'] == filters['rooms']]
+    if 'rooms_min' in filters:
+        filtered = filtered[filtered['房數'] >= filters['rooms_min']]
+    if 'rooms_max' in filters:
+        filtered = filtered[filtered['房數'] <= filters['rooms_max']]
+
+    # 廳數
+    if 'living_rooms' in filters:
+        filtered = filtered[filtered['廳數'] == filters['living_rooms']]
+    if 'living_rooms_min' in filters:
+        filtered = filtered[filtered['廳數'] >= filters['living_rooms_min']]
+    if 'living_rooms_max' in filters:
+        filtered = filtered[filtered['廳數'] <= filters['living_rooms_max']]
+
+    # 衛數
+    if 'bathrooms' in filters:
+        filtered = filtered[filtered['衛數'] == filters['bathrooms']]
+    if 'bathrooms_min' in filters:
+        filtered = filtered[filtered['衛數'] >= filters['bathrooms_min']]
+    if 'bathrooms_max' in filters:
+        filtered = filtered[filtered['衛數'] <= filters['bathrooms_max']]
+
+    # 樓層條件（部分資料可能是 "7/15" 格式，需擷取樓層數字）
+    if 'floor_min' in filters or 'floor_max' in filters:
+        if '樓層' in filtered.columns:
+            filtered['樓層數'] = (
+                filtered['樓層']
+                .astype(str)
+                .str.extract(r'(\d+)')[0]
+                .astype(float)
+            )
+            if 'floor_min' in filters:
+                filtered = filtered[filtered['樓層數'] >= filters['floor_min']]
+            if 'floor_max' in filters:
+                filtered = filtered[filtered['樓層數'] <= filters['floor_max']]
+
+    return filtered
 def display_pagination(df, items_per_page=10):
     """
     處理分頁邏輯並返回當前頁面的資料
