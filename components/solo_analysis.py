@@ -36,8 +36,6 @@ def get_favorites_data():
 
 def tab1_module():
     fav_df = get_favorites_data()
-    genai.configure(api_key=gemini_key)
-    model = genai.GenerativeModel("gemini-2.0-flash")
     if fav_df.empty:
             st.header("個別分析")
             st.info("⭐ 尚未有收藏房產，無法比較")
@@ -149,6 +147,10 @@ def tab1_module():
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
             try:
+
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                
                 address = selected_row.get('地址')
                 city = address[:3]
                 
