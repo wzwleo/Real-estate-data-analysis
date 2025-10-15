@@ -15,50 +15,6 @@ name_map = {
 # 建立反向對照表:中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
-# 整理為 Gemini 可讀文字
-def house_to_text(row):
-    # 處理欄位缺值
-    def val(col):
-        v = row.get(col, "未提供")
-        return str(v) if v not in [None, ""] else "未提供"
-
-    # 建坪與實際坪數
-    area = val("建坪")
-    actual_space = val("主+陽")
-
-    # 總價與單價計算
-    try:
-        total_price = int(row.get("總價(萬)", 0)) * 10000
-    except:
-        total_price = "未提供"
-
-    try:
-        area_price_per = f"{total_price / float(area):,.0f}" if area != "未提供" else "未提供"
-    except:
-        area_price_per = "未提供"
-
-    try:
-        actual_price_per = f"{total_price / float(actual_space):,.0f}" if actual_space != "未提供" else "未提供"
-    except:
-        actual_price_per = "未提供"
-
-    # 整理成文字
-    text = f"""
-房屋標題: {val('標題')}
-地址: {val('地址')}
-類型: {val('類型')}
-建坪: {area} 坪
-實際坪數: {actual_space} 坪
-格局: {val('格局')}
-樓層: {val('樓層')}
-屋齡: {val('屋齡')}
-車位: {val('車位')}
-總價: {total_price} 元
-建坪單價: {area_price_per} 元/坪
-實際單價: {actual_price_per} 元/坪
-"""
-    return text.strip()
-
 def get_favorites_data():
     """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
@@ -350,7 +306,10 @@ def tab1_module():
                 avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']:.1f} 萬/坪" 
                       for _, row in avg_price.iterrows()])
                 # 生成可給 Gemini 的文字
-                gemini_input_text_chart = house_to_text(selected_row)
+                gemini_input_text_chart = f"""
+                地址：{selected_row.get('地址','未提供')}
+                建坪單價：{area_Price_per} 元/坪
+                """
                 
                 prompt = f"""
                 你是一位台灣不動產市場專家，請針對下列目標房屋的建坪單價和區域平均建坪單價資訊，提供簡短的價格評估：
