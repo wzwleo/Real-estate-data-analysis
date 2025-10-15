@@ -126,44 +126,58 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         completed += 1
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-def call(params, tag_cat, tag_kw):
-    """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
-    for attempt in range(5):  # 改成 5 次
-        try:
-            data = requests.get(
-                "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                params=params, timeout=10
-            ).json()
-        except Exception as e:
-            st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
-            return []
-        st_code = data.get("status")
-        if st_code == "OK":
-            return data.get("results", [])
-        elif st_code == "ZERO_RESULTS":
-            st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
-            return []
-        elif st_code == "OVER_QUERY_LIMIT":
-            st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
-            time.sleep(5)  # 改成 5 秒間隔
-            continue
-        else:
-            st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
-            return []
-    return []
 
+    def call(params, tag_cat, tag_kw):
+        """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
+        for attempt in range(5):
+            try:
+                data = requests.get(
+                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+                    params=params, timeout=10
+                ).json()
+            except Exception as e:
+                st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
+                return []
+            st_code = data.get("status")
+            if st_code == "OK":
+                return data.get("results", [])
+            elif st_code == "ZERO_RESULTS":
+                st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
+                return []
+            elif st_code == "OVER_QUERY_LIMIT":
+                st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
+                time.sleep(5)
+                continue
+            else:
+                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
+                return []
+        return []
 
+    # 迴圈查詢
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
-            params = {
-                "location": f"{lat},{lng}",
-                "radius": radius,
-                "keyword": kw,
-                "key": api_key,
-                "language": "zh-TW"
-            }
+            params = {"location": f"{lat},{lng}", "radius": radius, "keyword": kw, "key": api_key, "language": "zh-TW"}
             for p in call(params, cat, kw):
+                try:
+                    pid = p.get("place_id", "")
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    loc = p["geometry"]["location"]
+                    dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                    if dist <= radius:
+                        results.append((cat, kw, p.get("name","未命名"), loc["lat"], loc["lng"], dist, pid))
+                except Exception:
+                    continue
+            time.sleep(0.3)
+
+    # 額外關鍵字
+    if extra_keyword:
+        update_progress(f"額外關鍵字: {extra_keyword}")
+        params = {"location": f"{lat},{lng}", "radius": radius, "keyword": extra_keyword, "key": api_key, "language": "zh-TW"}
+        for p in call(params, "關鍵字", extra_keyword):
+            try:
                 pid = p.get("place_id", "")
                 if pid in seen:
                     continue
@@ -171,29 +185,9 @@ def call(params, tag_cat, tag_kw):
                 loc = p["geometry"]["location"]
                 dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
                 if dist <= radius:
-                    results.append((cat, kw, p.get("name","未命名"), loc["lat"], loc["lng"], dist, pid))
-            time.sleep(0.3)
-
-    # 額外關鍵字
-    if extra_keyword:
-        update_progress(f"額外關鍵字: {extra_keyword}")
-        params = {
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "keyword": extra_keyword,
-            "key": api_key,
-            "language": "zh-TW"
-        }
-        for p in call(params, "關鍵字", extra_keyword):
-            pid = p.get("place_id", "")
-            if pid in seen:
+                    results.append(("關鍵字", extra_keyword, p.get("name","未命名"), loc["lat"], loc["lng"], dist, pid))
+            except Exception:
                 continue
-            seen.add(pid)
-            loc = p["geometry"]["location"]
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-            if dist <= radius:
-                results.append(("關鍵字", extra_keyword, p.get("name","未命名"),
-                                loc["lat"], loc["lng"], dist, pid))
         time.sleep(0.3)
 
     progress.progress(1.0)
