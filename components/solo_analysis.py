@@ -308,7 +308,13 @@ def tab1_module():
                 # 生成可給 Gemini 的文字
                 gemini_input_text_chart = f"""
                 地址：{selected_row.get('地址','未提供')}
+                建坪：{area_text}
                 建坪單價：{area_Price_per} 元/坪
+                類型：{selected_row.get('類型','未提供')}
+                格局：{selected_row.get('格局','未提供')}
+                樓層：{selected_row.get('樓層','未提供')}
+                屋齡：{selected_row.get('屋齡','未提供')}
+                車位：{selected_row.get('車位','未提供')}
                 """
                 
                 prompt = f"""
