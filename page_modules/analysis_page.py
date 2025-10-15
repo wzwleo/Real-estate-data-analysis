@@ -101,8 +101,12 @@ def geocode_address(address: str, api_key: str):
     st.warning(f"Geocoding error: {status} / {r.get('error_message','')}")
     return None, None
 
-def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
+# ===========================
+# 改進版 Places 查詢
+# ===========================
+def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword="", location_name=""):
     results, seen = [], set()
+    missing = []  # 新增：紀錄沒有結果的類別/項目
 
     def call(params, tag_cat, tag_kw):
         try:
@@ -111,14 +115,20 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 params=params, timeout=10
             ).json()
         except Exception as e:
-            st.warning(f"Places request failed: {e}")
+            st.warning(f"{location_name} 查詢失敗: {e}")
             return []
-        st_code = data.get("status")
-        if st_code != "OK":
-            st.warning(f"Places error [{tag_cat}-{tag_kw}]: {st_code} / {data.get('error_message','')}")
+
+        st_code = data.get("status", "")
+        if st_code == "ZERO_RESULTS":
+            missing.append((tag_cat, tag_kw))
             return []
+        elif st_code != "OK":
+            st.warning(f"{location_name} 的 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
+            return []
+
         return data.get("results", [])
 
+    # 查詢各類別
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             params = {
@@ -139,6 +149,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     results.append((cat, kw, p.get("name","未命名"),
                                     loc["lat"], loc["lng"], dist, pid))
 
+    # 額外關鍵字
     if extra_keyword:
         params = {
             "location": f"{lat},{lng}",
@@ -159,6 +170,12 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                                 loc["lat"], loc["lng"], dist, pid))
 
     results.sort(key=lambda x: x[5])
+
+    # 顯示沒有結果的細項
+    if missing:
+        msg = f"🏠 {location_name} 缺少以下項目：\n" + "\n".join([f"- {c}-{k}" for c, k in missing])
+        st.info(msg)
+
     return results
 
 def render_map(lat, lng, places, radius, title="房屋"):
@@ -276,8 +293,9 @@ def render_analysis_page():
                 if lat_a is None or lat_b is None:
                     st.error("❌ 無法解析地址（請檢查 Server Key 的 API/來源限制）"); st.stop()
 
-                places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
-                places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
+                # 傳入房屋名稱
+                places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword, location_name="房屋A")
+                places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword, location_name="房屋B")
 
                 m1, m2 = st.columns(2)
                 with m1: render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
