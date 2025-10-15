@@ -353,8 +353,15 @@ def tab1_module():
                 gemini_input_text_chart = house_to_text(selected_row)
                 
                 prompt = f"""
-                請幫我分析此房產：
+                你是一位台灣不動產市場專家，請根據下列房屋資料和區域平均地坪單價資訊，提供市場分析：
+                
+                房屋資料：
                 {gemini_input_text_chart}
+                
+                區域平均地坪單價：
+                {avg_text}
+                
+                請分析該房屋在同區域的價格合理性，指出是否高於或低於平均水平，並給出購買建議。
                 """
                 
                 with st.spinner("Gemini 正在分析中..."):
