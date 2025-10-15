@@ -294,12 +294,13 @@ def tab1_module():
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
         if chart_clicked:
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-2.0-flash")
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
             try:
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                
                 address = selected_row.get('地址')
                 city = address[:3]
                 
