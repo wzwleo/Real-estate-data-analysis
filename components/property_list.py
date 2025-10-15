@@ -95,38 +95,52 @@ def render_pagination_controls(current_page, total_pages, total_items):
     """
     if total_pages <= 1:
         return
-        
+
+    # 初始化按鈕觸發標誌
+    if 'button_triggered' not in st.session_state:
+        st.session_state.button_triggered = False
+
     col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
-    
+
     with col1:
         if st.button("⏮️ 第一頁", disabled=(current_page == 1), key="first_page"):
             st.session_state.current_search_page = 1
+            st.session_state.button_triggered = True
             st.rerun()
-    
+
     with col2:
         if st.button("⏪ 上一頁", disabled=(current_page == 1), key="prev_page"):
             st.session_state.current_search_page = max(1, current_page - 1)
+            st.session_state.button_triggered = True
             st.rerun()
-    
+
     with col3:
+        # 頁面跳轉選擇器
         new_page = st.selectbox(
             "選擇頁面",
             options=range(1, total_pages + 1),
             index=current_page - 1,
             key="page_selector"
         )
-        if new_page != current_page:
+        # 僅當非按鈕觸發時，更新 current_search_page
+        if not st.session_state.button_triggered and new_page != current_page:
             st.session_state.current_search_page = new_page
             st.rerun()
-    
+
     with col4:
         if st.button("下一頁 ⏩", disabled=(current_page == total_pages), key="next_page"):
             st.session_state.current_search_page = min(total_pages, current_page + 1)
+            st.session_state.button_triggered = True
             st.rerun()
-    
+
     with col5:
         if st.button("最後一頁 ⏭️", disabled=(current_page == total_pages), key="last_page"):
             st.session_state.current_search_page = total_pages
+            st.session_state.button_triggered = True
             st.rerun()
-    
+
+    # 重置按鈕觸發標誌
+    st.session_state.button_triggered = False
+
+    # 顯示頁面資訊
     st.info(f"📄 第 {current_page} 頁，共 {total_pages} 頁 | 顯示第 {(current_page-1)*10+1} - {min(current_page*10, total_items)} 筆資料")
