@@ -73,6 +73,7 @@ def _extract_json_text(text: str):
     return None
 
 
+
 def _normalize_value(val):
     """把單一欄位的解析結果轉成整數或區間 dict"""
     if val is None:
