@@ -2,6 +2,7 @@ import math
 import json
 import requests
 import streamlit as st
+import time
 from string import Template
 from streamlit.components.v1 import html
 from components.solo_analysis import tab1_module
@@ -24,6 +25,7 @@ def get_favorites_data():
     fav_ids = st.session_state.favorites
     fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
+
 
 def render_favorites_list(fav_df):
     st.subheader("⭐ 我的收藏清單")
@@ -49,6 +51,7 @@ def render_favorites_list(fav_df):
                 st.markdown(f'[🔗 物件連結]({property_url})')
             st.markdown("---")
 
+
 # ===========================
 # Google Places 搜尋與地圖顯示
 # ===========================
@@ -69,6 +72,7 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
+
 def haversine(lat1, lon1, lat2, lon2):
     R = 6371000
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
@@ -77,14 +81,17 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(d_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(d_lambda/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
 
+
 def _get_server_key():
     server_key = st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
     if "GMAPS_SERVER_KEY" not in st.session_state and server_key:
-        st.write("")
+        st.warning("⚠️ 建議改用 GMAPS_SERVER_KEY（伺服器用）與 GMAPS_BROWSER_KEY（前端用）分離金鑰。")
     return server_key
+
 
 def _get_browser_key():
     return st.session_state.get("GMAPS_BROWSER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
+
 
 def geocode_address(address: str, api_key: str):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
@@ -101,36 +108,43 @@ def geocode_address(address: str, api_key: str):
     st.warning(f"Geocoding error: {status} / {r.get('error_message','')}")
     return None, None
 
+
 # ===========================
-# 改進版 Places 查詢
+# 改良版：具延遲與重試的 Places 查詢
 # ===========================
-def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword="", location_name=""):
+def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
-    missing = []  # 新增：紀錄沒有結果的類別/項目
 
     def call(params, tag_cat, tag_kw):
-        try:
-            data = requests.get(
-                "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                params=params, timeout=10
-            ).json()
-        except Exception as e:
-            st.warning(f"{location_name} 查詢失敗: {e}")
-            return []
+        """內部呼叫 API 並自動處理延遲與重試"""
+        for attempt in range(3):  # 最多重試 3 次
+            try:
+                data = requests.get(
+                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+                    params=params, timeout=10
+                ).json()
+            except Exception as e:
+                st.warning(f"Places request failed ({tag_cat}-{tag_kw}): {e}")
+                return []
 
-        st_code = data.get("status", "")
-        if st_code == "ZERO_RESULTS":
-            missing.append((tag_cat, tag_kw))
-            return []
-        elif st_code != "OK":
-            st.warning(f"{location_name} 的 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
-            return []
+            st_code = data.get("status")
+            if st_code == "OK":
+                return data.get("results", [])
+            elif st_code == "ZERO_RESULTS":
+                st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
+                return []
+            elif st_code == "OVER_QUERY_LIMIT":
+                st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
+                time.sleep(1)  # 延遲 1 秒再重試
+                continue
+            else:
+                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code} / {data.get('error_message','')}")
+                return []
+        return []  # 超過重試次數仍失敗
 
-        return data.get("results", [])
-
-    # 查詢各類別
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
+            st.write(f"🔍 正在查詢 {cat}-{kw} ...")
             params = {
                 "location": f"{lat},{lng}",
                 "radius": radius,
@@ -148,9 +162,11 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 if dist <= radius:
                     results.append((cat, kw, p.get("name","未命名"),
                                     loc["lat"], loc["lng"], dist, pid))
+            time.sleep(0.2)  # ✅ 每次請求間隔 0.2 秒（避免 OVER_QUERY_LIMIT）
 
     # 額外關鍵字
     if extra_keyword:
+        st.write(f"🔍 額外搜尋關鍵字: {extra_keyword}")
         params = {
             "location": f"{lat},{lng}",
             "radius": radius,
@@ -168,15 +184,11 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             if dist <= radius:
                 results.append(("關鍵字", extra_keyword, p.get("name","未命名"),
                                 loc["lat"], loc["lng"], dist, pid))
+        time.sleep(0.2)
 
     results.sort(key=lambda x: x[5])
-
-    # 顯示沒有結果的細項
-    if missing:
-        msg = f"🏠 {location_name} 缺少以下項目：\n" + "\n".join([f"- {c}-{k}" for c, k in missing])
-        st.info(msg)
-
     return results
+
 
 def render_map(lat, lng, places, radius, title="房屋"):
     browser_key = _get_browser_key()
@@ -229,8 +241,10 @@ function initMap() {
     )
     html(map_html, height=400)
 
+
 def format_places(places):
     return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
+
 
 # ===========================
 # 分析頁面主函式
@@ -293,9 +307,11 @@ def render_analysis_page():
                 if lat_a is None or lat_b is None:
                     st.error("❌ 無法解析地址（請檢查 Server Key 的 API/來源限制）"); st.stop()
 
-                # 傳入房屋名稱
-                places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword, location_name="房屋A")
-                places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword, location_name="房屋B")
+                with st.spinner("正在查詢房屋A的周邊..."):
+                    places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
+                time.sleep(1.0)  # ✅ 房屋A與房屋B之間延遲，防止速率超限
+                with st.spinner("正在查詢房屋B的周邊..."):
+                    places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
 
                 m1, m2 = st.columns(2)
                 with m1: render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
