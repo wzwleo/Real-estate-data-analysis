@@ -353,11 +353,11 @@ def tab1_module():
                 gemini_input_text_chart = house_to_text(selected_row)
                 
                 prompt = f"""
-                你是一位台灣不動產市場專家，請根據下列目標房屋的地坪單價和區域平均地坪單價資訊，提供簡短的價格評估：
+                你是一位台灣不動產市場專家，請根據下列目標房屋的建坪單價和區域平均建坪單價資訊，提供簡短的價格評估：
                 目標房屋：
                 {gemini_input_text_chart}
                 
-                區域平均地坪單價：
+                區域平均建坪單價：
                 {avg_text}
                 
                 請分析該房屋在同區域的價格合理性，指出是否高於或低於平均水平。
