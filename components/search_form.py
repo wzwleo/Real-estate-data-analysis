@@ -158,13 +158,6 @@ def handle_search_submit(selected_label, options, housetype_change,
                 'area_max': area_max,
                 'car_grip': car_grip
             }
-
-            # 執行篩選前，先處理車位篩選邏輯
-            if car_grip == "需要":
-                df = df[df['車位'].notna() & (df['車位'] != '無車位')]
-            elif car_grip == "不要":
-                df = df[df['車位'] == '無車位']
-            # "不限" 就不做篩選
             
             # 執行篩選
             filtered_df = filter_properties(df, filters)
