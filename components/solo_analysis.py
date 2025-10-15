@@ -297,6 +297,7 @@ def tab1_module():
                     template='plotly_white'
                 )
                 st.plotly_chart(fig, use_container_width=True)
+                avg_price['區域'] = avg_price['區域'] + '區'
                 st.write(avg_price)
                 
             except Exception as e:
