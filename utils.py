@@ -110,5 +110,39 @@ def display_pagination(df, items_per_page=10):
     
     return current_page_data, st.session_state.current_search_page, total_pages, total_items
 
+def filter_properties(df, filters):
+    df_filtered = df.copy()
+
+    if filters.get("housetype") and filters["housetype"] != "不限":
+        df_filtered = df_filtered[df_filtered["類型"].str.contains(filters["housetype"], na=False)]
+    if filters.get("budget_min") is not None:
+        df_filtered = df_filtered[df_filtered["總價(萬)"] >= filters["budget_min"]]
+    if filters.get("budget_max") and filters["budget_max"] < 1000000:
+        df_filtered = df_filtered[df_filtered["總價(萬)"] <= filters["budget_max"]]
+    if filters.get("age_min") is not None:
+        df_filtered = df_filtered[df_filtered["屋齡"] >= filters["age_min"]]
+    if filters.get("age_max") and filters["age_max"] < 100:
+        df_filtered = df_filtered[df_filtered["屋齡"] <= filters["age_max"]]
+    if filters.get("area_min") is not None:
+        df_filtered = df_filtered[df_filtered["建坪"] >= filters["area_min"]]
+    if filters.get("area_max") and filters["area_max"] < 1000:
+        df_filtered = df_filtered[df_filtered["建坪"] <= filters["area_max"]]
+    
+    # 🧠 AI 分析補強的條件
+    if filters.get("room_min"):
+        df_filtered = df_filtered[df_filtered["格局"].str.extract(r'(\d+)房')[0].astype(float) >= filters["room_min"]]
+    if filters.get("room_max"):
+        df_filtered = df_filtered[df_filtered["格局"].str.extract(r'(\d+)房')[0].astype(float) <= filters["room_max"]]
+    if filters.get("living_min"):
+        df_filtered = df_filtered[df_filtered["格局"].str.extract(r'房(\d+)廳')[0].astype(float) >= filters["living_min"]]
+    if filters.get("bath_min"):
+        df_filtered = df_filtered[df_filtered["格局"].str.extract(r'廳(\d+)衛')[0].astype(float) >= filters["bath_min"]]
+
+    if filters.get("floor_min"):
+        df_filtered = df_filtered[df_filtered["樓層"].str.extract(r'(\d+)')[0].astype(float) >= filters["floor_min"]]
+    if filters.get("floor_max"):
+        df_filtered = df_filtered[df_filtered["樓層"].str.extract(r'(\d+)')[0].astype(float) <= filters["floor_max"]]
+
+    return df_filtered
 
 
