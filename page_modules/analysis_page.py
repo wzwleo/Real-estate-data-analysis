@@ -228,9 +228,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 def check_places_found(places, selected_categories, extra_keyword):
     messages = []
 
-    if not selected_categories:
-        messages.append("⚠️ 尚未選擇任何生活機能類別")
-    
     found_dict = {cat: False for cat in selected_categories}
     extra_found = False
 
@@ -240,16 +237,23 @@ def check_places_found(places, selected_categories, extra_keyword):
         if extra_keyword and cat == "關鍵字" and kw == extra_keyword:
             extra_found = True
 
+    # 如果沒有任何 places，就直接警告所有選擇類別
+    if not places:
+        for cat in selected_categories:
+            messages.append(f"⚠️ 周圍沒有 {cat} 類別的設施")
+        if extra_keyword:
+            messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
+        return messages
+
+    # 正常檢查哪些類別沒找到
     for cat in selected_categories:
         if not found_dict.get(cat, False):
             messages.append(f"⚠️ 周圍沒有 {cat} 類別的設施")
     if extra_keyword and not extra_found:
         messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
 
-    if not places and selected_categories:
-        messages.append("⚠️ 查詢結果為空，周邊沒有任何選定的生活機能設施")
-    
     return messages
+
 
 # ===========================
 # 地圖渲染
