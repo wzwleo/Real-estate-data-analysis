@@ -29,10 +29,8 @@ def get_favorites_data():
     fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
 
-
 def render_favorites_list(fav_df):
     st.subheader("⭐ 我的收藏清單")
-
     for idx, (_, row) in enumerate(fav_df.iterrows()):
         with st.container():
             col1, col2 = st.columns([8, 2])
@@ -57,7 +55,6 @@ def render_favorites_list(fav_df):
             st.markdown(f'[🔗 物件連結]({property_url})')
             st.markdown("---")
 
-
 # ===========================
 # Google Places 設定
 # ===========================
@@ -78,7 +75,6 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
-
 # ===========================
 # 工具函式
 # ===========================
@@ -90,39 +86,32 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(d_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(d_lambda/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-
 def _get_server_key():
     server_key = st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
     if "GMAPS_SERVER_KEY" not in st.session_state and server_key:
         st.warning("⚠️地圖加載需要時間，請耐心等待")
     return server_key
 
-
 def _get_browser_key():
     return st.session_state.get("GMAPS_BROWSER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
-
 
 def geocode_address(address: str, api_key: str):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {"address": address, "key": api_key, "language": "zh-TW"}
-
     try:
         r = requests.get(url, params=params, timeout=10).json()
     except Exception as e:
         st.error(f"地址解析失敗: {e}")
         return None, None
-
     status = r.get("status")
     if status == "OK" and r.get("results"):
         loc = r["results"][0]["geometry"]["location"]
         return loc["lat"], loc["lng"]
-
     st.warning(f"Geocoding error: {status}")
     return None, None
 
-
 # ===========================
-# 額外文字關鍵字搜尋 (Text Search)
+# 額外文字關鍵字搜尋
 # ===========================
 def search_text_google_places(lat, lng, api_key, keyword, radius=500):
     url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
@@ -138,14 +127,12 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
     except Exception as e:
         st.warning(f"❌ 關鍵字 {keyword} 查詢失敗: {e}")
         return []
-
     results = []
     for p in r.get("results", []):
         loc = p["geometry"]["location"]
         dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
         results.append(("關鍵字", keyword, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, p.get("place_id", "")))
     return results
-
 
 # ===========================
 # Google Places API v1 查詢
@@ -157,7 +144,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     progress = st.progress(0)
     progress_text = st.empty()
     completed = 0
-
     def update_progress(task_desc):
         nonlocal completed
         completed += 1
@@ -171,7 +157,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             "X-Goog-Api-Key": api_key,
             "X-Goog-FieldMask": "places.id,places.displayName.text,places.location"
         }
-
         for attempt in range(5):
             try:
                 r = requests.post(url, headers=headers, json=json_body, timeout=10)
@@ -179,7 +164,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             except Exception as e:
                 st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
                 return []
-
             if "places" in data:
                 return data["places"]
             elif "error" in data:
@@ -238,21 +222,17 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     results.sort(key=lambda x: x[5])
     return results
 
-
 # ===========================
 # 檢查房屋周圍是否有設施
 # ===========================
 def check_places_found(places, selected_categories, extra_keyword):
-    # 初始化為 False
     found_dict = {cat: False for cat in selected_categories}
     extra_found = False
-
-    for cat, kw, name, lat, lng, dist, pid in places:
+    for cat, kw, name, lat, lng, dist, pid in (places or []):
         if cat in found_dict:
             found_dict[cat] = True
         if extra_keyword and cat == "關鍵字" and kw == extra_keyword:
             extra_found = True
-
     messages = []
     for cat in selected_categories:
         if not found_dict.get(cat, False):
@@ -261,16 +241,13 @@ def check_places_found(places, selected_categories, extra_keyword):
         messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
     return messages
 
-
-
 # ===========================
 # 地圖渲染
 # ===========================
 def render_map(lat, lng, places, radius, title="房屋"):
     browser_key = _get_browser_key()
-
     data = []
-    for cat, kw, name, p_lat, p_lng, dist, pid in places:
+    for cat, kw, name, p_lat, p_lng, dist, pid in (places or []):
         data.append({
             "cat": cat,
             "kw": kw,
@@ -281,7 +258,6 @@ def render_map(lat, lng, places, radius, title="房屋"):
             "pid": pid,
             "color": CATEGORY_COLORS.get(cat, "#000000")
         })
-
     data_json = json.dumps(data, ensure_ascii=False)
     tpl = Template("""
         <div id="map" style="height:400px;"></div>
@@ -296,72 +272,40 @@ def render_map(lat, lng, places, radius, title="房屋"):
                 var marker = new google.maps.Marker({
                     position: {lat: p.lat, lng: p.lng},
                     map: map,
-                    icon: {
-                        path: google.maps.SymbolPath.CIRCLE,
-                        scale: 6,
-                        fillColor: p.color,
-                        fillOpacity: 1,
-                        strokeWeight: 1
-                    },
+                    icon: {path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: p.color, fillOpacity: 1, strokeWeight: 1},
                     title: p.cat + "-" + p.name
                 });
-                marker.addListener("click", function(){
-                    new google.maps.InfoWindow({content: info}).open(map, marker);
-                });
+                marker.addListener("click", function(){new google.maps.InfoWindow({content: info}).open(map, marker);});
             });
-            new google.maps.Circle({
-                strokeColor:"#FF0000",
-                strokeOpacity:0.8,
-                strokeWeight:2,
-                fillColor:"#FF0000",
-                fillOpacity:0.1,
-                map: map,
-                center: center,
-                radius: $RADIUS
-            });
+            new google.maps.Circle({strokeColor:"#FF0000", strokeOpacity:0.8, strokeWeight:2, fillColor:"#FF0000", fillOpacity:0.1, map: map, center: center, radius: $RADIUS});
         }
         </script>
         <script src="https://maps.googleapis.com/maps/api/js?key=$BROWSER_KEY&callback=initMap" async defer></script>
     """)
-    map_html = tpl.substitute(
-        LAT=lat,
-        LNG=lng,
-        TITLE=title,
-        DATA_JSON=data_json,
-        RADIUS=radius,
-        BROWSER_KEY=browser_key
-    )
+    map_html = tpl.substitute(LAT=lat, LNG=lng, TITLE=title, DATA_JSON=data_json, RADIUS=radius, BROWSER_KEY=browser_key)
     html(map_html, height=400)
 
-
 # ===========================
-# 格式化 Places 用於 Gemini
+# 格式化 Places
 # ===========================
 def format_places(places):
-    return "\n".join([
-        f"{cat}-{kw}: {name} ({dist} m)"
-        for cat, kw, name, lat, lng, dist, pid in places
-    ])
-
+    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in (places or [])])
 
 # ===========================
 # 分析主頁
 # ===========================
 def render_analysis_page():
     st.title("📊 分析頁面")
-
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
     tab1, tab2, _ = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"])
-
     with tab1:
         _ = get_favorites_data()
         tab1_module()
 
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
-
         fav_df = get_favorites_data()
         if fav_df.empty:
             st.info("⭐ 尚未有收藏房產，無法比較")
@@ -391,18 +335,15 @@ def render_analysis_page():
             if not _get_browser_key():
                 st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**")
                 st.stop()
-
             if not server_key or not gemini_key:
                 st.error("❌ 請在側邊欄填入 Server Key 與 Gemini Key")
                 st.stop()
-
             if choice_a == choice_b:
                 st.warning("⚠️ 請選擇兩個不同房屋")
                 st.stop()
 
             house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
             house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
-
             lat_a, lng_a = geocode_address(house_a["地址"], server_key)
             lat_b, lng_b = geocode_address(house_b["地址"], server_key)
 
@@ -431,7 +372,6 @@ def render_analysis_page():
 
             genai.configure(api_key=gemini_key)
             model = genai.GenerativeModel("gemini-2.0-flash")
-
             prompt = f"""
             你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
             房屋 A：
@@ -442,7 +382,6 @@ def render_analysis_page():
 
             請列出優缺點與結論。
             """
-
             resp = model.generate_content(prompt)
             st.subheader("📊 Gemini 分析結果")
             st.write(resp.text)
