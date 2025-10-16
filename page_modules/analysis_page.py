@@ -111,7 +111,7 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
 # ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
-    total_tasks = sum(len(PLACE_KEYWORDS[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
+    total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
 
     progress = st.progress(0)
     progress_text = st.empty()
@@ -123,35 +123,71 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
+    def call(params, tag_cat, tag_kw):
+        """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
+        for attempt in range(5):
+            try:
+                data = requests.get(
+                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+                    params=params, timeout=10
+                ).json()
+            except Exception as e:
+                st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
+                return []
+
+            status = data.get("status")
+            if status == "OK":
+                return data.get("results", [])
+            elif status == "ZERO_RESULTS":
+                st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
+                return []
+            elif status == "OVER_QUERY_LIMIT":
+                st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
+                time.sleep(5)
+                continue
+            else:
+                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {status}")
+                return []
+        return []
+
+    # 類別搜尋
     for cat in selected_categories:
-        for kw in PLACE_KEYWORDS[cat]:
+        for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
-            for p in search_text_google_places(lat, lng, api_key, kw, radius):
-                if p[5] > radius:  # 過濾掉超過半徑的
-                    continue
-                pid = p[6]
+            params = {
+                "location": f"{lat},{lng}",
+                "radius": radius,
+                "type": kw,
+                "key": api_key,
+                "language": "zh-TW"
+            }
+            for p in call(params, cat, kw):
+                pid = p.get("place_id", "")
                 if pid in seen:
                     continue
                 seen.add(pid)
-                results.append((cat, kw, p[2], p[3], p[4], p[5], pid))
-            time.sleep(1)
+                loc = p["geometry"]["location"]
+                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                if dist <= radius:
+                    results.append((cat, kw, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, pid))
+            time.sleep(1.5)
 
+    # 額外文字關鍵字
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
         for p in search_text_google_places(lat, lng, api_key, extra_keyword, radius):
-            if p[5] > radius:
-                continue
             pid = p[6]
             if pid in seen:
                 continue
             seen.add(pid)
-            results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], pid))
+            results.append(p)
         time.sleep(0.3)
 
     progress.progress(1.0)
     progress_text.text("✅ 查詢完成！")
     results.sort(key=lambda x: x[5])
     return results
+
 
 # ===========================
 # 檢查房屋周邊是否有設施（細分子關鍵字）
