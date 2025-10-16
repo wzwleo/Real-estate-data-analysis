@@ -111,7 +111,7 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
 # ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
-    total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
+    total_tasks = sum(len(PLACE_KEYWORDS[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
 
     progress = st.progress(0)
     progress_text = st.empty()
@@ -152,7 +152,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
     # 類別搜尋
     for cat in selected_categories:
-        for kw in PLACE_TYPES[cat]:
+        for kw in PLACE_KEYWORDS[cat]:
             update_progress(f"查詢 {cat}-{kw}")
             params = {
                 "location": f"{lat},{lng}",
@@ -188,9 +188,8 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     results.sort(key=lambda x: x[5])
     return results
 
-
 # ===========================
-# 檢查房屋周邊是否有設施（細分子關鍵字）
+# 檢查房屋周邊是否有設施
 # ===========================
 def check_places_found(places, selected_categories, extra_keyword):
     found_dict = {cat: {kw: False for kw in PLACE_KEYWORDS[cat]} for cat in selected_categories}
