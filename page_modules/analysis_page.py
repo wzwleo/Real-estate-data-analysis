@@ -114,96 +114,44 @@ def geocode_address(address: str, api_key: str):
 # ===========================
 # 改良版 Google Places + 進度條
 # ===========================
-from functools import lru_cache
-
-# ===========================
-# 改良版 Google Places + 節流、快取、合併查詢 + 進度條
-# ===========================
-@lru_cache(maxsize=512)
-def cached_places(lat, lng, keyword, radius, api_key):
-    """具備快取與自動重試的 Google Places 查詢"""
-    url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-    params = {
-        "location": f"{lat},{lng}",
-        "radius": radius,
-        "keyword": keyword,
-        "key": api_key,
-        "language": "zh-TW"
-    }
-
-    for attempt in range(5):
-        try:
-            resp = requests.get(url, params=params, timeout=10)
-            if resp.status_code == 200:
-                data = resp.json()
-                status = data.get("status", "")
-                if status == "OK":
-                    return data["results"]
-                elif status == "ZERO_RESULTS":
-                    return []
-                elif status in ["OVER_QUERY_LIMIT", "RESOURCE_EXHAUSTED"]:
-                    wait_time = 2 ** attempt
-                    st.warning(f"⏳ 達到查詢上限，等待 {wait_time}s 後重試...")
-                    time.sleep(wait_time)
-                else:
-                    st.warning(f"❌ Google 回傳錯誤: {status}")
-                    return []
-            elif resp.status_code == 429:
-                wait_time = 2 ** attempt
-                st.warning(f"⚠️ Too Many Requests（429），等待 {wait_time}s 後重試...")
-                time.sleep(wait_time)
-            else:
-                st.error(f"HTTP 錯誤: {resp.status_code}")
-                return []
-        except Exception as e:
-            st.warning(f"🚫 呼叫失敗: {e}")
-            time.sleep(2 ** attempt)
-    return []
-
-
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
-    """整合查詢流程：合併關鍵字、節流、快取、進度條"""
     results, seen = [], set()
-
-    # 合併每類別的多關鍵字為一個 OR 查詢
-    merged_queries = []
-    for cat in selected_categories:
-        keywords = PLACE_TYPES[cat]
-        merged_queries.append((cat, "|".join(keywords)))
-    if extra_keyword:
-        merged_queries.append(("關鍵字", extra_keyword))
-
-    total_tasks = len(merged_queries)
+    total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
     progress = st.progress(0)
     progress_text = st.empty()
     completed = 0
 
-    for cat, kw_query in merged_queries:
+    def update_progress(task_desc):
+        nonlocal completed
         completed += 1
         progress.progress(min(completed / total_tasks, 1.0))
-        progress_text.text(f"🔍 查詢 {cat} 類別中：{kw_query}")
+        progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-        data = cached_places(lat, lng, kw_query, radius, api_key)
-        for p in data:
+    def call(params, tag_cat, tag_kw):
+        """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
+        for attempt in range(5):
             try:
-                pid = p.get("place_id", "")
-                if pid in seen:
-                    continue
-                seen.add(pid)
-                loc = p["geometry"]["location"]
-                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-                if dist <= radius:
-                    results.append((cat, kw_query, p.get("name","未命名"), loc["lat"], loc["lng"], dist, pid))
-            except Exception:
+                data = requests.get(
+                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
+                    params=params, timeout=10
+                ).json()
+            except Exception as e:
+                st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
+                return []
+            st_code = data.get("status")
+            if st_code == "OK":
+                return data.get("results", [])
+            elif st_code == "ZERO_RESULTS":
+                st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
+                return []
+            elif st_code == "OVER_QUERY_LIMIT":
+                st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
+                time.sleep(5)
                 continue
-
-        time.sleep(0.3)  # 每次查詢後延遲，避免打太快
-
-    progress.progress(1.0)
-    progress_text.text("✅ 查詢完成！")
-    results.sort(key=lambda x: x[5])
-    return results
-
+            else:
+                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
+                return []
+        return []
 
     # 迴圈查詢
     for cat in selected_categories:
@@ -381,4 +329,4 @@ def render_analysis_page():
 
 
 def format_places(places):
-    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
+    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])幫我改我要完整的程式嗎?
