@@ -29,7 +29,6 @@ def get_favorites_data():
     fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
 
-
 # ===========================
 # 關鍵字設定
 # ===========================
@@ -50,7 +49,6 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
-
 # ===========================
 # 工具函式
 # ===========================
@@ -62,33 +60,26 @@ def haversine(lat1, lon1, lat2, lon2):
     a = math.sin(d_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(d_lambda/2)**2
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-
 def _get_server_key():
     return st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
-
 
 def _get_browser_key():
     return st.session_state.get("GMAPS_BROWSER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
 
-
 def geocode_address(address: str, api_key: str):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {"address": address, "key": api_key, "language": "zh-TW"}
-
     try:
         r = requests.get(url, params=params, timeout=10).json()
     except Exception as e:
         st.error(f"地址解析失敗: {e}")
         return None, None
-
     status = r.get("status")
     if status == "OK" and r.get("results"):
         loc = r["results"][0]["geometry"]["location"]
         return loc["lat"], loc["lng"]
-
     st.warning(f"Geocoding error: {status}")
     return None, None
-
 
 # ===========================
 # Google Text Search
@@ -115,7 +106,6 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
         results.append(("關鍵字", keyword, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, p.get("place_id", "")))
     return results
 
-
 # ===========================
 # 查詢房屋周邊關鍵字
 # ===========================
@@ -133,11 +123,12 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-    # 搜尋每個類別的關鍵字
     for cat in selected_categories:
         for kw in PLACE_KEYWORDS[cat]:
             update_progress(f"查詢 {cat}-{kw}")
             for p in search_text_google_places(lat, lng, api_key, kw, radius):
+                if p[5] > radius:  # 過濾掉超過半徑的
+                    continue
                 pid = p[6]
                 if pid in seen:
                     continue
@@ -145,10 +136,11 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 results.append((cat, kw, p[2], p[3], p[4], p[5], pid))
             time.sleep(1)
 
-    # 額外關鍵字
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
         for p in search_text_google_places(lat, lng, api_key, extra_keyword, radius):
+            if p[5] > radius:
+                continue
             pid = p[6]
             if pid in seen:
                 continue
@@ -161,15 +153,10 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     results.sort(key=lambda x: x[5])
     return results
 
-
-# ===========================
-# 檢查房屋周邊是否有設施
-# ===========================
 # ===========================
 # 檢查房屋周邊是否有設施（細分子關鍵字）
 # ===========================
 def check_places_found(places, selected_categories, extra_keyword):
-    # 初始化字典: 類別 -> 子關鍵字 -> False
     found_dict = {cat: {kw: False for kw in PLACE_KEYWORDS[cat]} for cat in selected_categories}
     extra_found = False
 
@@ -188,8 +175,6 @@ def check_places_found(places, selected_categories, extra_keyword):
         messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
     return messages
 
-
-
 # ===========================
 # 地圖渲染
 # ===========================
@@ -207,7 +192,6 @@ def render_map(lat, lng, places, radius, title="房屋"):
             "pid": pid,
             "color": CATEGORY_COLORS.get(cat, "#000000")
         })
-
     data_json = json.dumps(data, ensure_ascii=False)
     tpl = Template("""
         <div id="map" style="height:400px;"></div>
@@ -259,7 +243,6 @@ def render_map(lat, lng, places, radius, title="房屋"):
     )
     html(map_html, height=400)
 
-
 # ===========================
 # 格式化 Places 用於 Gemini
 # ===========================
@@ -268,7 +251,6 @@ def format_places(places):
         f"{cat}-{kw}: {name} ({dist} m)"
         for cat, kw, name, lat, lng, dist, pid in places
     ])
-
 
 # ===========================
 # 分析頁面
@@ -302,7 +284,7 @@ def render_analysis_page():
 
         server_key = _get_server_key()
         gemini_key = st.session_state.get("GEMINI_KEY", "")
-        radius = 500
+        radius = 500  # 固定 500 公尺
         keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
 
         st.subheader("選擇要比較的生活機能類別")
