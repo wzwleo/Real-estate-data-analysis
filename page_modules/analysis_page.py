@@ -189,7 +189,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                         results.append((cat, kw, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, pid))
                 except Exception:
                     continue
-            time.sleep(0.3)
+            time.sleep(3)
 
     # 額外關鍵字
     if extra_keyword:
