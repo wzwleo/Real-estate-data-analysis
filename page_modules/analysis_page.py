@@ -122,10 +122,33 @@ def geocode_address(address: str, api_key: str):
 
 
 # ===========================
+# 額外文字關鍵字搜尋 (Text Search)
+# ===========================
+def search_text_google_places(lat, lng, api_key, keyword, radius=500):
+    url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+    params = {
+        "query": keyword,
+        "location": f"{lat},{lng}",
+        "radius": radius,
+        "key": api_key,
+        "language": "zh-TW"
+    }
+    try:
+        r = requests.get(url, params=params, timeout=10).json()
+    except Exception as e:
+        st.warning(f"❌ 關鍵字 {keyword} 查詢失敗: {e}")
+        return []
+
+    results = []
+    for p in r.get("results", []):
+        loc = p["geometry"]["location"]
+        dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+        results.append(("關鍵字", keyword, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, p.get("place_id", "")))
+    return results
+
+
+# ===========================
 # Google Places API v1 查詢
-# ===========================
-# ===========================
-# Google Places API v1 查詢（支援自由文字關鍵字）
 # ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
@@ -143,10 +166,6 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
     def call(json_body, tag_cat, tag_kw):
         url = "https://places.googleapis.com/v1/places:searchNearby"
-        # Text Search API
-        if tag_cat == "關鍵字":
-            url = "https://places.googleapis.com/v1/places:searchText"
-
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key,
@@ -174,7 +193,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     return []
         return []
 
-    # 查詢類別設施
+    # 類別搜尋
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
@@ -203,35 +222,21 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     continue
             time.sleep(1.5)
 
-    # 查詢額外關鍵字 (Text Search)
+    # 額外文字關鍵字
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
-        body = {
-            "query": extra_keyword,
-            "location": {"latitude": lat, "longitude": lng},
-            "radius": radius,
-            "maxResultCount": 20
-        }
-        for p in call(body, "關鍵字", extra_keyword):
-            try:
-                pid = p.get("id", "")
-                if pid in seen:
-                    continue
-                seen.add(pid)
-                loc = p["location"]
-                dist = int(haversine(lat, lng, loc["latitude"], loc["longitude"]))
-                if dist <= radius:
-                    name = p.get("displayName", {}).get("text", "未命名")
-                    results.append(("關鍵字", extra_keyword, name, loc["latitude"], loc["longitude"], dist, pid))
-            except Exception:
+        for p in search_text_google_places(lat, lng, api_key, extra_keyword, radius):
+            pid = p[6]
+            if pid in seen:
                 continue
+            seen.add(pid)
+            results.append(p)
         time.sleep(0.3)
 
     progress.progress(1.0)
     progress_text.text("✅ 查詢完成！")
     results.sort(key=lambda x: x[5])
     return results
-
 
 
 # ===========================
