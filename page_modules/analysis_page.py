@@ -197,34 +197,32 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
             time.sleep(1.5)
 
     # 查詢額外關鍵字
-   # 查詢額外關鍵字
-if extra_keyword:
-    update_progress(f"額外關鍵字: {extra_keyword}")
-    body = {
-        "searchText": extra_keyword,  # Google Places 新版用 searchText
-        "maxResultCount": 20,
-        "locationRestriction": {
-            "circle": {
-                "center": {"latitude": lat, "longitude": lng},
-                "radius": radius
+    if extra_keyword:
+        update_progress(f"額外關鍵字: {extra_keyword}")
+        body = {
+            "searchText": extra_keyword,
+            "maxResultCount": 20,
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius
+                }
             }
         }
-    }
-    for p in call(body, "關鍵字", extra_keyword):
-        try:
-            pid = p.get("id", "")
-            if pid in seen:
+        for p in call(body, "關鍵字", extra_keyword):
+            try:
+                pid = p.get("id", "")
+                if pid in seen:
+                    continue
+                seen.add(pid)
+                loc = p["location"]
+                dist = int(haversine(lat, lng, loc["latitude"], loc["longitude"]))
+                if dist <= radius:
+                    name = p.get("displayName", {}).get("text", "未命名")
+                    results.append(("關鍵字", extra_keyword, name, loc["latitude"], loc["longitude"], dist, pid))
+            except Exception:
                 continue
-            seen.add(pid)
-            loc = p["location"]
-            dist = int(haversine(lat, lng, loc["latitude"], loc["longitude"]))
-            if dist <= radius:
-                name = p.get("displayName", {}).get("text", "未命名")
-                results.append(("關鍵字", extra_keyword, name, loc["latitude"], loc["longitude"], dist, pid))
-        except Exception:
-            continue
-    time.sleep(0.3)
-
+        time.sleep(0.3)
 
     progress.progress(1.0)
     progress_text.text("✅ 查詢完成！")
