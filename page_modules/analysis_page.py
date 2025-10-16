@@ -124,6 +124,9 @@ def geocode_address(address: str, api_key: str):
 # ===========================
 # Google Places API v1 查詢
 # ===========================
+# ===========================
+# Google Places API v1 查詢（支援自由文字關鍵字）
+# ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
     total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
@@ -140,6 +143,10 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
     def call(json_body, tag_cat, tag_kw):
         url = "https://places.googleapis.com/v1/places:searchNearby"
+        # Text Search API
+        if tag_cat == "關鍵字":
+            url = "https://places.googleapis.com/v1/places:searchText"
+
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key,
@@ -196,18 +203,14 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     continue
             time.sleep(1.5)
 
-    # 查詢額外關鍵字
+    # 查詢額外關鍵字 (Text Search)
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
         body = {
-            "searchText": extra_keyword,
-            "maxResultCount": 20,
-            "locationRestriction": {
-                "circle": {
-                    "center": {"latitude": lat, "longitude": lng},
-                    "radius": radius
-                }
-            }
+            "query": extra_keyword,
+            "location": {"latitude": lat, "longitude": lng},
+            "radius": radius,
+            "maxResultCount": 20
         }
         for p in call(body, "關鍵字", extra_keyword):
             try:
@@ -228,6 +231,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     progress_text.text("✅ 查詢完成！")
     results.sort(key=lambda x: x[5])
     return results
+
 
 
 # ===========================
