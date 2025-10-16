@@ -153,8 +153,12 @@ def handle_search_submit(selected_label, options, housetype_change, budget_min, 
         if '屋齡' in df.columns:
             df['屋齡'] = (
                 df['屋齡']
+                .astype(str)                     # 轉為字串避免型別錯誤
+                .str.replace('年', '', regex=False)  # 移除「年」
                 .replace('預售', '0')            # 預售視為 0
             )
+            # 嘗試轉為數字，轉不動的變成 NaN
+            df['屋齡'] = pd.to_numeric(df['屋齡'], errors='coerce').fillna(0)
         
         # 解析格局
         def parse_layout(layout_str):
