@@ -124,6 +124,9 @@ def geocode_address(address: str, api_key: str):
 # ===========================
 # 改良版 Google Places API v1
 # ===========================
+# ===========================
+# 改良版 Google Places API v1（類別 + 關鍵字）
+# ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
     total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
@@ -138,9 +141,12 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-    def call(json_body, tag_cat, tag_kw):
-        """新版 Places API v1 POST 請求 + 自動重試"""
-        url = "https://places.googleapis.com/v1/places:searchNearby"
+    def call_places_api(api_key, body, query_type, tag_cat, tag_kw):
+        if query_type == "text":
+            url = "https://places.googleapis.com/v1/places:searchText"
+        else:  # nearby
+            url = "https://places.googleapis.com/v1/places:searchNearby"
+
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key,
@@ -149,7 +155,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
         for attempt in range(5):
             try:
-                r = requests.post(url, headers=headers, json=json_body, timeout=10)
+                r = requests.post(url, headers=headers, json=body, timeout=10)
                 data = r.json()
             except Exception as e:
                 st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
@@ -168,7 +174,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     return []
         return []
 
-    # 逐類別查詢
+    # 類別查詢
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
@@ -176,13 +182,10 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 "includedTypes": [kw],
                 "maxResultCount": 20,
                 "locationRestriction": {
-                    "circle": {
-                        "center": {"latitude": lat, "longitude": lng},
-                        "radius": radius
-                    }
+                    "circle": {"center": {"latitude": lat, "longitude": lng}, "radius": radius}
                 }
             }
-            for p in call(body, cat, kw):
+            for p in call_places_api(api_key, body, "nearby", cat, kw):
                 try:
                     pid = p.get("id", "")
                     if pid in seen:
@@ -197,20 +200,17 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     continue
             time.sleep(1.5)
 
-    # 額外關鍵字
+    # 額外關鍵字查詢
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
         body = {
             "textQuery": extra_keyword,
             "maxResultCount": 20,
-            "locationRestriction": {
-                "circle": {
-                    "center": {"latitude": lat, "longitude": lng},
-                    "radius": radius
-                }
+            "locationBias": {
+                "circle": {"center": {"latitude": lat, "longitude": lng}, "radius": radius}
             }
         }
-        for p in call(body, "關鍵字", extra_keyword):
+        for p in call_places_api(api_key, body, "text", "關鍵字", extra_keyword):
             try:
                 pid = p.get("id", "")
                 if pid in seen:
@@ -229,6 +229,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     progress_text.text("✅ 查詢完成！")
     results.sort(key=lambda x: x[5])
     return results
+
 
 
 # ===========================
