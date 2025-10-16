@@ -122,10 +122,7 @@ def geocode_address(address: str, api_key: str):
 
 
 # ===========================
-# 改良版 Google Places API v1
-# ===========================
-# ===========================
-# 改良版 Google Places API v1（類別 + 關鍵字）
+# Google Places API v1 查詢
 # ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
@@ -141,12 +138,8 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-    def call_places_api(api_key, body, query_type, tag_cat, tag_kw):
-        if query_type == "text":
-            url = "https://places.googleapis.com/v1/places:searchText"
-        else:  # nearby
-            url = "https://places.googleapis.com/v1/places:searchNearby"
-
+    def call(json_body, tag_cat, tag_kw):
+        url = "https://places.googleapis.com/v1/places:searchNearby"
         headers = {
             "Content-Type": "application/json",
             "X-Goog-Api-Key": api_key,
@@ -155,7 +148,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
         for attempt in range(5):
             try:
-                r = requests.post(url, headers=headers, json=body, timeout=10)
+                r = requests.post(url, headers=headers, json=json_body, timeout=10)
                 data = r.json()
             except Exception as e:
                 st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
@@ -174,7 +167,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     return []
         return []
 
-    # 類別查詢
+    # 查詢類別設施
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
@@ -182,10 +175,13 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 "includedTypes": [kw],
                 "maxResultCount": 20,
                 "locationRestriction": {
-                    "circle": {"center": {"latitude": lat, "longitude": lng}, "radius": radius}
+                    "circle": {
+                        "center": {"latitude": lat, "longitude": lng},
+                        "radius": radius
+                    }
                 }
             }
-            for p in call_places_api(api_key, body, "nearby", cat, kw):
+            for p in call(body, cat, kw):
                 try:
                     pid = p.get("id", "")
                     if pid in seen:
@@ -200,17 +196,20 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     continue
             time.sleep(1.5)
 
-    # 額外關鍵字查詢
+    # 查詢額外關鍵字
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
         body = {
-            "textQuery": extra_keyword,
+            "query": extra_keyword,
             "maxResultCount": 20,
-            "locationBias": {
-                "circle": {"center": {"latitude": lat, "longitude": lng}, "radius": radius}
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius
+                }
             }
         }
-        for p in call_places_api(api_key, body, "text", "關鍵字", extra_keyword):
+        for p in call(body, "關鍵字", extra_keyword):
             try:
                 pid = p.get("id", "")
                 if pid in seen:
@@ -230,6 +229,27 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     results.sort(key=lambda x: x[5])
     return results
 
+
+# ===========================
+# 檢查房屋周圍是否有設施
+# ===========================
+def check_places_found(places, selected_categories, extra_keyword):
+    found_dict = {cat: False for cat in selected_categories}
+    extra_found = False
+
+    for cat, kw, name, lat, lng, dist, pid in places:
+        if cat in found_dict:
+            found_dict[cat] = True
+        if cat == "關鍵字" and kw == extra_keyword:
+            extra_found = True
+
+    messages = []
+    for cat, found in found_dict.items():
+        if not found:
+            messages.append(f"⚠️ 周圍沒有 {cat} 類別的設施")
+    if extra_keyword and not extra_found:
+        messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
+    return messages
 
 
 # ===========================
@@ -304,6 +324,16 @@ def render_map(lat, lng, places, radius, title="房屋"):
 
 
 # ===========================
+# 格式化 Places 用於 Gemini
+# ===========================
+def format_places(places):
+    return "\n".join([
+        f"{cat}-{kw}: {name} ({dist} m)"
+        for cat, kw, name, lat, lng, dist, pid in places
+    ])
+
+
+# ===========================
 # 分析主頁
 # ===========================
 def render_analysis_page():
@@ -371,10 +401,16 @@ def render_analysis_page():
 
             with st.spinner("正在查詢房屋 A 周邊..."):
                 places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
+                messages_a = check_places_found(places_a, selected_categories, keyword)
+                for msg in messages_a:
+                    st.warning(f"房屋 A: {msg}")
                 time.sleep(1)
 
             with st.spinner("正在查詢房屋 B 周邊..."):
                 places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
+                messages_b = check_places_found(places_b, selected_categories, keyword)
+                for msg in messages_b:
+                    st.warning(f"房屋 B: {msg}")
 
             col1, col2 = st.columns(2)
             with col1:
@@ -399,10 +435,3 @@ def render_analysis_page():
             resp = model.generate_content(prompt)
             st.subheader("📊 Gemini 分析結果")
             st.write(resp.text)
-
-
-def format_places(places):
-    return "\n".join([
-        f"{cat}-{kw}: {name} ({dist} m)"
-        for cat, kw, name, lat, lng, dist, pid in places
-    ])
