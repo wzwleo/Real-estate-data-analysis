@@ -198,17 +198,17 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
     # 查詢額外關鍵字
     if extra_keyword:
-        update_progress(f"額外關鍵字: {extra_keyword}")
-        body = {
-            "query": extra_keyword,
-            "maxResultCount": 20,
-            "locationRestriction": {
-                "circle": {
-                    "center": {"latitude": lat, "longitude": lng},
-                    "radius": radius
-                }
+    update_progress(f"額外關鍵字: {extra_keyword}")
+    body = {
+        "searchText": extra_keyword,  # <-- 改這裡
+        "maxResultCount": 20,
+        "locationRestriction": {
+            "circle": {
+                "center": {"latitude": lat, "longitude": lng},
+                "radius": radius
             }
         }
+    }
         for p in call(body, "關鍵字", extra_keyword):
             try:
                 pid = p.get("id", "")
