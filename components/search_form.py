@@ -149,6 +149,13 @@ def handle_search_submit(selected_label, options, housetype_change, budget_min, 
     try:
         df = pd.read_csv(file_path)
 
+        # 屋齡預處理：將 "預售" 視為 0，其餘轉為數字
+        if '屋齡' in df.columns:
+            df['屋齡'] = (
+                df['屋齡']
+                .replace('預售', '0')            # 預售視為 0
+            )
+        
         # 解析格局
         def parse_layout(layout_str):
             if not isinstance(layout_str, str):
