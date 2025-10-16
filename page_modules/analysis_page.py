@@ -62,11 +62,11 @@ def render_favorites_list(fav_df):
 # Google Places 設定
 # ===========================
 PLACE_TYPES = {
-    "教育": ["圖書館", "幼兒園", "小學", "學校", "中學", "大學"],
-    "健康與保健": ["牙醫", "醫師", "藥局", "醫院"],
-    "購物": ["便利商店", "超市", "百貨公司"],
-    "交通運輸": ["公車站", "地鐵站", "火車站"],
-    "餐飲": ["餐廳"]
+    "教育": ["school", "library", "university"],
+    "健康與保健": ["pharmacy", "doctor", "hospital", "dentist"],
+    "購物": ["supermarket", "shopping_mall", "convenience_store"],
+    "交通運輸": ["bus_station", "subway_station", "train_station"],
+    "餐飲": ["restaurant", "cafe"]
 }
 
 CATEGORY_COLORS = {
@@ -122,7 +122,7 @@ def geocode_address(address: str, api_key: str):
 
 
 # ===========================
-# 改良版 Google Places + 進度條
+# 改良版 Google Places API v1
 # ===========================
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
@@ -138,79 +138,89 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress.progress(min(completed / total_tasks, 1.0))
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-    def call(params, tag_cat, tag_kw):
-        """自動處理重試與延遲（5 次重試，每次間隔 5 秒）"""
+    def call(json_body, tag_cat, tag_kw):
+        """新版 Places API v1 POST 請求 + 自動重試"""
+        url = "https://places.googleapis.com/v1/places:searchNearby"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key,
+            "X-Goog-FieldMask": "places.id,places.displayName.text,places.location"
+        }
+
         for attempt in range(5):
             try:
-                data = requests.get(
-                    "https://maps.googleapis.com/maps/api/place/nearbysearch/json",
-                    params=params,
-                    timeout=10
-                ).json()
+                r = requests.post(url, headers=headers, json=json_body, timeout=10)
+                data = r.json()
             except Exception as e:
                 st.warning(f"❌ {tag_cat}-{tag_kw} 查詢失敗: {e}")
                 return []
 
-            st_code = data.get("status")
-            if st_code == "OK":
-                return data.get("results", [])
-            elif st_code == "ZERO_RESULTS":
-                st.info(f"🏠 該地區沒有 {tag_cat}-{tag_kw}")
-                return []
-            elif st_code == "OVER_QUERY_LIMIT":
-                st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
-                time.sleep(5)
-                continue
-            else:
-                st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {st_code}")
-                return []
+            if "places" in data:
+                return data["places"]
+            elif "error" in data:
+                code = data["error"].get("status", "")
+                if "RESOURCE_EXHAUSTED" in code or "OVER_QUERY_LIMIT" in code:
+                    st.warning(f"⏳ API 過載（{tag_cat}-{tag_kw}），第 {attempt+1} 次重試中...")
+                    time.sleep(5)
+                    continue
+                else:
+                    st.warning(f"🏠 {tag_cat}-{tag_kw} 查詢錯誤: {data['error'].get('message', code)}")
+                    return []
         return []
 
-    # 迴圈查詢
+    # 逐類別查詢
     for cat in selected_categories:
         for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
-            params = {
-                "location": f"{lat},{lng}",
-                "radius": radius,
-                "keyword": kw,
-                "key": api_key,
-                "language": "zh-TW"
+            body = {
+                "includedTypes": [kw],
+                "maxResultCount": 20,
+                "locationRestriction": {
+                    "circle": {
+                        "center": {"latitude": lat, "longitude": lng},
+                        "radius": radius
+                    }
+                }
             }
-            for p in call(params, cat, kw):
+            for p in call(body, cat, kw):
                 try:
-                    pid = p.get("place_id", "")
+                    pid = p.get("id", "")
                     if pid in seen:
                         continue
                     seen.add(pid)
-                    loc = p["geometry"]["location"]
-                    dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                    loc = p["location"]
+                    dist = int(haversine(lat, lng, loc["latitude"], loc["longitude"]))
                     if dist <= radius:
-                        results.append((cat, kw, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, pid))
+                        name = p.get("displayName", {}).get("text", "未命名")
+                        results.append((cat, kw, name, loc["latitude"], loc["longitude"], dist, pid))
                 except Exception:
                     continue
-            time.sleep(3)
+            time.sleep(1.5)
 
     # 額外關鍵字
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
-        params = {
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "keyword": extra_keyword,
-            "key": api_key,
-            "language": "zh-TW"
+        body = {
+            "textQuery": extra_keyword,
+            "maxResultCount": 20,
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius
+                }
+            }
         }
-        for p in call(params, "關鍵字", extra_keyword):
+        for p in call(body, "關鍵字", extra_keyword):
             try:
-                pid = p.get("place_id", "")
+                pid = p.get("id", "")
                 if pid in seen:
                     continue
                 seen.add(pid)
-                loc = p["geometry"]["location"]
-                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                loc = p["location"]
+                dist = int(haversine(lat, lng, loc["latitude"], loc["longitude"]))
                 if dist <= radius:
-                    results.append(("關鍵字", extra_keyword, p.get("name", "未命名"), loc["lat"], loc["lng"], dist, pid))
+                    name = p.get("displayName", {}).get("text", "未命名")
+                    results.append(("關鍵字", extra_keyword, name, loc["latitude"], loc["longitude"], dist, pid))
             except Exception:
                 continue
         time.sleep(0.3)
