@@ -36,7 +36,7 @@ def get_favorites_data():
 def tab1_module():
     fav_df = get_favorites_data()
     if fav_df.empty:
-            st.header("個別分析唷")
+            st.header("個別分析")
             st.info("⭐ 尚未有收藏房產，無法比較")
     else:
         options = fav_df['標題']
@@ -110,7 +110,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
             st.write("\n")
-            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
+            analyze_clicked = st.button("開始分析哈", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
