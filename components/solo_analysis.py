@@ -223,19 +223,17 @@ def tab1_module():
                     
                     請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
                     """
+        # -------------------- 存入 session_state --------------------
+                with st.spinner("Gemini 正在分析中..."):
+                    response = model.generate_content(prompt)
+        
+                st.session_state['current_analysis_result'] = {
+                    "house_title": house_title,
+                    "result_text": response.text,
+                    "similar_data": relevant_data
+                }
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
-                
-        # -------------------- 存入 session_state --------------------
-        with st.spinner("Gemini 正在分析中..."):
-            response = model.generate_content(prompt)
-
-        st.session_state['current_analysis_result'] = {
-            "house_title": house_title,
-            "result_text": response.text,
-            "similar_data": relevant_data
-        }
-        
         # -------------------- 顯示分析結果 --------------------
         # 顯示分析結果
         if 'current_analysis_result' in st.session_state:
