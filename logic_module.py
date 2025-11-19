@@ -5,3 +5,4 @@ def run_analysis(user_input):
     price = df["price"].mean()
 
     return f"平均價格：{price}"
+result = run_analysis("台中")
