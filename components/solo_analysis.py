@@ -36,7 +36,7 @@ def get_favorites_data():
 def tab1_module():
     fav_df = get_favorites_data()
     if fav_df.empty:
-            st.header("個別分析")
+            st.header("個別分析1")
             st.info("⭐ 尚未有收藏房產，無法比較")
     else:
         options = fav_df['標題']
