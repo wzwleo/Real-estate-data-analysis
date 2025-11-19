@@ -191,18 +191,22 @@ def tab1_module():
                 }
         
         # -------------------- 顯示分析結果 --------------------
+        # 顯示分析結果
         if 'current_analysis_result' in st.session_state:
             st.success("✅ 分析完成")
             st.markdown("### 🧠 **Gemini 市場分析結果**")
-            st.markdown(st.session_state['current_analysis_result']['result_text'])
+            st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
         
-            with st.expander("相似房型資料"):
-                similar_df = pd.DataFrame(st.session_state['current_analysis_result']['similar_data'])
-                if not similar_df.empty:
-                    display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位']
-                    st.dataframe(similar_df[display_cols])
-                else:
-                    st.write("沒有找到相似房型")
+            # 安全存取相似房型資料
+            similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
+            if similar_data:
+                similar_df = pd.DataFrame(similar_data)
+                display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位']
+                # 避免 KeyError
+                similar_df = similar_df[[col for col in display_cols if col in similar_df.columns]]
+                st.dataframe(similar_df)
+            else:
+                st.write("沒有找到相似房型")
         
             # -------------------- 儲存分析結果 --------------------
             if st.button("🗃️儲存分析結果", key="data_storage"):
