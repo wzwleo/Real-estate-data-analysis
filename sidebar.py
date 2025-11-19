@@ -20,7 +20,13 @@ def render_sidebar():
         if 'current_search_page' in st.session_state:
             del st.session_state.current_search_page   
  
+    if st.sidebar.button("分析結果總覽", use_container_width=True, key="Analysis_Records_button"):
+        st.session_state.current_page = 'Analysis_Records'
+        # 重置搜尋頁面
+        if 'current_search_page' in st.session_state:
+            del st.session_state.current_search_page
 
+    
     # 設置區域
     st.sidebar.title("⚙️設置")
 
