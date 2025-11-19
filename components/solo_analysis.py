@@ -226,15 +226,15 @@ def tab1_module():
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
                 
-                # -------------------- 存入 session_state --------------------
-                with st.spinner("Gemini 正在分析中..."):
-                    response = model.generate_content(prompt)
-        
-                st.session_state['current_analysis_result'] = {
-                    "house_title": house_title,
-                    "result_text": response.text,
-                    "similar_data": relevant_data
-                }
+        # -------------------- 存入 session_state --------------------
+        with st.spinner("Gemini 正在分析中..."):
+            response = model.generate_content(prompt)
+
+        st.session_state['current_analysis_result'] = {
+            "house_title": house_title,
+            "result_text": response.text,
+            "similar_data": relevant_data
+        }
         
         # -------------------- 顯示分析結果 --------------------
         # 顯示分析結果
