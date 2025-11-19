@@ -20,8 +20,8 @@ def render_sidebar():
         if 'current_search_page' in st.session_state:
             del st.session_state.current_search_page   
  
-    if st.sidebar.button("🗄️ 分析結果總覽", use_container_width=True, key="Analysis_Records_button"):
-        st.session_state.current_page = 'Analysis_Records'
+    if st.sidebar.button("🗄️ 分析結果總覽", use_container_width=True, key="analysis_records_button"):
+        st.session_state.current_page = 'records'
         # 重置搜尋頁面
         if 'current_search_page' in st.session_state:
             del st.session_state.current_search_page
