@@ -24,6 +24,8 @@ def main():
          render_analysis_page()
     elif st.session_state.current_page == 'compare':
         render_compare_page()
+    elif st.session_state.current_page == 'records':
+        render_analysis_records_page()
 
 if __name__ == "__main__":
     main()
