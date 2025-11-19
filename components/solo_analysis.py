@@ -246,6 +246,9 @@ def tab1_module():
                         st.dataframe(similar_df)
                     else:
                         st.write("沒有找到相似房型")
+                data_storage_clicked = st.button("🗃️儲存分析結果", use_container_width=True, key="data_storag")
+                if data_storage_clicked:
+                    st.write("hi")
 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
