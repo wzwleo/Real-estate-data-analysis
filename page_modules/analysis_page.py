@@ -261,96 +261,229 @@ def render_analysis_page():
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
-    tab1, tab2, _ = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"])
+    tab1, tab2, tab3 = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"])
 
+    # ===========================
+    # Tab1: 個別分析
+    # ===========================
     with tab1:
         _ = get_favorites_data()
         tab1_module()
 
+    # ===========================
+    # Tab2: 房屋比較（Google Places + Gemini）
+    # ===========================
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
 
         fav_df = get_favorites_data()
         if fav_df.empty:
             st.info("⭐ 尚未有收藏房產，無法比較")
+        else:
+            options = fav_df['標題'] + " | " + fav_df['地址']
+            c1, c2 = st.columns(2)
+            with c1:
+                choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
+            with c2:
+                choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
+
+            server_key = _get_server_key()
+            gemini_key = st.session_state.get("GEMINI_KEY", "")
+            radius = 500  # 固定 500 公尺
+            keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
+
+            st.subheader("選擇要比較的生活機能類別")
+            selected_categories = []
+            cols = st.columns(len(PLACE_KEYWORDS))
+            for i, cat in enumerate(PLACE_KEYWORDS.keys()):
+                with cols[i]:
+                    if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
+                        selected_categories.append(cat)
+
+            if st.button("開始比較"):
+                if not _get_browser_key():
+                    st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**")
+                    st.stop()
+                if not server_key or not gemini_key:
+                    st.error("❌ 請在側邊欄填入 Server Key 與 Gemini Key")
+                    st.stop()
+                if choice_a == choice_b:
+                    st.warning("⚠️ 請選擇兩個不同房屋")
+                    st.stop()
+
+                house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
+                house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
+
+                lat_a, lng_a = geocode_address(house_a["地址"], server_key)
+                lat_b, lng_b = geocode_address(house_b["地址"], server_key)
+                if lat_a is None or lat_b is None:
+                    st.error("❌ 地址解析失敗，請檢查 Server Key 限制。")
+                    return
+
+                with st.spinner("正在查詢房屋 A 周邊..."):
+                    places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
+                    messages_a = check_places_found(places_a, selected_categories, keyword)
+                    for msg in messages_a:
+                        st.warning(f"房屋 A: {msg}")
+                    time.sleep(1)
+
+                with st.spinner("正在查詢房屋 B 周邊..."):
+                    places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
+                    messages_b = check_places_found(places_b, selected_categories, keyword)
+                    for msg in messages_b:
+                        st.warning(f"房屋 B: {msg}")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
+                with col2:
+                    render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
+
+                # Gemini 分析
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                prompt = f"""
+                你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
+                房屋 A：
+                {format_places(places_a)}
+
+                房屋 B：
+                {format_places(places_b)}
+
+                請列出優缺點與結論。
+                """
+                resp = model.generate_content(prompt)
+                st.subheader("📊 Gemini 分析結果")
+                st.write(resp.text)
+
+    # ===========================
+    # Tab3: 市場趨勢分析（原程式 B 整合）
+    # ===========================
+    with tab3:
+        st.subheader("📊 市場趨勢分析")
+
+        # 讀取地區座標
+        with open("district_coords.json", "r", encoding="utf-8") as f:
+            district_coords = json.load(f)
+        city_list = list(district_coords.keys())
+
+        # 讀取 CSV 資料
+        folder = "./"
+        file_names = [f for f in os.listdir(folder) if f.startswith("合併後不動產統計_") and f.endswith(".csv")]
+        dfs = []
+        for file in file_names:
+            try:
+                df = pd.read_csv(os.path.join(folder, file))
+                dfs.append(df)
+            except Exception as e:
+                st.error(f"讀取失敗：{file} {e}")
+        combined_df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
+        if combined_df.empty:
+            st.info("📂 無可用資料")
             return
 
-        options = fav_df['標題'] + " | " + fav_df['地址']
-        c1, c2 = st.columns(2)
-        with c1:
-            choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
-        with c2:
-            choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
+        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
 
-        server_key = _get_server_key()
-        gemini_key = st.session_state.get("GEMINI_KEY", "")
-        radius = 500  # 固定 500 公尺
-        keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword")
+        col1, col2 = st.columns([3, 1])
 
-        st.subheader("選擇要比較的生活機能類別")
-        selected_categories = []
-        cols = st.columns(len(PLACE_KEYWORDS))
-        for i, cat in enumerate(PLACE_KEYWORDS.keys()):
-            with cols[i]:
-                if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
-                    selected_categories.append(cat)
+        # -----------------------------
+        # 右側：縣市 / 行政區選擇
+        # -----------------------------
+        with col2:
+            st.subheader("縣市列表")
+            for city in city_list:
+                if st.button(city):
+                    st.session_state.selected_city = city
+                    st.session_state.selected_district = None
+                    st.session_state.show_filtered_data = True
 
-        if st.button("開始比較"):
-            if not _get_browser_key():
-                st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**")
-                st.stop()
+            if st.session_state.selected_city:
+                st.markdown(f"### 行政區：{st.session_state.selected_city}")
+                district_names = ["全部"] + list(district_coords[st.session_state.selected_city].keys())
+                for name in district_names:
+                    if st.button(name):
+                        st.session_state.selected_district = None if name == "全部" else name
+                        st.session_state.show_filtered_data = True
+                if st.button("回到全台"):
+                    st.session_state.selected_city = None
+                    st.session_state.selected_district = None
+                    st.session_state.show_filtered_data = False
 
-            if not server_key or not gemini_key:
-                st.error("❌ 請在側邊欄填入 Server Key 與 Gemini Key")
-                st.stop()
+        # -----------------------------
+        # 左側：圖表 + 資料表
+        # -----------------------------
+        with col1:
+            if st.session_state.show_filtered_data:
+                filtered_df = combined_df.copy()
+                if st.session_state.selected_city:
+                    filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
+                if st.session_state.selected_district:
+                    filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
 
-            if choice_a == choice_b:
-                st.warning("⚠️ 請選擇兩個不同房屋")
-                st.stop()
+                st.markdown("## 📂 篩選結果資料")
+                st.write(f"共 {len(filtered_df)} 筆資料")
+                st.dataframe(filtered_df)
 
-            house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
-            house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
+                # -----------------------------
+                # 圖表：價格趨勢
+                # -----------------------------
+                if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
+                    filtered_df['年份'] = filtered_df['季度'].str[:3].astype(int) + 1911
+                    yearly_avg = filtered_df.groupby(['年份', 'BUILD'])['平均單價元平方公尺'].mean().reset_index()
+                    years = sorted(yearly_avg['年份'].unique())
+                    year_labels = [str(y) for y in years]
 
-            lat_a, lng_a = geocode_address(house_a["地址"], server_key)
-            lat_b, lng_b = geocode_address(house_b["地址"], server_key)
+                    new_data = [
+                        int(yearly_avg[(yearly_avg['年份'] == y) & (yearly_avg['BUILD'] == '新成屋')]['平均單價元平方公尺'].values[0])
+                        if not yearly_avg[(yearly_avg['年份'] == y) & (yearly_avg['BUILD'] == '新成屋')].empty else 0
+                        for y in years
+                    ]
 
-            if lat_a is None or lat_b is None:
-                st.error("❌ 地址解析失敗，請檢查 Server Key 限制。")
-                return
+                    old_data = [
+                        int(yearly_avg[(yearly_avg['年份'] == y) & (yearly_avg['BUILD'] == '中古屋')]['平均單價元平方公尺'].values[0])
+                        if not yearly_avg[(yearly_avg['年份'] == y) & (yearly_avg['BUILD'] == '中古屋')].empty else 0
+                        for y in years
+                    ]
 
-            with st.spinner("正在查詢房屋 A 周邊..."):
-                places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
-                messages_a = check_places_found(places_a, selected_categories, keyword)
-                for msg in messages_a:
-                    st.warning(f"房屋 A: {msg}")
-                time.sleep(1)
+                    options = {
+                        "title": {"text": "不動產價格趨勢分析"},
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["新成屋", "中古屋"]},
+                        "xAxis": {"type": "category", "data": year_labels},
+                        "yAxis": {"type": "value"},
+                        "series": [
+                            {"name": "新成屋", "type": "line", "data": new_data},
+                            {"name": "中古屋", "type": "line", "data": old_data},
+                        ],
+                    }
+                    st_echarts(options, height="400px")
 
-            with st.spinner("正在查詢房屋 B 周邊..."):
-                places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
-                messages_b = check_places_found(places_b, selected_categories, keyword)
-                for msg in messages_b:
-                    st.warning(f"房屋 B: {msg}")
+                # -----------------------------
+                # 圖表：交易筆數
+                # -----------------------------
+                elif chart_type == "交易筆數分布" and len(filtered_df) > 0:
+                    group_col = "縣市" if st.session_state.selected_city is None else "行政區"
+                    if "交易筆數" in filtered_df.columns:
+                        counts = filtered_df.groupby(group_col)["交易筆數"].sum().reset_index()
+                    else:
+                        counts = filtered_df.groupby(group_col).size().reset_index(name="交易筆數")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
-            with col2:
-                render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
+                    pie_data = [
+                        {"value": int(row["交易筆數"]), "name": row[group_col]} 
+                        for _, row in counts.iterrows()
+                    ]
+                    pie_data = sorted(pie_data, key=lambda x: x['value'], reverse=True)[:10]
 
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel("gemini-2.0-flash")
+                    options = {
+                        "title": {"text": "交易筆數分布", "left": "center"},
+                        "tooltip": {"trigger": "item"},
+                        "legend": {"orient": "vertical", "left": "left"},
+                        "series": [{
+                            "name": "交易筆數",
+                            "type": "pie",
+                            "radius": "50%",
+                            "data": pie_data,
+                        }],
+                    }
+                    st_echarts(options, height="400px")
 
-            prompt = f"""
-            你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
-            房屋 A：
-            {format_places(places_a)}
-
-            房屋 B：
-            {format_places(places_b)}
-
-            請列出優缺點與結論。
-            """
-
-            resp = model.generate_content(prompt)
-            st.subheader("📊 Gemini 分析結果")
-            st.write(resp.text)
