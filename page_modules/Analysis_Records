@@ -1,3 +1,4 @@
 import streamlit as st
 
-st.title("🗄️ 分析結果總覽")
+def render_Analysis_Records_page():
+  st.title("🗄️ 分析結果總覽")
