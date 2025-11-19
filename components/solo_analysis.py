@@ -226,16 +226,12 @@ def tab1_module():
                 
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
-                    # ✅ 把分析結果暫存起來
-                    st.session_state['current_analysis_result'] = {
-                        "house_title": selected_row['標題'],
-                        "result_text": response.text
-                    }
-                # 顯示分析結果（即使按鈕觸發重跑也不消失）
-                if 'current_analysis_result' in st.session_state:
-                    st.success("✅ 分析完成")
-                    st.markdown("### 🧠 **Gemini 市場分析結果**")
-                    st.markdown(st.session_state['current_analysis_result']['result_text'])
+               
+                st.success("✅ 分析完成")
+                st.markdown("### 🧠 **Gemini 市場分析結果**")
+                
+                # 顯示 Gemini 分析結果
+                st.markdown(response.text)
                 
                 with st.expander("相似房型資料"):
                     if relevant_data:
@@ -250,15 +246,9 @@ def tab1_module():
                         st.dataframe(similar_df)
                     else:
                         st.write("沒有找到相似房型")
-                data_storage_clicked = st.button("🗃️儲存分析結果", key="data_storage")
+                data_storage_clicked = st.button("🗃️儲存分析結果", use_container_width=True, key="data_storag")
                 if data_storage_clicked:
-                    if 'ai_results' not in st.session_state:
-                        st.session_state.ai_results = []
-                    
-                    # 把目前顯示的分析結果存進歷史列表
-                    st.session_state.ai_results.append(st.session_state['current_analysis_result'])
-                    
-                    st.success("✅ 已儲存分析結果")
+                    st.write("hi")
 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
