@@ -254,11 +254,11 @@ def tab1_module():
                 if data_storage_clicked:
                     if 'ai_results' not in st.session_state:
                         st.session_state.ai_results = []
-    
-    # 把目前顯示的分析結果存進歷史列表
-    st.session_state.ai_results.append(st.session_state['current_analysis_result'])
-    
-    st.success("✅ 已儲存分析結果")
+                    
+                    # 把目前顯示的分析結果存進歷史列表
+                    st.session_state.ai_results.append(st.session_state['current_analysis_result'])
+                    
+                    st.success("✅ 已儲存分析結果")
 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
