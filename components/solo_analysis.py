@@ -226,10 +226,7 @@ def tab1_module():
 
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
-                    
-                st.session_state.analysis_result = response.text
-                st.session_state.relevant_data = relevant_data
-                
+
                 st.success("✅ 分析完成")
                 st.markdown("### 🧠 **Gemini 市場分析結果**")
 
@@ -249,28 +246,12 @@ def tab1_module():
                         st.dataframe(similar_df)
                     else:
                         st.write("沒有找到相似房型")
+                data_storage_clicked = st.button("🗃️儲存分析結果", use_container_width=True, key="data_storag")
+                if data_storage_clicked:
+                    st.write("hi")
 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
-                
-        # 🔑 新增：在 if analyze_clicked 外面，獨立顯示已保存的結果
-        if 'analysis_result' in st.session_state and st.session_state.analysis_result:
-            st.markdown("### 🧠 **已保存的分析結果**")
-            st.markdown(st.session_state.analysis_result)
-            
-            with st.expander("相似房型資料"):
-                if 'relevant_data' in st.session_state and st.session_state.relevant_data:
-                    similar_df = pd.DataFrame(st.session_state.relevant_data)
-                    display_cols = ['標題', '地址', '建坪', '主+陽', '總價(萬)', '屋齡', '類型', '格局', '樓層', '車位']
-                    similar_df = similar_df[display_cols]
-                    st.dataframe(similar_df)
-            
-            # 儲存按鈕
-            col_save, col_empty = st.columns([1, 4])
-            with col_save:
-                if st.button("🗃️ 儲存分析結果", use_container_width=True, key="data_storage"):
-                    st.success("✅ 分析結果已儲存")
-                    
         if chart_clicked:
             house_input_text_chart = f"""
             地址：{selected_row.get('地址','未提供')}
