@@ -431,4 +431,51 @@ def render_analysis_page():
 
                     old_data = [
                         int(yearly_avg[(yearly_avg['年份'] == y) & (yearly_avg['BUILD'] == '中古屋')]['平均單價元平方公尺'].values[0])
-                        if not
+                        if not yearly_avg[(yearly_avg['年份'] == y) & (yearly_avg['BUILD'] == '中古屋')].empty else 0
+                        for y in years
+                    ]
+
+                    options = {
+                        "title": {"text": "不動產價格趨勢分析"},
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["新成屋", "中古屋"]},
+                        "xAxis": {"type": "category", "data": year_labels},
+                        "yAxis": {"type": "value"},
+                        "series": [
+                            {"name": "新成屋", "type": "line", "data": new_data},
+                            {"name": "中古屋", "type": "line", "data": old_data},
+                        ],
+                    }
+                    st_echarts(options, height="400px")
+
+            # -----------------------------
+            # 圖表：交易筆數
+            # -----------------------------
+                elif chart_type == "交易筆數分布" and len(filtered_df) > 0:
+                    group_col = "縣市" if st.session_state.selected_city is None else "行政區"
+                    if "交易筆數" in filtered_df.columns:
+                        counts = filtered_df.groupby(group_col)["交易筆數"].sum().reset_index()
+                    else:
+                        counts = filtered_df.groupby(group_col).size().reset_index(name="交易筆數")
+
+                    pie_data = [
+                        {"value": int(row["交易筆數"]), "name": row[group_col]} 
+                        for _, row in counts.iterrows()
+                    ]
+                    pie_data = sorted(pie_data, key=lambda x: x['value'], reverse=True)[:10]
+
+                    options = {
+                        "title": {"text": "交易筆數分布", "left": "center"},
+                        "tooltip": {"trigger": "item"},
+                        "legend": {"orient": "vertical", "left": "left"},
+                        "series": [{
+                            "name": "交易筆數",
+                            "type": "pie",
+                            "radius": "50%",
+                            "data": pie_data,
+                        }],
+                    }
+                    st_echarts(options, height="400px")
+            else:
+                st.info("請從右側選擇縣市 / 行政區以顯示資料與圖表")
+
