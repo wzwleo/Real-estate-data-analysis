@@ -146,109 +146,68 @@ def tab1_module():
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
             try:
-
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
-
-                address = selected_row.get('地址')
-                city = address[:3]
-
-                # 轉換成英文檔名
+                city = selected_row['地址'][:3]
                 english_filename = reverse_name_map.get(city)
                 file_path = os.path.join("./Data", english_filename)
-
-                # 讀取 CSV 檔案
                 df = pd.read_csv(file_path)
                 house_title = str(selected_row.get('標題','')).strip()
-                # 根據標題篩選房型
-                selected_row = df[df['標題'] == house_title].iloc[0]
-
+                selected_row_full = df[df['標題']==house_title].iloc[0]
+        
+                # 向量化與相似房屋搜尋
                 embed_model = SentenceTransformer('all-MiniLM-L6-v2')
-                with st.spinner("正在將資料進行向量化處理..."):
-                    def row_to_text(row):
-                        """將每列資料轉為文字描述"""
-                        return (
-                            f"地址:{row['地址']}, 建坪:{row['建坪']}, 主+陽:{row['主+陽']}, "
-                            f"總價:{row['總價(萬)']}萬, 屋齡:{row['屋齡']}, 類型:{row['類型']}, "
-                            f"格局:{row['格局']}, 樓層:{row['樓層']}, 車位:{row['車位']}"
-                        )
-                    texts = df.apply(row_to_text, axis=1).tolist()
-                    embeddings = embed_model.encode(texts, show_progress_bar=True)
-                    embeddings = np.array(embeddings).astype('float32')
-
-                    dimension = embeddings.shape[1]
-                    num_elements = len(embeddings)
-
-                    # 初始化索引
-                    index = hnswlib.Index(space='l2', dim=dimension)
-
-                    # 建立索引（ef_construction 越大越精確但越慢）
-                    index.init_index(max_elements=num_elements, ef_construction=200, M=16)
-
-                    index.add_items(embeddings, np.arange(num_elements))
-
-                    # 設定查詢參數（ef 越大越精確）
-                    index.set_ef(50)
-
-                    # 找到選中房屋的索引
-                    selected_idx = df[df['標題'] == house_title].index[0]
-                    selected_text = row_to_text(selected_row)
-                    query_vec = embeddings[selected_idx:selected_idx+1]
-
-                    # 查詢相似房屋（包含自己，所以查 11 筆）
-                    top_k = 11
-                    labels, distances = index.knn_query(query_vec, k=top_k)
-
-                    # 取得相似房屋資料（過濾掉自己）
-                    relevant_data = []
-                    for i, (idx, dist) in enumerate(zip(labels[0], distances[0])):
-                        if idx != selected_idx:
-                            house_data = df.iloc[idx].to_dict()
-                            relevant_data.append(house_data)
-
-                    # 準備文字輸入
-                    selected_text_display = f"{selected_row['標題']} - {selected_text}"
-                    relevant_text = "\n".join([f"{r['標題']} - {row_to_text(r)}" for r in relevant_data])
-
-                    # 組合提示詞
-                    prompt = f"""
-                    你是一位台灣不動產市場專家，具有多年房屋估價與市場分析經驗。
-                    請根據以下房屋資料生成中文市場分析：
-                    
-                    目標房型：
-                    {selected_text_display}
-                    
-                    相似房屋資料：
-                    {relevant_text}
-                    
-                    請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
-                    """
-
+                texts = df.apply(lambda row: f"地址:{row['地址']}, 建坪:{row['建坪']}, 主+陽:{row['主+陽']}, 總價:{row['總價(萬)']}萬, 屋齡:{row['屋齡']}, 類型:{row['類型']}, 格局:{row['格局']}, 樓層:{row['樓層']}, 車位:{row['車位']}", axis=1).tolist()
+                embeddings = np.array(embed_model.encode(texts, show_progress_bar=True), dtype='float32')
+        
+                index = hnswlib.Index(space='l2', dim=embeddings.shape[1])
+                index.init_index(max_elements=len(embeddings), ef_construction=200, M=16)
+                index.add_items(embeddings, np.arange(len(embeddings)))
+                index.set_ef(50)
+        
+                selected_idx = df[df['標題']==house_title].index[0]
+                query_vec = embeddings[selected_idx:selected_idx+1]
+                labels, distances = index.knn_query(query_vec, k=11)
+        
+                relevant_data = [df.iloc[idx].to_dict() for idx in labels[0] if idx != selected_idx]
+        
+                # 組合提示詞
+                prompt = f"""
+                你是一位台灣不動產市場專家，請分析下列房屋：
+                目標房型：{texts[selected_idx]}
+                相似房屋資料：{"; ".join([texts[idx] for idx in labels[0] if idx != selected_idx])}
+                """
+        
+                # -------------------- 存入 session_state --------------------
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
-
-                st.success("✅ 分析完成")
-                st.markdown("### 🧠 **Gemini 市場分析結果**")
-
-                # 顯示 Gemini 分析結果
-                st.markdown(response.text)
-
-                with st.expander("相似房型資料"):
-                    if relevant_data:
-                        # 將 list of dict 轉成 DataFrame
-                        similar_df = pd.DataFrame(relevant_data)
-
-                        # 可以選擇只顯示特定欄位，或重新命名欄位
-                        display_cols = ['標題', '地址', '建坪', '主+陽', '總價(萬)', '屋齡', '類型', '格局', '樓層', '車位']
-                        similar_df = similar_df[display_cols]
-
-                        # 顯示 DataFrame
-                        st.dataframe(similar_df)
-                    else:
-                        st.write("沒有找到相似房型")
-                data_storage_clicked = st.button("🗃️儲存分析結果", use_container_width=True, key="data_storag")
-                if data_storage_clicked:
-                    st.write("hi")
+        
+                st.session_state['current_analysis_result'] = {
+                    "house_title": house_title,
+                    "result_text": response.text,
+                    "similar_data": relevant_data
+                }
+        
+        # -------------------- 顯示分析結果 --------------------
+        if 'current_analysis_result' in st.session_state:
+            st.success("✅ 分析完成")
+            st.markdown("### 🧠 **Gemini 市場分析結果**")
+            st.markdown(st.session_state['current_analysis_result']['result_text'])
+        
+            with st.expander("相似房型資料"):
+                similar_df = pd.DataFrame(st.session_state['current_analysis_result']['similar_data'])
+                if not similar_df.empty:
+                    display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位']
+                    st.dataframe(similar_df[display_cols])
+                else:
+                    st.write("沒有找到相似房型")
+        
+            # -------------------- 儲存分析結果 --------------------
+            if st.button("🗃️儲存分析結果", key="data_storage"):
+                if 'ai_results' not in st.session_state:
+                    st.session_state.ai_results = []
+                st.session_state.ai_results.append(st.session_state['current_analysis_result'])
+                st.success("✅ 已儲存分析結果")
 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
