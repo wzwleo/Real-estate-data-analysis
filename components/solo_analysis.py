@@ -248,7 +248,8 @@ def tab1_module():
                 display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位']
                 # 避免 KeyError
                 similar_df = similar_df[[col for col in display_cols if col in similar_df.columns]]
-                st.dataframe(similar_df)
+                with st.expander("相似房型資料"):
+                    st.dataframe(similar_df)
             else:
                 st.write("沒有找到相似房型")
         
