@@ -3,7 +3,7 @@ from sidebar import render_sidebar
 from page_modules.home_page import render_home_page
 from page_modules.search_page import render_search_page
 from page_modules.analysis_page import render_analysis_page
-from page_modules.analysis_Records import render_Analysis_Records_page
+from page_modules.analysis_Records import render_analysis_Records_page
 def main():
 #主應用程式入口
 
@@ -24,7 +24,7 @@ def main():
          render_analysis_page()
     elif st.session_state.current_page == 'compare':
         render_compare_page()
-    elif st.session_state.current_page == 'Analysis_Records':
-        render_Analysis_Records_page()
+    elif st.session_state.current_page == 'analysis_Records':
+        render_analysis_Records_page()
 if __name__ == "__main__":
     main()
