@@ -254,7 +254,7 @@ def tab1_module():
                 st.write("沒有找到相似房型")
         
             # -------------------- 儲存分析結果 --------------------
-            if st.button("🗃️儲存分析結果", key="data_storage"):
+            if st.button("🗃️儲存分析結果", use_container_width=True, key="data_storage"):
                 if 'ai_results' not in st.session_state:
                     st.session_state.ai_results = []
                 st.session_state.ai_results.append(st.session_state['current_analysis_result'])
