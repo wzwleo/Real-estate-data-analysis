@@ -1,15 +1,15 @@
 import os
 import math
 import json
-import time
 import requests
 import streamlit as st
-import pandas as pd
+import time
 from string import Template
 from streamlit.components.v1 import html
-from streamlit_echarts import st_echarts
 from components.solo_analysis import tab1_module
 import google.generativeai as genai
+import pandas as pd
+from streamlit_echarts import st_echarts
 
 # ===========================
 # 收藏與分析功能
@@ -155,11 +155,13 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 def check_places_found(places, selected_categories, extra_keyword):
     found_dict = {cat: {kw: False for kw in PLACE_KEYWORDS[cat]} for cat in selected_categories}
     extra_found = False
+
     for cat, kw, name, lat, lng, dist, pid in places:
         if cat in found_dict and kw in found_dict[cat]:
             found_dict[cat][kw] = True
         if extra_keyword and cat == "關鍵字" and kw == extra_keyword:
             extra_found = True
+
     messages = []
     for cat, kws in found_dict.items():
         for kw, found in kws.items():
@@ -171,8 +173,18 @@ def check_places_found(places, selected_categories, extra_keyword):
 
 def render_map(lat, lng, places, radius, title="房屋"):
     browser_key = _get_browser_key()
-    data = [{"cat": cat, "kw": kw, "name": name, "lat": p_lat, "lng": p_lng, "dist": dist, "pid": pid, "color": CATEGORY_COLORS.get(cat, "#000000")}
-            for cat, kw, name, p_lat, p_lng, dist, pid in places]
+    data = []
+    for cat, kw, name, p_lat, p_lng, dist, pid in places:
+        data.append({
+            "cat": cat,
+            "kw": kw,
+            "name": name,
+            "lat": p_lat,
+            "lng": p_lng,
+            "dist": dist,
+            "pid": pid,
+            "color": CATEGORY_COLORS.get(cat, "#000000")
+        })
     data_json = json.dumps(data, ensure_ascii=False)
     tpl = Template("""
         <div id="map" style="height:400px;"></div>
@@ -187,59 +199,92 @@ def render_map(lat, lng, places, radius, title="房屋"):
                 var marker = new google.maps.Marker({
                     position: {lat: p.lat, lng: p.lng},
                     map: map,
-                    icon: {path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: p.color, fillOpacity: 1, strokeWeight: 1},
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 6,
+                        fillColor: p.color,
+                        fillOpacity: 1,
+                        strokeWeight: 1
+                    },
                     title: p.cat + "-" + p.name
                 });
                 marker.addListener("click", function(){
                     new google.maps.InfoWindow({content: info}).open(map, marker);
                 });
             });
-            new google.maps.Circle({strokeColor:"#FF0000", strokeOpacity:0.8, strokeWeight:2, fillColor:"#FF0000", fillOpacity:0.1, map: map, center: center, radius: $RADIUS});
+            new google.maps.Circle({
+                strokeColor:"#FF0000",
+                strokeOpacity:0.8,
+                strokeWeight:2,
+                fillColor:"#FF0000",
+                fillOpacity:0.1,
+                map: map,
+                center: center,
+                radius: $RADIUS
+            });
         }
         </script>
         <script src="https://maps.googleapis.com/maps/api/js?key=$BROWSER_KEY&callback=initMap" async defer></script>
     """)
-    map_html = tpl.substitute(LAT=lat, LNG=lng, TITLE=title, DATA_JSON=data_json, RADIUS=radius, BROWSER_KEY=browser_key)
+    map_html = tpl.substitute(
+        LAT=lat,
+        LNG=lng,
+        TITLE=title,
+        DATA_JSON=data_json,
+        RADIUS=radius,
+        BROWSER_KEY=browser_key
+    )
     html(map_html, height=400)
 
 def format_places(places):
-    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
+    return "\n".join([
+        f"{cat}-{kw}: {name} ({dist} m)"
+        for cat, kw, name, lat, lng, dist, pid in places
+    ])
 
 # ===========================
-# 載入合併 CSV
+# CSV 載入函式
 # ===========================
-def load_real_estate_csv(folder="./"):
+def load_real_estate_csv(folder="./page_modules"):
     file_names = [f for f in os.listdir(folder) if f.startswith("合併後不動產統計_") and f.endswith(".csv")]
     dfs = []
     for file in file_names:
+        path = os.path.join(folder, file)
         try:
-            df = pd.read_csv(os.path.join(folder, file))
-            dfs.append(df)
-        except Exception as e:
-            st.error(f"讀取失敗：{file} {e}")
-    combined_df = pd.concat(dfs, ignore_index=True) if dfs else pd.DataFrame()
-    return combined_df
+            df = pd.read_csv(path, encoding="utf-8")
+        except:
+            try:
+                df = pd.read_csv(path, encoding="big5")
+            except Exception as e:
+                st.warning(f"讀取失敗：{file} - {e}")
+                continue
+        dfs.append(df)
+    if dfs:
+        combined_df = pd.concat(dfs, ignore_index=True)
+        return combined_df
+    return pd.DataFrame()
 
 # ===========================
-# 主頁面
+# 分析頁面
 # ===========================
 def render_analysis_page():
     st.title("📊 分析頁面")
+
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
     tab1, tab2, tab3 = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"])
 
-    # ===========================
-    # Tab1 個別分析
-    # ===========================
+    # ---------------------------
+    # Tab1: 個別分析
+    # ---------------------------
     with tab1:
         _ = get_favorites_data()
         tab1_module()
 
-    # ===========================
-    # Tab2 房屋比較
-    # ===========================
+    # ---------------------------
+    # Tab2: 房屋比較
+    # ---------------------------
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
         fav_df = get_favorites_data()
@@ -283,7 +328,7 @@ def render_analysis_page():
                 lat_a, lng_a = geocode_address(house_a["地址"], server_key)
                 lat_b, lng_b = geocode_address(house_b["地址"], server_key)
                 if lat_a is None or lat_b is None:
-                    st.error("❌ 地址解析失敗")
+                    st.error("❌ 地址解析失敗，請檢查 Server Key 限制。")
                     return
 
                 with st.spinner("正在查詢房屋 A 周邊..."):
@@ -305,93 +350,114 @@ def render_analysis_page():
                 with col2:
                     render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
 
+                # Gemini 分析
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
                 prompt = f"""
-你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
-房屋 A：
-{format_places(places_a)}
+                你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
+                房屋 A：
+                {format_places(places_a)}
 
-房屋 B：
-{format_places(places_b)}
+                房屋 B：
+                {format_places(places_b)}
 
-請列出優缺點與結論。
-"""
+                請列出優缺點與結論。
+                """
                 resp = model.generate_content(prompt)
                 st.subheader("📊 Gemini 分析結果")
                 st.write(resp.text)
 
-    # ===========================
-    # Tab3 市場趨勢分析
-    # ===========================
+    # ---------------------------
+    # Tab3: 市場趨勢分析
+    # ---------------------------
     with tab3:
-        combined_df = load_real_estate_csv()
+        st.subheader("📊 市場趨勢分析")
+
+        combined_df = load_real_estate_csv(folder="./page_modules")
         if combined_df.empty:
             st.info("📂 無可用資料")
             st.stop()
 
-        # 獲取縣市 / 行政區
-        cities = sorted(combined_df["縣市"].unique())
-        selected_city = st.selectbox("選擇縣市", ["全台"] + cities)
-        districts = []
-        if selected_city != "全台":
-            districts = sorted(combined_df[combined_df["縣市"] == selected_city]["行政區"].unique())
-        selected_district = st.selectbox("選擇行政區", ["全部"] + list(districts))
-
-        # 過濾資料
-        filtered_df = combined_df.copy()
-        if selected_city != "全台":
-            filtered_df = filtered_df[filtered_df["縣市"] == selected_city]
-        if selected_district != "全部":
-            filtered_df = filtered_df[filtered_df["行政區"] == selected_district]
-
-        st.markdown(f"## 📂 篩選結果資料，共 {len(filtered_df)} 筆")
-        st.dataframe(filtered_df)
-
         chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
 
-        if chart_type == "不動產價格趨勢分析" and not filtered_df.empty:
-            filtered_df['年份'] = filtered_df['季度'].str[:3].astype(int) + 1911
-            yearly_avg = filtered_df.groupby(['年份', 'BUILD'])['平均單價元平方公尺'].mean().reset_index()
-            years = sorted(yearly_avg['年份'].unique())
-            year_labels = [str(y) for y in years]
+        col1, col2 = st.columns([3, 1])
 
-            new_data = [
-                int(yearly_avg[(yearly_avg['年份']==y) & (yearly_avg['BUILD']=='新成屋')]['平均單價元平方公尺'].values[0])
-                if not yearly_avg[(yearly_avg['年份']==y) & (yearly_avg['BUILD']=='新成屋')].empty else 0
-                for y in years
-            ]
-            old_data = [
-                int(yearly_avg[(yearly_avg['年份']==y) & (yearly_avg['BUILD']=='中古屋')]['平均單價元平方公尺'].values[0])
-                if not yearly_avg[(yearly_avg['年份']==y) & (yearly_avg['BUILD']=='中古屋')].empty else 0
-                for y in years
-            ]
-
-            options = {
-                "title": {"text": "不動產價格趨勢分析"},
-                "tooltip": {"trigger": "axis"},
-                "legend": {"data": ["新成屋", "中古屋"]},
-                "xAxis": {"type": "category", "data": year_labels},
-                "yAxis": {"type": "value"},
-                "series": [
-                    {"name": "新成屋", "type": "line", "data": new_data},
-                    {"name": "中古屋", "type": "line", "data": old_data},
-                ],
-            }
-            st_echarts(options, height="400px")
-
-        elif chart_type == "交易筆數分布" and not filtered_df.empty:
-            group_col = "縣市" if selected_city=="全台" else "行政區"
-            if "交易筆數" in filtered_df.columns:
-                counts = filtered_df.groupby(group_col)["交易筆數"].sum().reset_index()
+        with col2:
+            cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
+            city_choice = st.selectbox("選擇縣市", cities)
+            if city_choice != "全台":
+                st.session_state.selected_city = city_choice
+                district_names = ["全部"] + sorted(combined_df[combined_df["縣市"]==city_choice]["行政區"].dropna().unique().tolist())
+                district_choice = st.selectbox("選擇行政區", district_names)
+                st.session_state.selected_district = None if district_choice == "全部" else district_choice
+                st.session_state.show_filtered_data = True
             else:
-                counts = filtered_df.groupby(group_col).size().reset_index(name="交易筆數")
-            pie_data = [{"value": int(row["交易筆數"]), "name": row[group_col]} for _, row in counts.iterrows()]
-            pie_data = sorted(pie_data, key=lambda x: x['value'], reverse=True)[:10]
-            options = {
-                "title": {"text": "交易筆數分布", "left": "center"},
-                "tooltip": {"trigger": "item"},
-                "legend": {"orient": "vertical", "left": "left"},
-                "series": [{"name": "交易筆數", "type": "pie", "radius": "50%", "data": pie_data}],
-            }
-            st_echarts(options, height="400px")
+                st.session_state.selected_city = None
+                st.session_state.selected_district = None
+                st.session_state.show_filtered_data = False
+
+        with col1:
+            if st.session_state.show_filtered_data:
+                filtered_df = combined_df.copy()
+                if st.session_state.selected_city:
+                    filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
+                if st.session_state.selected_district:
+                    filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
+
+                st.markdown("## 📂 篩選結果資料")
+                st.write(f"共 {len(filtered_df)} 筆資料")
+                st.dataframe(filtered_df)
+
+                # -----------------
+                # 圖表
+                # -----------------
+                if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
+                    filtered_df['年份'] = filtered_df['季度'].str[:3].astype(int) + 1911
+                    yearly_avg = filtered_df.groupby(['年份', 'BUILD'])['平均單價元平方公尺'].mean().reset_index()
+                    years = sorted(yearly_avg['年份'].unique())
+                    year_labels = [str(y) for y in years]
+
+                    new_data = [
+                        int(yearly_avg[(yearly_avg['年份']==y) & (yearly_avg['BUILD']=='新成屋')]['平均單價元平方公尺'].mean())
+                        for y in years
+                    ]
+                    old_data = [
+                        int(yearly_avg[(yearly_avg['年份']==y) & (yearly_avg['BUILD']=='中古屋')]['平均單價元平方公尺'].mean())
+                        for y in years
+                    ]
+                    option = {
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["新成屋", "中古屋"]},
+                        "xAxis": {"type": "category", "data": year_labels},
+                        "yAxis": {"type": "value"},
+                        "series": [
+                            {"name": "新成屋", "type": "line", "data": new_data},
+                            {"name": "中古屋", "type": "line", "data": old_data}
+                        ]
+                    }
+                    st_echarts(option, height="400px")
+
+                elif chart_type == "交易筆數分布" and len(filtered_df) > 0:
+                    df_group = filtered_df.groupby(['年份', 'BUILD'])['交易筆數'].sum().reset_index()
+                    years = sorted(df_group['年份'].unique())
+                    year_labels = [str(y) for y in years]
+
+                    new_data = [
+                        int(df_group[(df_group['年份']==y) & (df_group['BUILD']=='新成屋')]['交易筆數'].sum())
+                        for y in years
+                    ]
+                    old_data = [
+                        int(df_group[(df_group['年份']==y) & (df_group['BUILD']=='中古屋')]['交易筆數'].sum())
+                        for y in years
+                    ]
+                    option = {
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["新成屋", "中古屋"]},
+                        "xAxis": {"type": "category", "data": year_labels},
+                        "yAxis": {"type": "value"},
+                        "series": [
+                            {"name": "新成屋", "type": "bar", "data": new_data},
+                            {"name": "中古屋", "type": "bar", "data": old_data}
+                        ]
+                    }
+                    st_echarts(option, height="400px")
