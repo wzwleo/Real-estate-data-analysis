@@ -177,7 +177,9 @@ def tab1_module():
                 目標房型：{texts[selected_idx]}
                 相似房屋資料：{"; ".join([texts[idx] for idx in labels[0] if idx != selected_idx])}
                 """
-        
+            except Exception as e:
+                st.error(f"❌ 分析過程發生錯誤：{e}")
+                
                 # -------------------- 存入 session_state --------------------
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
@@ -209,8 +211,8 @@ def tab1_module():
                 st.session_state.ai_results.append(st.session_state['current_analysis_result'])
                 st.success("✅ 已儲存分析結果")
 
-            except Exception as e:
-                st.error(f"❌ 分析過程發生錯誤：{e}")
+
+            
         if chart_clicked:
             house_input_text_chart = f"""
             地址：{selected_row.get('地址','未提供')}
