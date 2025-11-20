@@ -223,10 +223,24 @@ def tab1_module():
                     
                     請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
                     """
+
+                    prompt_score = f"""
+                    你是一位台灣不動產市場專家，具有多年房屋估價與市場分析經驗。
+                    請根據價格、坪數、屋齡、樓層、格局這五個欄位幫目標房型打分數滿分10分
+                    
+                    目標房型：
+                    {selected_text_display}
+                    
+                    相似房屋資料：
+                    {relevant_text}
+                    
+                    只要說各自的分數就好了。
+                    """
         # -------------------- 存入 session_state --------------------
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
-        
+                    response_score = model.generate_content(prompt_score)
+                    
                 st.session_state['current_analysis_result'] = {
                     "house_title": house_title,
                     "result_text": response.text,
@@ -252,6 +266,7 @@ def tab1_module():
                     st.dataframe(similar_df)
             else:
                 st.write("沒有找到相似房型")
+            st.markdown(response_score.text)
         
             # -------------------- 儲存分析結果 --------------------
             if st.button("🗃️儲存分析結果", use_container_width=True, key="data_storage"):
