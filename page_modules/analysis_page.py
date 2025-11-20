@@ -549,33 +549,36 @@ with tab3:
 
                 st_echarts(option, height="400px")
 
-            elif chart_type == "交易筆數分布" and len(filtered_df) > 0:
+            elif chart_type == "交易筆數分布":
+            # 全台或單縣市
                 if city_choice == "全台":
-                    trans_counts = filtered_df.groupby("縣市").size().reset_index(name="count")
+                    trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
                     pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
                 else:
-                    trans_counts = filtered_df.groupby("行政區").size().reset_index(name="count")
+                    df_city = combined_df[combined_df["縣市"] == city_choice]
+                    trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
                     pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
 
-                option = {
-                    "tooltip": {"trigger": "item", "formatter": "{a} <br/>{b}: {c} ({d}%)"},
-                    "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
-                    "series": [
-                        {
-                            "name": "交易筆數",
-                            "type": "pie",
-                            "radius": "50%",
-                            "data": pie_data,
-                            "emphasis": {
-                                "itemStyle": {
-                                    "shadowBlur": 10,
-                                    "shadowOffsetX": 0,
-                                    "shadowColor": "rgba(0, 0, 0, 0.5)"
+                if pie_data:  # 避免空資料
+                    option = {
+                        "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+                        "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
+                        "series": [
+                            {
+                                "name": "交易筆數",
+                                "type": "pie",
+                                "radius": "50%",
+                                "data": pie_data,
+                                "emphasis": {
+                                    "itemStyle": {
+                                        "shadowBlur": 10,
+                                        "shadowOffsetX": 0,
+                                        "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                    }
                                 }
                             }
-                        }
-                    ]
-                }
-
-                st_echarts(option, height="400px")
-
+                        ]
+                    }
+                    st_echarts(option, height="400px")
+                else:
+                    st.info("⚠️ 無交易資料，無法顯示圓餅圖")
