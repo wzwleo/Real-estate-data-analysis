@@ -307,11 +307,22 @@ def tab1_module():
             st.markdown("### 🧠 **Gemini 市場分析結果**")
             st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
             
-            ai_score = ai_score.strip()
-            st.text(ai_score)
+            match = re.search(r'\{.*\}', ai_score_clean, re.DOTALL)
+            if match:
+                try:
+                    scores = json.loads(match.group())
+                except json.JSONDecodeError as e:
+                    st.error(f"❌ JSON 解析錯誤: {e}")
+                    st.text(ai_score)
+                    scores = None
+            else:
+                st.error("❌ 無法從 AI 回傳中找到 JSON")
+                st.text(ai_score)
+                scores = None
             
-            scores = json.loads(ai_score)
-            st.plotly_chart(plot_radar(scores), use_container_width=True)
+            if scores:
+                st.plotly_chart(plot_radar(scores), use_container_width=True)
+                
             # 安全存取相似房型資料
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
             if similar_data:
