@@ -8,6 +8,7 @@ import numpy as np
 import plotly.express as px
 import json
 import plotly.graph_objects as go
+import re
 
 # 在檔案開頭,name_map 下方加入反向對照表
 name_map = {
@@ -291,7 +292,7 @@ def tab1_module():
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
                     response_score = model.generate_content(prompt_score)
-                    ai_score_clean = (ai_score or "").strip()
+                    ai_score_clean = (response_score.text or "").strip()
                 
                 st.session_state['current_analysis_result'] = {
                     "house_title": house_title,
