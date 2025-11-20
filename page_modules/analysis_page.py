@@ -416,20 +416,29 @@ def render_analysis_page():
                 # Gemini 分析
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
-                prompt = f"""
-                你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
-                房屋 A：
-                {format_places(places_a)}
 
-                房屋 B：
-                {format_places(places_b)}
+                # 安全處理空列表
+                places_a_text = format_places(places_a) if places_a else "無周邊資料"
+                places_b_text = format_places(places_b) if places_b else "無周邊資料"
 
-                請列出優缺點與結論。
+                prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
+
+                房屋 A:
+                {places_a_text}
+
+                房屋 B:
+                {places_b_text}
+
+                請列出每間房屋的優缺點，並給出綜合結論。
                 """
+
+                # 可選：先印出 prompt 確認
+                st.text_area("Gemini Prompt", prompt, height=300)
 
                 resp = model.generate_content(prompt)
                 st.subheader("📊 Gemini 分析結果")
                 st.write(resp.text)
+
 
     # ---------------------------
     # Tab3: 市場趨勢分析
