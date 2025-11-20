@@ -323,21 +323,31 @@ def load_real_estate_csv(folder="./page_modules"):
 def render_analysis_page():
     st.title("📊 分析頁面")
 
+    # 初始化收藏清單
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
+    # 初始化篩選條件
+    if 'selected_city' not in st.session_state:
+        st.session_state.selected_city = None
+    if 'selected_district' not in st.session_state:
+        st.session_state.selected_district = None
+    if 'show_filtered_data' not in st.session_state:
+        st.session_state.show_filtered_data = False
+
+    # Tab 分頁
     tab1, tab2, tab3 = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"])
 
-    # ---------------------------
+    # ============================
     # Tab1: 個別分析
-    # ---------------------------
+    # ============================
     with tab1:
         _ = get_favorites_data()
-        tab1_module()
+        tab1_module()  # 你的個別分析模組
 
-    # ---------------------------
+    # ============================
     # Tab2: 房屋比較
-    # ---------------------------
+    # ============================
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
 
@@ -369,11 +379,9 @@ def render_analysis_page():
                 if not _get_browser_key():
                     st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**")
                     st.stop()
-
                 if not server_key or not gemini_key:
                     st.error("❌ 請在側邊欄填入 Server Key 與 Gemini Key")
                     st.stop()
-
                 if choice_a == choice_b:
                     st.warning("⚠️ 請選擇兩個不同房屋")
                     st.stop()
@@ -388,6 +396,7 @@ def render_analysis_page():
                     st.error("❌ 地址解析失敗，請檢查 Server Key 限制。")
                     return
 
+                # 查詢房屋周邊
                 with st.spinner("正在查詢房屋 A 周邊..."):
                     places_a = query_google_places_keyword(
                         lat_a, lng_a, server_key, selected_categories,
@@ -407,6 +416,7 @@ def render_analysis_page():
                     for msg in messages_b:
                         st.warning(f"房屋 B: {msg}")
 
+                # 顯示地圖
                 col1, col2 = st.columns(2)
                 with col1:
                     render_map(lat_a, lng_a, places_a, radius, title="房屋 A")
@@ -417,168 +427,159 @@ def render_analysis_page():
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
 
-                # 安全處理空列表
                 places_a_text = format_places(places_a) if places_a else "無周邊資料"
                 places_b_text = format_places(places_b) if places_b else "無周邊資料"
 
                 prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
 
-                房屋 A:
-                {places_a_text}
+房屋 A:
+{places_a_text}
 
-                房屋 B:
-                {places_b_text}
+房屋 B:
+{places_b_text}
 
-                請列出每間房屋的優缺點，並給出綜合結論。
-                """
+請列出每間房屋的優缺點，並給出綜合結論。
+"""
 
-                # 可選：先印出 prompt 確認
                 st.text_area("Gemini Prompt", prompt, height=300)
-
                 resp = model.generate_content(prompt)
                 st.subheader("📊 Gemini 分析結果")
                 st.write(resp.text)
 
+    # ============================
+    # Tab3: 市場趨勢分析
+    # ============================
+    with tab3:
+        st.subheader("📊 市場趨勢分析")
 
-    # ---------------------------
-    # ---------------------------
-# Tab3: 市場趨勢分析
-# ---------------------------
-with tab3:
-    st.subheader("📊 市場趨勢分析")
+        combined_df = load_real_estate_csv(folder="./page_modules")
+        if combined_df.empty:
+            st.info("📂 無可用資料")
+            st.stop()
 
-    combined_df = load_real_estate_csv(folder="./page_modules")
-    if combined_df.empty:
-        st.info("📂 無可用資料")
-        st.stop()
+        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
 
-    chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
+        col1, col2 = st.columns([3, 1])
 
-    col1, col2 = st.columns([3, 1])
+        # 選縣市與行政區
+        with col2:
+            cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
+            city_choice = st.selectbox("選擇縣市", cities)
 
-    with col2:
-        cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
-        city_choice = st.selectbox("選擇縣市", cities)
+            if city_choice != "全台":
+                st.session_state.selected_city = city_choice
 
-        if city_choice != "全台":
-            st.session_state.selected_city = city_choice
-
-            district_names = ["全部"] + sorted(
-                combined_df[combined_df["縣市"] == city_choice]["行政區"]
-                .dropna()
-                .unique()
-                .tolist()
-            )
-            district_choice = st.selectbox("選擇行政區", district_names)
-
-            st.session_state.selected_district = (
-                None if district_choice == "全部" else district_choice
-            )
-            st.session_state.show_filtered_data = True
-        else:
-            st.session_state.selected_city = None
-            st.session_state.selected_district = None
-            st.session_state.show_filtered_data = False
-
-    with col1:
-        if st.session_state.show_filtered_data:
-            filtered_df = combined_df.copy()
-
-            if st.session_state.selected_city:
-                filtered_df = filtered_df[
-                    filtered_df["縣市"] == st.session_state.selected_city
-                ]
-            if st.session_state.selected_district:
-                filtered_df = filtered_df[
-                    filtered_df["行政區"] == st.session_state.selected_district
-                ]
-
-            st.markdown("## 📂 篩選結果資料")
-            st.write(f"共 {len(filtered_df)} 筆資料")
-            st.dataframe(filtered_df)
-
-            # -----------------
-            # 圖表
-            # -----------------
-            if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
-                filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
-
-                yearly_avg = (
-                    filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"]
-                    .mean()
-                    .reset_index()
+                district_names = ["全部"] + sorted(
+                    combined_df[combined_df["縣市"] == city_choice]["行政區"]
+                    .dropna()
+                    .unique()
+                    .tolist()
                 )
+                district_choice = st.selectbox("選擇行政區", district_names)
 
-                years = sorted(yearly_avg["年份"].unique())
-                year_labels = [str(y) for y in years]
+                st.session_state.selected_district = (
+                    None if district_choice == "全部" else district_choice
+                )
+                st.session_state.show_filtered_data = True
+            else:
+                st.session_state.selected_city = None
+                st.session_state.selected_district = None
+                st.session_state.show_filtered_data = False
 
-                def safe_mean(df):
-                    if df.empty:
-                        return 0
-                    v = df.mean()
-                    return 0 if pd.isna(v) else int(v)
+        # 顯示資料與圖表
+        with col1:
+            if st.session_state.show_filtered_data:
+                filtered_df = combined_df.copy()
+                if st.session_state.selected_city:
+                    filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
+                if st.session_state.selected_district:
+                    filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
 
-                new_data = [
-                    safe_mean(
-                        yearly_avg[
-                            (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")
-                        ]["平均單價元平方公尺"]
+                st.markdown("## 📂 篩選結果資料")
+                st.write(f"共 {len(filtered_df)} 筆資料")
+                st.dataframe(filtered_df)
+
+                # -----------------
+                # 圖表
+                # -----------------
+                if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
+                    filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
+                    yearly_avg = (
+                        filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"]
+                        .mean()
+                        .reset_index()
                     )
-                    for y in years
-                ]
 
-                old_data = [
-                    safe_mean(
-                        yearly_avg[
-                            (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")
-                        ]["平均單價元平方公尺"]
-                    )
-                    for y in years
-                ]
+                    years = sorted(yearly_avg["年份"].unique())
+                    year_labels = [str(y) for y in years]
 
-                option = {
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": ["新成屋", "中古屋"]},
-                    "xAxis": {"type": "category", "data": year_labels},
-                    "yAxis": {"type": "value"},
-                    "series": [
-                        {"name": "新成屋", "type": "line", "data": new_data},
-                        {"name": "中古屋", "type": "line", "data": old_data},
-                    ],
-                }
+                    def safe_mean(df):
+                        if df.empty:
+                            return 0
+                        v = df.mean()
+                        return 0 if pd.isna(v) else int(v)
 
-                st_echarts(option, height="400px")
+                    new_data = [
+                        safe_mean(
+                            yearly_avg[
+                                (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")
+                            ]["平均單價元平方公尺"]
+                        )
+                        for y in years
+                    ]
 
-            elif chart_type == "交易筆數分布":
-            # 全台或單縣市
-                if city_choice == "全台":
-                    trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
-                    pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
-                else:
-                    df_city = combined_df[combined_df["縣市"] == city_choice]
-                    trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
-                    pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+                    old_data = [
+                        safe_mean(
+                            yearly_avg[
+                                (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")
+                            ]["平均單價元平方公尺"]
+                        )
+                        for y in years
+                    ]
 
-                if pie_data:  # 避免空資料
                     option = {
-                        "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
-                        "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["新成屋", "中古屋"]},
+                        "xAxis": {"type": "category", "data": year_labels},
+                        "yAxis": {"type": "value"},
                         "series": [
-                            {
-                                "name": "交易筆數",
-                                "type": "pie",
-                                "radius": "50%",
-                                "data": pie_data,
-                                "emphasis": {
-                                    "itemStyle": {
-                                        "shadowBlur": 10,
-                                        "shadowOffsetX": 0,
-                                        "shadowColor": "rgba(0, 0, 0, 0.5)"
+                            {"name": "新成屋", "type": "line", "data": new_data},
+                            {"name": "中古屋", "type": "line", "data": old_data},
+                        ],
+                    }
+
+                    st_echarts(option, height="400px")
+
+                elif chart_type == "交易筆數分布":
+                    # 全台或單縣市
+                    if city_choice == "全台":
+                        trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
+                        pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
+                    else:
+                        df_city = combined_df[combined_df["縣市"] == city_choice]
+                        trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
+                        pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+
+                    if pie_data:
+                        option = {
+                            "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+                            "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
+                            "series": [
+                                {
+                                    "name": "交易筆數",
+                                    "type": "pie",
+                                    "radius": "50%",
+                                    "data": pie_data,
+                                    "emphasis": {
+                                        "itemStyle": {
+                                            "shadowBlur": 10,
+                                            "shadowOffsetX": 0,
+                                            "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                        }
                                     }
                                 }
-                            }
-                        ]
-                    }
-                    st_echarts(option, height="400px")
-                else:
-                    st.info("⚠️ 無交易資料，無法顯示圓餅圖")
+                            ]
+                        }
+                        st_echarts(option, height="400px")
+                    else:
+                        st.info("⚠️ 無交易資料，無法顯示圓餅圖")
