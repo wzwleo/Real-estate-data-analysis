@@ -306,6 +306,7 @@ def tab1_module():
             st.success("✅ 分析完成")
             st.markdown("### 🧠 **Gemini 市場分析結果**")
             st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
+            ai_score = ai_score.strip()
             st.text(ai_score)
             
             scores = json.loads(ai_score)
