@@ -441,9 +441,10 @@ def render_analysis_page():
 
 
     # ---------------------------
-    # Tab3: 市場趨勢分析
     # ---------------------------
-    with tab3:
+# Tab3: 市場趨勢分析
+# ---------------------------
+with tab3:
     st.subheader("📊 市場趨勢分析")
 
     combined_df = load_real_estate_csv(folder="./page_modules")
@@ -549,15 +550,16 @@ def render_analysis_page():
                 st_echarts(option, height="400px")
 
             elif chart_type == "交易筆數分布" and len(filtered_df) > 0:
-                # 計算每個行政區的交易筆數
-                trans_counts = (
-                    filtered_df.groupby("行政區").size().reset_index(name="count")
-                )
-                pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+                if city_choice == "全台":
+                    trans_counts = filtered_df.groupby("縣市").size().reset_index(name="count")
+                    pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
+                else:
+                    trans_counts = filtered_df.groupby("行政區").size().reset_index(name="count")
+                    pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
 
                 option = {
                     "tooltip": {"trigger": "item", "formatter": "{a} <br/>{b}: {c} ({d}%)"},
-                    "legend": {"orient": "vertical", "left": "left", "data": [row["行政區"] for _, row in trans_counts.iterrows()]},
+                    "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
                     "series": [
                         {
                             "name": "交易筆數",
@@ -576,3 +578,4 @@ def render_analysis_page():
                 }
 
                 st_echarts(option, height="400px")
+
