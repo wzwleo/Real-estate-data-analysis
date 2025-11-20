@@ -6,6 +6,8 @@ from sentence_transformers import SentenceTransformer
 import os
 import numpy as np
 import plotly.express as px
+import json
+import plotly.graph_objects as go
 
 # 在檔案開頭,name_map 下方加入反向對照表
 name_map = {
@@ -14,6 +16,36 @@ name_map = {
 }
 # 建立反向對照表:中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
+
+def plot_radar(scores):
+    categories = list(scores.keys())
+    values = list(scores.values())
+
+    # 關閉環線前需要把首點補上（Plotly 要環狀）
+    categories.append(categories[0])
+    values.append(values[0])
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        name='AI 評分'
+    ))
+
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 10]   # 0～10 分
+            )
+        ),
+        showlegend=False,
+        title="AI 房屋評分雷達圖"
+    )
+
+    return fig
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -259,7 +291,8 @@ def tab1_module():
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
                     response_score = model.generate_content(prompt_score)
-                    
+                    ai_score = response_score.text
+                
                 st.session_state['current_analysis_result'] = {
                     "house_title": house_title,
                     "result_text": response.text,
@@ -273,7 +306,9 @@ def tab1_module():
             st.success("✅ 分析完成")
             st.markdown("### 🧠 **Gemini 市場分析結果**")
             st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
-        
+
+            scores = json.loads(ai_score)
+            st.plotly_chart(plot_radar(scores), use_container_width=True)
             # 安全存取相似房型資料
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
             if similar_data:
@@ -285,7 +320,6 @@ def tab1_module():
                     st.dataframe(similar_df)
             else:
                 st.write("沒有找到相似房型")
-            st.markdown(response_score.text)
         
             # -------------------- 儲存分析結果 --------------------
             if st.button("🗃️儲存分析結果", use_container_width=True, key="data_storage"):
