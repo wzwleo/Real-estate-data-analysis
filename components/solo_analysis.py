@@ -291,7 +291,7 @@ def tab1_module():
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
                     response_score = model.generate_content(prompt_score)
-                    ai_score = response_score.text
+                    ai_score_clean = (ai_score or "").strip()
                 
                 st.session_state['current_analysis_result'] = {
                     "house_title": house_title,
