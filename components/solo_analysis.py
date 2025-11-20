@@ -142,7 +142,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
             st.write("\n")
-            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
+            analyze_clicked = st.button("開始分析1", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
