@@ -444,106 +444,135 @@ def render_analysis_page():
     # Tab3: 市場趨勢分析
     # ---------------------------
     with tab3:
-        st.subheader("📊 市場趨勢分析")
+    st.subheader("📊 市場趨勢分析")
 
-        combined_df = load_real_estate_csv(folder="./page_modules")
-        if combined_df.empty:
-            st.info("📂 無可用資料")
-            st.stop()
+    combined_df = load_real_estate_csv(folder="./page_modules")
+    if combined_df.empty:
+        st.info("📂 無可用資料")
+        st.stop()
 
-        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
+    chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
 
-        col1, col2 = st.columns([3, 1])
+    col1, col2 = st.columns([3, 1])
 
-        with col2:
-            cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
-            city_choice = st.selectbox("選擇縣市", cities)
+    with col2:
+        cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
+        city_choice = st.selectbox("選擇縣市", cities)
 
-            if city_choice != "全台":
-                st.session_state.selected_city = city_choice
+        if city_choice != "全台":
+            st.session_state.selected_city = city_choice
 
-                district_names = ["全部"] + sorted(
-                    combined_df[combined_df["縣市"] == city_choice]["行政區"]
-                    .dropna()
-                    .unique()
-                    .tolist()
+            district_names = ["全部"] + sorted(
+                combined_df[combined_df["縣市"] == city_choice]["行政區"]
+                .dropna()
+                .unique()
+                .tolist()
+            )
+            district_choice = st.selectbox("選擇行政區", district_names)
+
+            st.session_state.selected_district = (
+                None if district_choice == "全部" else district_choice
+            )
+            st.session_state.show_filtered_data = True
+        else:
+            st.session_state.selected_city = None
+            st.session_state.selected_district = None
+            st.session_state.show_filtered_data = False
+
+    with col1:
+        if st.session_state.show_filtered_data:
+            filtered_df = combined_df.copy()
+
+            if st.session_state.selected_city:
+                filtered_df = filtered_df[
+                    filtered_df["縣市"] == st.session_state.selected_city
+                ]
+            if st.session_state.selected_district:
+                filtered_df = filtered_df[
+                    filtered_df["行政區"] == st.session_state.selected_district
+                ]
+
+            st.markdown("## 📂 篩選結果資料")
+            st.write(f"共 {len(filtered_df)} 筆資料")
+            st.dataframe(filtered_df)
+
+            # -----------------
+            # 圖表
+            # -----------------
+            if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
+                filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
+
+                yearly_avg = (
+                    filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"]
+                    .mean()
+                    .reset_index()
                 )
-                district_choice = st.selectbox("選擇行政區", district_names)
 
-                st.session_state.selected_district = (
-                    None if district_choice == "全部" else district_choice
-                )
-                st.session_state.show_filtered_data = True
-            else:
-                st.session_state.selected_city = None
-                st.session_state.selected_district = None
-                st.session_state.show_filtered_data = False
+                years = sorted(yearly_avg["年份"].unique())
+                year_labels = [str(y) for y in years]
 
-        with col1:
-            if st.session_state.show_filtered_data:
-                filtered_df = combined_df.copy()
+                def safe_mean(df):
+                    if df.empty:
+                        return 0
+                    v = df.mean()
+                    return 0 if pd.isna(v) else int(v)
 
-                if st.session_state.selected_city:
-                    filtered_df = filtered_df[
-                        filtered_df["縣市"] == st.session_state.selected_city
-                    ]
-                if st.session_state.selected_district:
-                    filtered_df = filtered_df[
-                        filtered_df["行政區"] == st.session_state.selected_district
-                    ]
-
-                st.markdown("## 📂 篩選結果資料")
-                st.write(f"共 {len(filtered_df)} 筆資料")
-                st.dataframe(filtered_df)
-
-                # -----------------
-                # 圖表
-                # -----------------
-                if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
-                    filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
-
-                    yearly_avg = (
-                        filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"]
-                        .mean()
-                        .reset_index()
+                new_data = [
+                    safe_mean(
+                        yearly_avg[
+                            (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")
+                        ]["平均單價元平方公尺"]
                     )
+                    for y in years
+                ]
 
-                    years = sorted(yearly_avg["年份"].unique())
-                    year_labels = [str(y) for y in years]
+                old_data = [
+                    safe_mean(
+                        yearly_avg[
+                            (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")
+                        ]["平均單價元平方公尺"]
+                    )
+                    for y in years
+                ]
 
-                    def safe_mean(df):
-                        if df.empty:
-                            return 0
-                        v = df.mean()
-                        return 0 if pd.isna(v) else int(v)
+                option = {
+                    "tooltip": {"trigger": "axis"},
+                    "legend": {"data": ["新成屋", "中古屋"]},
+                    "xAxis": {"type": "category", "data": year_labels},
+                    "yAxis": {"type": "value"},
+                    "series": [
+                        {"name": "新成屋", "type": "line", "data": new_data},
+                        {"name": "中古屋", "type": "line", "data": old_data},
+                    ],
+                }
 
-                    new_data = [
-                        safe_mean(
-                            yearly_avg[
-                                (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")
-                            ]["平均單價元平方公尺"]
-                        )
-                        for y in years
+                st_echarts(option, height="400px")
+
+            elif chart_type == "交易筆數分布" and len(filtered_df) > 0:
+                # 計算每個行政區的交易筆數
+                trans_counts = (
+                    filtered_df.groupby("行政區").size().reset_index(name="count")
+                )
+                pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+
+                option = {
+                    "tooltip": {"trigger": "item", "formatter": "{a} <br/>{b}: {c} ({d}%)"},
+                    "legend": {"orient": "vertical", "left": "left", "data": [row["行政區"] for _, row in trans_counts.iterrows()]},
+                    "series": [
+                        {
+                            "name": "交易筆數",
+                            "type": "pie",
+                            "radius": "50%",
+                            "data": pie_data,
+                            "emphasis": {
+                                "itemStyle": {
+                                    "shadowBlur": 10,
+                                    "shadowOffsetX": 0,
+                                    "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                }
+                            }
+                        }
                     ]
+                }
 
-                    old_data = [
-                        safe_mean(
-                            yearly_avg[
-                                (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")
-                            ]["平均單價元平方公尺"]
-                        )
-                        for y in years
-                    ]
-
-                    option = {
-                        "tooltip": {"trigger": "axis"},
-                        "legend": {"data": ["新成屋", "中古屋"]},
-                        "xAxis": {"type": "category", "data": year_labels},
-                        "yAxis": {"type": "value"},
-                        "series": [
-                            {"name": "新成屋", "type": "line", "data": new_data},
-                            {"name": "中古屋", "type": "line", "data": old_data},
-                        ],
-                    }
-
-                    st_echarts(option, height="400px")
+                st_echarts(option, height="400px")
