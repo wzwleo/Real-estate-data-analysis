@@ -172,7 +172,7 @@ def tab1_module():
             chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
 
         gemini_key = st.session_state.get("GEMINI_KEY","")
-
+        ai_score = None
         if analyze_clicked:
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
