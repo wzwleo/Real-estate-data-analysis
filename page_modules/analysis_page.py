@@ -550,14 +550,29 @@ with tab3:
                 st_echarts(option, height="400px")
 
             elif chart_type == "交易筆數分布":
-            # 全台或單縣市
+                # 設定前 N 名
+                TOP_N = 10
+
+                # 全台或單縣市
                 if city_choice == "全台":
                     trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
-                    pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
+                    counts = trans_counts.sort_values("count", ascending=False).reset_index(drop=True)
+                    top_counts = counts.head(TOP_N)
+                    other_counts = counts.iloc[TOP_N:]
+                    if not other_counts.empty:
+                        other_sum = other_counts["count"].sum()
+                        top_counts = top_counts.append({"縣市": "其他", "count": other_sum}, ignore_index=True)
+                    pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in top_counts.iterrows()]
                 else:
                     df_city = combined_df[combined_df["縣市"] == city_choice]
                     trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
-                    pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+                    counts = trans_counts.sort_values("count", ascending=False).reset_index(drop=True)
+                    top_counts = counts.head(TOP_N)
+                    other_counts = counts.iloc[TOP_N:]
+                    if not other_counts.empty:
+                        other_sum = other_counts["count"].sum()
+                        top_counts = top_counts.append({"行政區": "其他", "count": other_sum}, ignore_index=True)
+                    pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in top_counts.iterrows()]
 
                 if pie_data:  # 避免空資料
                     option = {
