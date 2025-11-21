@@ -1,0 +1,71 @@
+from flask import Flask, request
+import json
+import os
+
+from linebot import LineBotApi, WebhookHandler
+from linebot.models import MessageEvent, TextMessage, TextSendMessage
+
+# 建立 Flask 主應用程式
+app = Flask(__name__)
+
+# -----------------------------
+# 從環境變數中取得 LINE BOT 金鑰
+# 不要把金鑰寫死在程式內，避免外洩
+# ACCESS_TOKEN = Channel Access Token
+# CHANNEL_SECRET = Channel Secret
+# -----------------------------
+access_token = os.environ.get("ACCESS_TOKEN")
+secret = os.environ.get("CHANNEL_SECRET")
+
+# 初始化 LINE Bot API 與 Handler
+line_bot_api = LineBotApi(access_token)
+handler = WebhookHandler(secret)
+
+
+# -----------------------------------
+# 主要 Webhook 接收點（LINE → 你的伺服器）
+# LINE 官方會傳送 POST 請求到這裡
+# -----------------------------------
+@app.route("/", methods=['POST'])
+def callback():
+    # 取得 LINE 傳來的 body（事件內容）
+    body = request.get_data(as_text=True)
+
+    # 取得簽章（用來驗證內容是否來自 LINE）
+    signature = request.headers.get("X-Line-Signature", "")
+
+    try:
+        # 交由 handler 驗證簽章與解析事件
+        handler.handle(body, signature)
+
+        # 將 body 轉成 Python dict
+        json_data = json.loads(body)
+
+        # 一般只有一個事件，所以抓第 0 個
+        event = json_data['events'][0]
+
+        # 判斷是否為使用者傳送「文字訊息」
+        if event['type'] == 'message' and event['message']['type'] == 'text':
+            user_message = event['message']['text']  # 使用者文字
+            reply_token = event['replyToken']        # 回覆用 token
+
+            # 回覆相同文字（Echo Bot）
+            line_bot_api.reply_message(
+                reply_token,
+                TextSendMessage(text=user_message)
+            )
+
+    except Exception as e:
+        # 若出錯，顯示錯誤（方便 debug）
+        print("錯誤：", e)
+        print("收到的內容：", body)
+
+    return 'OK'
+
+
+# -------------------------------
+# 本地啟動 Flask
+# 部署到雲端時會由平台自動指定 port
+# -------------------------------
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=5000, debug=True)
