@@ -14,8 +14,8 @@ app = Flask(__name__)
 # ACCESS_TOKEN = Channel Access Token
 # CHANNEL_SECRET = Channel Secret
 # -----------------------------
-access_token = os.environ.get("ACCESS_TOKEN")
-secret = os.environ.get("CHANNEL_SECRET")
+access_token = os.environ.get("2KzRcaH55WLNDzt4KqvDyss1K5Psr3usp1JcO7Y5EIYpuvvOYl4UFw8LpX9md7MUxIzbObtR/3qOQf/3GSwjq/ciYqfW3AScRzJyFApGNUDgjuv0wKzX3IHzTnikEP50RetSUFZDTOcMz9Tupc1iwwdB04t89/1O/w1cDnyilFU=")
+secret = os.environ.get("bd135d8f6048b82274b60763b59baefa")
 
 # 初始化 LINE Bot API 與 Handler
 line_bot_api = LineBotApi(access_token)
