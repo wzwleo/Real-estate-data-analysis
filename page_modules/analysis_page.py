@@ -463,31 +463,31 @@ def render_analysis_page():
         # 載入並整理人口資料
         # -----------------------------
         def 整理人口_csv(csv_path):
-        # 讀 CSV，不設定 header
-        raw_df = pd.read_csv(csv_path, header=None)
-        
-        # 先把每列拆成「年份」和「區域-人口」對
-        data = []
-        
-        # 假設第一列是年份標題
-        years = raw_df.iloc[0, 1::2].tolist()  # 取偶數欄 (人口數旁的年份列)
-        
-        # 從第二列開始是資料
-        for row in raw_df.iloc[1:].itertuples(index=False):
-            # 每列每兩欄是一組 [區域, 人口]
-            for i in range(0, len(row), 2):
-                if i+1 < len(row):
-                    area = str(row[i]).strip()
-                    for j, year in enumerate(years):
-                        if i + 1 + j < len(row):
-                            pop = row[i + 1 + j]
-                            if pd.notna(pop):
-                                data.append([year, area, int(str(pop).replace(',', ''))])
-        
-        # 生成整理後 DataFrame
-        df = pd.DataFrame(data, columns=['年份', '區域', '人口數'])
-        
-        return df
+            # 讀 CSV，不設定 header
+            raw_df = pd.read_csv(csv_path, header=None)
+            
+            # 先把每列拆成「年份」和「區域-人口」對
+            data = []
+            
+            # 假設第一列是年份標題
+            years = raw_df.iloc[0, 1::2].tolist()  # 取偶數欄 (人口數旁的年份列)
+            
+            # 從第二列開始是資料
+            for row in raw_df.iloc[1:].itertuples(index=False):
+                # 每列每兩欄是一組 [區域, 人口]
+                for i in range(0, len(row), 2):
+                    if i+1 < len(row):
+                        area = str(row[i]).strip()
+                        for j, year in enumerate(years):
+                            if i + 1 + j < len(row):
+                                pop = row[i + 1 + j]
+                                if pd.notna(pop):
+                                    data.append([year, area, int(str(pop).replace(',', ''))])
+            
+            # 生成整理後 DataFrame
+            df = pd.DataFrame(data, columns=['年份', '區域', '人口數'])
+            
+            return df
     
 
     
