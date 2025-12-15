@@ -462,41 +462,34 @@ def render_analysis_page():
         # -----------------------------
         # 載入並整理人口資料
         # -----------------------------
-        pop_file = "./page_modules/活頁薄1.csv"
-        if not os.path.exists(pop_file):
-            st.warning("📂 無人口資料")
-            pop_df = pd.DataFrame()
-        else:
-            try:
-                pop_raw = pd.read_csv(pop_file, encoding="big5", header=None)
-                # 假設第一列是年份代號(113、112...), 第二列是總人口、接下來是各區人口
-                # 我們先抓出年份
-                years = pop_raw.iloc[0, 1:].tolist()  # 第一列除了第一欄的年份
-                pop_data = []
-                for i in range(1, len(pop_raw)):
-                    row = pop_raw.iloc[i]
-                    area = row[0].strip()
-                    for j, pop in enumerate(row[1:]):
-                        try:
-                            population = int(str(pop).replace(",", "").strip())
-                        except:
-                            population = None
-                        pop_data.append({
-                            "年份": years[j],
-                            "區域別": area,
-                            "人口數": population
-                        })
-                pop_df = pd.DataFrame(pop_data)
-            except Exception as e:
-                st.error(f"讀取人口資料失敗: {e}")
-                pop_df = pd.DataFrame()
+        def 整理人口_csv(csv_path):
+        # 讀 CSV，不設定 header
+        raw_df = pd.read_csv(csv_path, header=None)
+        
+        # 先把每列拆成「年份」和「區域-人口」對
+        data = []
+        
+        # 假設第一列是年份標題
+        years = raw_df.iloc[0, 1::2].tolist()  # 取偶數欄 (人口數旁的年份列)
+        
+        # 從第二列開始是資料
+        for row in raw_df.iloc[1:].itertuples(index=False):
+            # 每列每兩欄是一組 [區域, 人口]
+            for i in range(0, len(row), 2):
+                if i+1 < len(row):
+                    area = str(row[i]).strip()
+                    for j, year in enumerate(years):
+                        if i + 1 + j < len(row):
+                            pop = row[i + 1 + j]
+                            if pd.notna(pop):
+                                data.append([year, area, int(str(pop).replace(',', ''))])
+        
+        # 生成整理後 DataFrame
+        df = pd.DataFrame(data, columns=['年份', '區域', '人口數'])
+        
+        return df
     
-        # 顯示人口資料
-        if pop_df.empty:
-            st.info("📂 無人口資料")
-        else:
-            st.markdown("## 👥 人口資料整理結果")
-            st.dataframe(pop_df)
+
     
         # -----------------------------
         # 原有房產資料篩選與圖表
