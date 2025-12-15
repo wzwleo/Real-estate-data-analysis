@@ -448,7 +448,6 @@ def render_analysis_page():
 
     
     # ============================
-    # -----------------------------
     # Tab3: 市場趨勢分析（整合人口資料）
     # -----------------------------
     with tab3:
@@ -458,52 +457,47 @@ def render_analysis_page():
         combined_df = load_real_estate_csv(folder="./page_modules")
         if combined_df.empty:
             st.info("📂 無可用不動產資料")
-        else:
-            st.success(f"📂 讀取到 {len(combined_df)} 筆不動產資料")
-    
         # -----------------------------
-        # 載入並整理人口資料
+        # 載入人口資料（安全版）
         # -----------------------------
         pop_file = "./page_modules/活頁薄1.csv"
         pop_df = pd.DataFrame()
-    
         if os.path.exists(pop_file):
             try:
                 raw_df = pd.read_csv(pop_file, header=None, encoding="big5")
-                years = raw_df.iloc[0, 1::2].tolist()
+                # 第一列是年份，從第二列開始是資料
+                years = raw_df.iloc[0, ::2].tolist()
                 data = []
-    
                 for row in raw_df.iloc[1:].itertuples(index=False):
                     for i in range(0, len(row), 2):
-                        if i+1 >= len(row):
+                        if i + 1 >= len(row):
                             continue
                         area = str(row[i]).strip()
                         for j, year in enumerate(years):
                             if i + 1 + j < len(row):
                                 pop = row[i + 1 + j]
                                 if pd.notna(pop):
-                                    pop = str(pop).replace(',', '').replace('　','').strip()
+                                    pop = str(pop).replace(",", "").strip()
                                     try:
                                         data.append([year, area, int(pop)])
                                     except:
                                         continue
-                if data:
-                    pop_df = pd.DataFrame(data, columns=["年份", "區域別", "人口數"])
+                pop_df = pd.DataFrame(data, columns=["年份", "區域別", "人口數"])
             except Exception as e:
                 st.warning(f"⚠️ 人口資料讀取失敗: {e}")
-    
-        if pop_df.empty:
-            st.info("📂 無人口資料")
         else:
+            st.info("📂 無人口資料")
+    
+        # 顯示人口資料（若有）
+        if not pop_df.empty:
             st.markdown("## 👥 人口資料整理結果")
             st.dataframe(pop_df)
     
         # -----------------------------
-        # 原本房價圖表程式，不受人口資料影響
+        # 原本房產資料圖表
         # -----------------------------
         chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
-    
-        col1, col2 = st.columns([3,1])
+        col1, col2 = st.columns([3, 1])
     
         # 選縣市與行政區
         with col2:
@@ -513,27 +507,102 @@ def render_analysis_page():
             if city_choice != "全台":
                 st.session_state.selected_city = city_choice
                 district_names = ["全部"] + sorted(
-                    combined_df[combined_df["縣市"]==city_choice]["行政區"].dropna().unique().tolist()
+                    combined_df[combined_df["縣市"] == city_choice]["行政區"].dropna().unique().tolist()
                 )
                 district_choice = st.selectbox("選擇行政區", district_names)
-                st.session_state.selected_district = None if district_choice=="全部" else district_choice
+                st.session_state.selected_district = None if district_choice == "全部" else district_choice
                 st.session_state.show_filtered_data = True
             else:
                 st.session_state.selected_city = None
                 st.session_state.selected_district = None
                 st.session_state.show_filtered_data = False
     
-        # 顯示房產資料
+        # 顯示房產資料與圖表
         with col1:
             filtered_df = combined_df.copy()
             if st.session_state.show_filtered_data:
                 if st.session_state.selected_city:
-                    filtered_df = filtered_df[filtered_df["縣市"]==st.session_state.selected_city]
+                    filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
                 if st.session_state.selected_district:
-                    filtered_df = filtered_df[filtered_df["行政區"]==st.session_state.selected_district]
+                    filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
     
             st.markdown("## 📂 篩選結果資料")
             st.write(f"共 {len(filtered_df)} 筆資料")
             st.dataframe(filtered_df)
+    
+            # -----------------
+            # 房價趨勢圖
+            # -----------------
+            if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
+                filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
+                yearly_avg = (
+                    filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"]
+                    .mean()
+                    .reset_index()
+                )
+    
+                years = sorted(yearly_avg["年份"].unique())
+                year_labels = [str(y) for y in years]
+    
+                def safe_mean(df):
+                    return int(df.mean()) if not df.empty else 0
+    
+                new_data = [
+                    safe_mean(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")]["平均單價元平方公尺"])
+                    for y in years
+                ]
+                old_data = [
+                    safe_mean(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")]["平均單價元平方公尺"])
+                    for y in years
+                ]
+    
+                option = {
+                    "tooltip": {"trigger": "axis"},
+                    "legend": {"data": ["新成屋", "中古屋"]},
+                    "xAxis": {"type": "category", "data": year_labels},
+                    "yAxis": {"type": "value"},
+                    "series": [
+                        {"name": "新成屋", "type": "line", "data": new_data},
+                        {"name": "中古屋", "type": "line", "data": old_data},
+                    ],
+                }
+                st_echarts(option, height="400px")
+    
+            # -----------------
+            # 交易筆數分布
+            # -----------------
+            elif chart_type == "交易筆數分布":
+                if city_choice == "全台":
+                    trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
+                    pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
+                else:
+                    df_city = combined_df[combined_df["縣市"] == city_choice]
+                    trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
+                    pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+    
+                if pie_data:
+                    option = {
+                        "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+                        "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
+                        "series": [
+                            {
+                                "name": "交易筆數",
+                                "type": "pie",
+                                "radius": "50%",
+                                "data": pie_data,
+                                "emphasis": {
+                                    "itemStyle": {
+                                        "shadowBlur": 10,
+                                        "shadowOffsetX": 0,
+                                        "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                    st_echarts(option, height="400px")
+                else:
+                    st.info("⚠️ 無交易資料，無法顯示圓餅圖")
+
 
 
