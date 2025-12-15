@@ -135,7 +135,7 @@ def 整理人口_csv(csv_path):
         return pd.DataFrame()
 
     try:
-        raw_df = pd.read_csv(csv_path, header=None, encoding="big5")
+        raw_df = pd.read_csv(csv_path, header=None, encoding="utf-8")
         data = []
 
         # 取年份（第一列），每兩欄一組
