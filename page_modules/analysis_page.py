@@ -451,95 +451,95 @@ def render_analysis_page():
     # Tab3: 市場趨勢分析（整合人口資料）
     # ============================
     # -----------------------------
-# Tab3: 市場趨勢分析（整合人口資料）
-# -----------------------------
-with tab3:
-    st.subheader("📊 市場趨勢分析")
-
-    # 載入房產資料
-    combined_df = load_real_estate_csv(folder="./page_modules")
-    if combined_df.empty:
-        st.info("📂 無可用不動產資料")
-        st.stop()
-
+    # Tab3: 市場趨勢分析（整合人口資料）
     # -----------------------------
-    # 載入並整理人口資料
-    # -----------------------------
-    pop_file = "./page_modules/活頁薄1.csv"
-    if not os.path.exists(pop_file):
-        st.warning("📂 無人口資料")
-        pop_df = pd.DataFrame()
-    else:
-        try:
-            raw_df = pd.read_csv(pop_file, header=None, encoding="big5")
-            # 取第一列作為年份列表
-            years = raw_df.iloc[0, ::2].tolist()  # 每兩欄一組，取第一欄作為年份
-            data = []
-
-            # 從第二列開始，拆成長表格
-            for row in raw_df.iloc[1:].itertuples(index=False):
-                # 每兩欄一組
-                for i in range(0, len(row), 2):
-                    if i + 1 >= len(row):
-                        continue
-                    area = str(row[i]).strip()
-                    for j, year in enumerate(years):
-                        if i + 1 + j < len(row):
-                            pop = row[i + 1 + j]
-                            if pd.notna(pop):
-                                pop = str(pop).replace(',', '').strip()
-                                try:
-                                    pop_int = int(pop)
-                                    data.append([year, area, pop_int])
-                                except:
-                                    continue
-            pop_df = pd.DataFrame(data, columns=["年份", "區域別", "人口數"])
-        except Exception as e:
-            st.error(f"讀取人口資料失敗: {e}")
+    with tab3:
+        st.subheader("📊 市場趨勢分析")
+    
+        # 載入房產資料
+        combined_df = load_real_estate_csv(folder="./page_modules")
+        if combined_df.empty:
+            st.info("📂 無可用不動產資料")
+            st.stop()
+    
+        # -----------------------------
+        # 載入並整理人口資料
+        # -----------------------------
+        pop_file = "./page_modules/活頁薄1.csv"
+        if not os.path.exists(pop_file):
+            st.warning("📂 無人口資料")
             pop_df = pd.DataFrame()
-
-    # 顯示人口資料
-    if pop_df.empty:
-        st.info("📂 無人口資料")
-    else:
-        st.markdown("## 👥 人口資料整理結果")
-        st.dataframe(pop_df)
-
-    # -----------------------------
-    # 原有房產資料篩選與圖表
-    # -----------------------------
-    chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
-
-    col1, col2 = st.columns([3, 1])
-
-    # 選縣市與行政區
-    with col2:
-        cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
-        city_choice = st.selectbox("選擇縣市", cities)
-
-        if city_choice != "全台":
-            st.session_state.selected_city = city_choice
-            district_names = ["全部"] + sorted(
-                combined_df[combined_df["縣市"] == city_choice]["行政區"].dropna().unique().tolist()
-            )
-            district_choice = st.selectbox("選擇行政區", district_names)
-            st.session_state.selected_district = None if district_choice == "全部" else district_choice
-            st.session_state.show_filtered_data = True
         else:
-            st.session_state.selected_city = None
-            st.session_state.selected_district = None
-            st.session_state.show_filtered_data = False
-
-    # 顯示房產資料
-    with col1:
-        if st.session_state.show_filtered_data:
-            filtered_df = combined_df.copy()
-            if st.session_state.selected_city:
-                filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
-            if st.session_state.selected_district:
-                filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
-
-            st.markdown("## 📂 篩選結果資料")
-            st.write(f"共 {len(filtered_df)} 筆資料")
-            st.dataframe(filtered_df)
+            try:
+                raw_df = pd.read_csv(pop_file, header=None, encoding="big5")
+                # 取第一列作為年份列表
+                years = raw_df.iloc[0, ::2].tolist()  # 每兩欄一組，取第一欄作為年份
+                data = []
+    
+                # 從第二列開始，拆成長表格
+                for row in raw_df.iloc[1:].itertuples(index=False):
+                    # 每兩欄一組
+                    for i in range(0, len(row), 2):
+                        if i + 1 >= len(row):
+                            continue
+                        area = str(row[i]).strip()
+                        for j, year in enumerate(years):
+                            if i + 1 + j < len(row):
+                                pop = row[i + 1 + j]
+                                if pd.notna(pop):
+                                    pop = str(pop).replace(',', '').strip()
+                                    try:
+                                        pop_int = int(pop)
+                                        data.append([year, area, pop_int])
+                                    except:
+                                        continue
+                pop_df = pd.DataFrame(data, columns=["年份", "區域別", "人口數"])
+            except Exception as e:
+                st.error(f"讀取人口資料失敗: {e}")
+                pop_df = pd.DataFrame()
+    
+        # 顯示人口資料
+        if pop_df.empty:
+            st.info("📂 無人口資料")
+        else:
+            st.markdown("## 👥 人口資料整理結果")
+            st.dataframe(pop_df)
+    
+        # -----------------------------
+        # 原有房產資料篩選與圖表
+        # -----------------------------
+        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
+    
+        col1, col2 = st.columns([3, 1])
+    
+        # 選縣市與行政區
+        with col2:
+            cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
+            city_choice = st.selectbox("選擇縣市", cities)
+    
+            if city_choice != "全台":
+                st.session_state.selected_city = city_choice
+                district_names = ["全部"] + sorted(
+                    combined_df[combined_df["縣市"] == city_choice]["行政區"].dropna().unique().tolist()
+                )
+                district_choice = st.selectbox("選擇行政區", district_names)
+                st.session_state.selected_district = None if district_choice == "全部" else district_choice
+                st.session_state.show_filtered_data = True
+            else:
+                st.session_state.selected_city = None
+                st.session_state.selected_district = None
+                st.session_state.show_filtered_data = False
+    
+        # 顯示房產資料
+        with col1:
+            if st.session_state.show_filtered_data:
+                filtered_df = combined_df.copy()
+                if st.session_state.selected_city:
+                    filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
+                if st.session_state.selected_district:
+                    filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
+    
+                st.markdown("## 📂 篩選結果資料")
+                st.write(f"共 {len(filtered_df)} 筆資料")
+                st.dataframe(filtered_df)
 
