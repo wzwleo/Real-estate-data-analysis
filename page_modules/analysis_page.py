@@ -128,6 +128,39 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
             p.get("place_id", "")
         ))
     return results
+def 整理人口_csv(csv_path):
+    import pandas as pd
+    import os
+    if not os.path.exists(csv_path):
+        return pd.DataFrame()
+
+    try:
+        raw_df = pd.read_csv(csv_path, header=None, encoding="big5")
+        data = []
+
+        # 取年份（第一列），每兩欄一組
+        years = raw_df.iloc[0, ::2].tolist()
+
+        # 從第二列開始是資料
+        for row in raw_df.iloc[1:].itertuples(index=False):
+            for i in range(0, len(row), 2):
+                if i + 1 >= len(row):
+                    continue
+                area = str(row[i]).strip()
+                for j, year in enumerate(years):
+                    if i + 1 + j < len(row):
+                        pop = row[i + 1 + j]
+                        if pd.notna(pop):
+                            try:
+                                pop_int = int(str(pop).replace(",", "").strip())
+                                data.append([year, area, pop_int])
+                            except:
+                                continue
+        df = pd.DataFrame(data, columns=["年份", "區域別", "人口數"])
+        return df
+    except Exception as e:
+        st.warning(f"⚠️ 人口資料讀取失敗: {e}")
+        return pd.DataFrame()
 
 
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
@@ -461,37 +494,12 @@ def render_analysis_page():
         # 載入人口資料（安全版）
         # -----------------------------
         pop_file = "./page_modules/活頁薄1.csv"
-        pop_df = pd.DataFrame()
-        if os.path.exists(pop_file):
-            try:
-                raw_df = pd.read_csv(pop_file, header=None, encoding="big5")
-                # 第一列是年份，從第二列開始是資料
-                years = raw_df.iloc[0, ::2].tolist()
-                data = []
-                for row in raw_df.iloc[1:].itertuples(index=False):
-                    for i in range(0, len(row), 2):
-                        if i + 1 >= len(row):
-                            continue
-                        area = str(row[i]).strip()
-                        for j, year in enumerate(years):
-                            if i + 1 + j < len(row):
-                                pop = row[i + 1 + j]
-                                if pd.notna(pop):
-                                    pop = str(pop).replace(",", "").strip()
-                                    try:
-                                        data.append([year, area, int(pop)])
-                                    except:
-                                        continue
-                pop_df = pd.DataFrame(data, columns=["年份", "區域別", "人口數"])
-            except Exception as e:
-                st.warning(f"⚠️ 人口資料讀取失敗: {e}")
-        else:
+        pop_df = 整理人口_csv(pop_file)
+        if pop_df.empty:
             st.info("📂 無人口資料")
-    
-        # 顯示人口資料（若有）
-        if not pop_df.empty:
-            st.markdown("## 👥 人口資料整理結果")
+        else:
             st.dataframe(pop_df)
+            
     
         # -----------------------------
         # 原本房產資料圖表
