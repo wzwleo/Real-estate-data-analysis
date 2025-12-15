@@ -31,6 +31,7 @@ def get_favorites_data():
     fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
     return fav_df
 
+
 # ===========================
 # 關鍵字設定
 # ===========================
@@ -51,6 +52,7 @@ CATEGORY_COLORS = {
     "關鍵字": "#000000"
 }
 
+
 # ===========================
 # 工具函式
 # ===========================
@@ -65,15 +67,19 @@ def haversine(lat1, lon1, lat2, lon2):
     )
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
+
 def _get_server_key():
     return st.session_state.get("GMAPS_SERVER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
+
 
 def _get_browser_key():
     return st.session_state.get("GMAPS_BROWSER_KEY") or st.session_state.get("GOOGLE_MAPS_KEY", "")
 
+
 def geocode_address(address: str, api_key: str):
     url = "https://maps.googleapis.com/maps/api/geocode/json"
     params = {"address": address, "key": api_key, "language": "zh-TW"}
+
     try:
         r = requests.get(url, params=params, timeout=10).json()
     except Exception as e:
@@ -87,6 +93,7 @@ def geocode_address(address: str, api_key: str):
 
     st.warning(f"Geocoding error: {status}")
     return None, None
+
 
 # ===========================
 # Google Text Search
@@ -122,6 +129,7 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
         ))
     return results
 
+
 def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
     results, seen = [], set()
     total_tasks = sum(len(PLACE_KEYWORDS[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
@@ -147,6 +155,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                     continue
                 seen.add(pid)
                 results.append((cat, kw, p[2], p[3], p[4], p[5], pid))
+
             time.sleep(1)
 
     if extra_keyword:
@@ -159,6 +168,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
                 continue
             seen.add(pid)
             results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], pid))
+
         time.sleep(0.3)
 
     progress.progress(1.0)
@@ -167,8 +177,12 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     results.sort(key=lambda x: x[5])
     return results
 
+
 def check_places_found(places, selected_categories, extra_keyword):
-    found_dict = {cat: {kw: False for kw in PLACE_KEYWORDS[cat]} for cat in selected_categories}
+    found_dict = {
+        cat: {kw: False for kw in PLACE_KEYWORDS[cat]}
+        for cat in selected_categories
+    }
     extra_found = False
 
     for cat, kw, name, lat, lng, dist, pid in places:
@@ -188,8 +202,10 @@ def check_places_found(places, selected_categories, extra_keyword):
 
     return messages
 
+
 def render_map(lat, lng, places, radius, title="房屋"):
     browser_key = _get_browser_key()
+
     data = []
     for cat, kw, name, p_lat, p_lng, dist, pid in places:
         data.append({
@@ -202,6 +218,7 @@ def render_map(lat, lng, places, radius, title="房屋"):
             "pid": pid,
             "color": CATEGORY_COLORS.get(cat, "#000000")
         })
+
     data_json = json.dumps(data, ensure_ascii=False)
 
     tpl = Template("""
@@ -214,17 +231,30 @@ def render_map(lat, lng, places, radius, title="房屋"):
                 center: center
             });
             new google.maps.Marker({position: center, map: map, title: "$TITLE"});
+
             var data = $DATA_JSON;
             data.forEach(function(p){
-                var info = p.cat + "-" + p.kw + ": " + p.name + "<br>距離中心 " + p.dist + " 公尺";
+                var info = p.cat + "-" + p.kw + ": " + p.name +
+                           "<br>距離中心 " + p.dist + " 公尺";
+
                 var marker = new google.maps.Marker({
                     position: {lat: p.lat, lng: p.lng},
                     map: map,
-                    icon: { path: google.maps.SymbolPath.CIRCLE, scale: 6, fillColor: p.color, fillOpacity: 1, strokeWeight: 1 },
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 6,
+                        fillColor: p.color,
+                        fillOpacity: 1,
+                        strokeWeight: 1
+                    },
                     title: p.cat + "-" + p.name
                 });
-                marker.addListener("click", function(){ new google.maps.InfoWindow({content: info}).open(map, marker); });
+
+                marker.addListener("click", function(){
+                    new google.maps.InfoWindow({content: info}).open(map, marker);
+                });
             });
+
             new google.maps.Circle({
                 strokeColor:"#FF0000",
                 strokeOpacity:0.8,
@@ -240,17 +270,33 @@ def render_map(lat, lng, places, radius, title="房屋"):
         <script src="https://maps.googleapis.com/maps/api/js?key=$BROWSER_KEY&callback=initMap" async defer></script>
     """)
 
-    map_html = tpl.substitute(LAT=lat, LNG=lng, TITLE=title, DATA_JSON=data_json, RADIUS=radius, BROWSER_KEY=browser_key)
+    map_html = tpl.substitute(
+        LAT=lat,
+        LNG=lng,
+        TITLE=title,
+        DATA_JSON=data_json,
+        RADIUS=radius,
+        BROWSER_KEY=browser_key
+    )
     html(map_html, height=400)
 
+
 def format_places(places):
-    return "\n".join([f"{cat}-{kw}: {name} ({dist} m)" for cat, kw, name, lat, lng, dist, pid in places])
+    return "\n".join([
+        f"{cat}-{kw}: {name} ({dist} m)"
+        for cat, kw, name, lat, lng, dist, pid in places
+    ])
+
 
 # ===========================
-# CSV 載入函式（可選擇資料夾或 GitHub）
+# CSV 載入函式
 # ===========================
 def load_real_estate_csv(folder="./page_modules"):
-    file_names = [f for f in os.listdir(folder) if f.startswith("合併後不動產統計_") and f.endswith(".csv")]
+    file_names = [
+        f for f in os.listdir(folder)
+        if f.startswith("合併後不動產統計_") and f.endswith(".csv")
+    ]
+
     dfs = []
     for file in file_names:
         path = os.path.join(folder, file)
@@ -262,10 +308,14 @@ def load_real_estate_csv(folder="./page_modules"):
             except Exception as e:
                 st.warning(f"讀取失敗：{file} - {e}")
                 continue
+
         dfs.append(df)
+
     if dfs:
         return pd.concat(dfs, ignore_index=True)
+
     return pd.DataFrame()
+
 
 # ===========================
 # 分析頁面主程式
@@ -300,6 +350,7 @@ def render_analysis_page():
     # ============================
     with tab2:
         st.subheader("🏠 房屋比較（Google Places + Gemini 分析）")
+
         fav_df = get_favorites_data()
         if fav_df.empty:
             st.info("⭐ 尚未有收藏房產，無法比較")
@@ -347,14 +398,20 @@ def render_analysis_page():
 
                 # 查詢房屋周邊
                 with st.spinner("正在查詢房屋 A 周邊..."):
-                    places_a = query_google_places_keyword(lat_a, lng_a, server_key, selected_categories, radius, extra_keyword=keyword)
+                    places_a = query_google_places_keyword(
+                        lat_a, lng_a, server_key, selected_categories,
+                        radius, extra_keyword=keyword
+                    )
                     messages_a = check_places_found(places_a, selected_categories, keyword)
                     for msg in messages_a:
                         st.warning(f"房屋 A: {msg}")
                     time.sleep(1)
 
                 with st.spinner("正在查詢房屋 B 周邊..."):
-                    places_b = query_google_places_keyword(lat_b, lng_b, server_key, selected_categories, radius, extra_keyword=keyword)
+                    places_b = query_google_places_keyword(
+                        lat_b, lng_b, server_key, selected_categories,
+                        radius, extra_keyword=keyword
+                    )
                     messages_b = check_places_found(places_b, selected_categories, keyword)
                     for msg in messages_b:
                         st.warning(f"房屋 B: {msg}")
@@ -369,8 +426,10 @@ def render_analysis_page():
                 # Gemini 分析
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
+
                 places_a_text = format_places(places_a) if places_a else "無周邊資料"
                 places_b_text = format_places(places_b) if places_b else "無周邊資料"
+
                 prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
 
 房屋 A:
@@ -381,6 +440,7 @@ def render_analysis_page():
 
 請列出每間房屋的優缺點，並給出綜合結論。
 """
+
                 st.text_area("Gemini Prompt", prompt, height=300)
                 resp = model.generate_content(prompt)
                 st.subheader("📊 Gemini 分析結果")
@@ -392,29 +452,12 @@ def render_analysis_page():
     with tab3:
         st.subheader("📊 市場趨勢分析")
 
-        # ----------------------------
-        # 1️⃣ 從 GitHub 載入 CSV（自動適應編碼）
-        # ----------------------------
-        GITHUB_RAW_URL = "https://raw.githubusercontent.com/你的帳號/你的Repo/main/合併後不動產統計_全部.csv"
-
-        try:
-            combined_df = pd.read_csv(GITHUB_RAW_URL, encoding="utf-8-sig")
-            st.success(f"✅ 從 GitHub 載入資料成功，共 {len(combined_df)} 筆")
-        except UnicodeDecodeError:
-            try:
-                combined_df = pd.read_csv(GITHUB_RAW_URL, encoding="big5")
-                st.success(f"✅ 從 GitHub (Big5) 載入資料成功，共 {len(combined_df)} 筆")
-            except Exception as e:
-                st.error(f"❌ 無法從 GitHub 讀取資料: {e}")
-                st.stop()
-        except Exception as e:
-            st.error(f"❌ 無法從 GitHub 讀取資料: {e}")
+        combined_df = load_real_estate_csv(folder="./page_modules")
+        if combined_df.empty:
+            st.info("📂 無可用資料")
             st.stop()
 
-        # ----------------------------
-        # 2️⃣ 選擇圖表
-        # ----------------------------
-        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布", "AI 行政區體質分析"])
+        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
 
         col1, col2 = st.columns([3, 1])
 
@@ -425,80 +468,118 @@ def render_analysis_page():
 
             if city_choice != "全台":
                 st.session_state.selected_city = city_choice
-                district_names = ["全部"] + sorted(combined_df[combined_df["縣市"] == city_choice]["行政區"].dropna().unique().tolist())
+
+                district_names = ["全部"] + sorted(
+                    combined_df[combined_df["縣市"] == city_choice]["行政區"]
+                    .dropna()
+                    .unique()
+                    .tolist()
+                )
                 district_choice = st.selectbox("選擇行政區", district_names)
-                st.session_state.selected_district = None if district_choice == "全部" else district_choice
+
+                st.session_state.selected_district = (
+                    None if district_choice == "全部" else district_choice
+                )
+                st.session_state.show_filtered_data = True
             else:
                 st.session_state.selected_city = None
                 st.session_state.selected_district = None
+                st.session_state.show_filtered_data = False
 
-        # ----------------------------
-        # 3️⃣ 篩選資料
-        # ----------------------------
+        # 顯示資料與圖表
         with col1:
-            filtered_df = combined_df.copy()
-            if st.session_state.selected_city:
-                filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
-            if st.session_state.selected_district:
-                filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
+            if st.session_state.show_filtered_data:
+                filtered_df = combined_df.copy()
+                if st.session_state.selected_city:
+                    filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
+                if st.session_state.selected_district:
+                    filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
 
-            st.markdown("## 📂 篩選結果資料")
-            st.write(f"共 {len(filtered_df)} 筆資料")
-            st.dataframe(filtered_df)
+                st.markdown("## 📂 篩選結果資料")
+                st.write(f"共 {len(filtered_df)} 筆資料")
+                st.dataframe(filtered_df)
 
-            # ----------------------------
-            # 4️⃣ 圖表呈現
-            # ----------------------------
-            if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
-                filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
-                yearly_avg = filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
-                years = sorted(yearly_avg["年份"].unique())
-                year_labels = [str(y) for y in years]
+                # -----------------
+                # 圖表
+                # -----------------
+                if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
+                    filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
+                    yearly_avg = (
+                        filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"]
+                        .mean()
+                        .reset_index()
+                    )
 
-                def safe_mean(df):
-                    return int(df.mean()) if not df.empty and not pd.isna(df.mean()) else 0
+                    years = sorted(yearly_avg["年份"].unique())
+                    year_labels = [str(y) for y in years]
 
-                new_data = [safe_mean(yearly_avg[(yearly_avg["年份"]==y) & (yearly_avg["BUILD"]=="新成屋")]["平均單價元平方公尺"]) for y in years]
-                old_data = [safe_mean(yearly_avg[(yearly_avg["年份"]==y) & (yearly_avg["BUILD"]=="中古屋")]["平均單價元平方公尺"]) for y in years]
+                    def safe_mean(df):
+                        if df.empty:
+                            return 0
+                        v = df.mean()
+                        return 0 if pd.isna(v) else int(v)
 
-                option = {
-                    "tooltip":{"trigger":"axis"},
-                    "legend":{"data":["新成屋","中古屋"]},
-                    "xAxis":{"type":"category","data":year_labels},
-                    "yAxis":{"type":"value"},
-                    "series":[
-                        {"name":"新成屋","type":"line","data":new_data},
-                        {"name":"中古屋","type":"line","data":old_data}
+                    new_data = [
+                        safe_mean(
+                            yearly_avg[
+                                (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")
+                            ]["平均單價元平方公尺"]
+                        )
+                        for y in years
                     ]
-                }
-                st_echarts(option, height="400px")
 
-            elif chart_type == "交易筆數分布":
-                if city_choice == "全台":
-                    trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
-                    pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
-                else:
-                    df_city = combined_df[combined_df["縣市"]==city_choice]
-                    trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
-                    pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+                    old_data = [
+                        safe_mean(
+                            yearly_avg[
+                                (yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")
+                            ]["平均單價元平方公尺"]
+                        )
+                        for y in years
+                    ]
 
-                if pie_data:
                     option = {
-                        "tooltip":{"trigger":"item","formatter":"{b}: {c} ({d}%)"},
-                        "legend":{"orient":"vertical","left":"left","data":[d["name"] for d in pie_data]},
-                        "series":[{"name":"交易筆數","type":"pie","radius":"50%","data":pie_data}]
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["新成屋", "中古屋"]},
+                        "xAxis": {"type": "category", "data": year_labels},
+                        "yAxis": {"type": "value"},
+                        "series": [
+                            {"name": "新成屋", "type": "line", "data": new_data},
+                            {"name": "中古屋", "type": "line", "data": old_data},
+                        ],
                     }
+
                     st_echarts(option, height="400px")
-                else:
-                    st.info("⚠️ 無交易資料，無法顯示圓餅圖")
 
-            elif chart_type == "AI 行政區體質分析":
-                st.markdown("---")
-                st.subheader("🧠 AI 行政區體質分析（人口 × 交易 × 價格）")
-                st.info("此功能可串接 AI 模型做後續分析")
+                elif chart_type == "交易筆數分布":
+                    # 全台或單縣市
+                    if city_choice == "全台":
+                        trans_counts = combined_df.groupby("縣市").size().reset_index(name="count")
+                        pie_data = [{"value": int(row["count"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
+                    else:
+                        df_city = combined_df[combined_df["縣市"] == city_choice]
+                        trans_counts = df_city.groupby("行政區").size().reset_index(name="count")
+                        pie_data = [{"value": int(row["count"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
 
-# ===========================
-# 主程式
-# ===========================
-if __name__ == "__main__":
-    render_analysis_page()
+                    if pie_data:
+                        option = {
+                            "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+                            "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
+                            "series": [
+                                {
+                                    "name": "交易筆數",
+                                    "type": "pie",
+                                    "radius": "50%",
+                                    "data": pie_data,
+                                    "emphasis": {
+                                        "itemStyle": {
+                                            "shadowBlur": 10,
+                                            "shadowOffsetX": 0,
+                                            "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                        st_echarts(option, height="400px")
+                    else:
+                        st.info("⚠️ 無交易資料，無法顯示圓餅圖")
