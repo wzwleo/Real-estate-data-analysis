@@ -448,57 +448,59 @@ def render_analysis_page():
 
     
     # ============================
-    # Tab3: 市場趨勢分析
+    # Tab3: 市場趨勢分析（整合人口資料）
     # ============================
     with tab3:
         st.subheader("📊 市場趨勢分析")
     
-        # -----------------
         # 載入房產資料
-        # -----------------
         combined_df = load_real_estate_csv(folder="./page_modules")
         if combined_df.empty:
-            st.info("📂 無可用房產資料")
+            st.info("📂 無可用不動產資料")
             st.stop()
     
-        # -----------------
-        # 載入人口資料
-        # -----------------
-        def load_population_csv(folder="./page_modules"):
-            file_names = [
-                f for f in os.listdir(folder)
-                if f.startswith("活頁薄") and f.endswith(".csv")
-            ]
+        # -----------------------------
+        # 載入並整理人口資料
+        # -----------------------------
+        pop_file = "./page_modules/活頁薄1.csv"
+        if not os.path.exists(pop_file):
+            st.warning("📂 無人口資料")
+            pop_df = pd.DataFrame()
+        else:
+            try:
+                pop_raw = pd.read_csv(pop_file, encoding="big5", header=None)
+                # 假設第一列是年份代號(113、112...), 第二列是總人口、接下來是各區人口
+                # 我們先抓出年份
+                years = pop_raw.iloc[0, 1:].tolist()  # 第一列除了第一欄的年份
+                pop_data = []
+                for i in range(1, len(pop_raw)):
+                    row = pop_raw.iloc[i]
+                    area = row[0].strip()
+                    for j, pop in enumerate(row[1:]):
+                        try:
+                            population = int(str(pop).replace(",", "").strip())
+                        except:
+                            population = None
+                        pop_data.append({
+                            "年份": years[j],
+                            "區域別": area,
+                            "人口數": population
+                        })
+                pop_df = pd.DataFrame(pop_data)
+            except Exception as e:
+                st.error(f"讀取人口資料失敗: {e}")
+                pop_df = pd.DataFrame()
     
-            dfs = []
-            for file in file_names:
-                path = os.path.join(folder, file)
-                try:
-                    df = pd.read_csv(path, encoding="utf-8")
-                except:
-                    try:
-                        df = pd.read_csv(path, encoding="big5")
-                    except Exception as e:
-                        st.warning(f"讀取失敗：{file} - {e}")
-                        continue
-    
-                dfs.append(df)
-    
-            if dfs:
-                return pd.concat(dfs, ignore_index=True)
-    
-            return pd.DataFrame()
-    
-        pop_df = load_population_csv(folder="./page_modules")
+        # 顯示人口資料
         if pop_df.empty:
             st.info("📂 無人口資料")
         else:
-            st.markdown("## 📂 人口資料")
+            st.markdown("## 👥 人口資料整理結果")
             st.dataframe(pop_df)
     
-        # -----------------
-        # 選擇圖表類型
-        # -----------------
+        # -----------------------------
+        # 原有房產資料篩選與圖表
+        # -----------------------------
         chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
     
         col1, col2 = st.columns([3, 1])
@@ -528,7 +530,7 @@ def render_analysis_page():
                 st.session_state.selected_district = None
                 st.session_state.show_filtered_data = False
     
-        # 顯示資料與圖表
+        # 顯示房產資料
         with col1:
             if st.session_state.show_filtered_data:
                 filtered_df = combined_df.copy()
@@ -542,7 +544,7 @@ def render_analysis_page():
                 st.dataframe(filtered_df)
     
                 # -----------------
-                # 圖表
+                # 房價趨勢圖
                 # -----------------
                 if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
                     filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
@@ -592,6 +594,9 @@ def render_analysis_page():
     
                     st_echarts(option, height="400px")
     
+                # -----------------
+                # 交易筆數分布
+                # -----------------
                 elif chart_type == "交易筆數分布":
                     # 全台或單縣市
                     if city_choice == "全台":
