@@ -496,8 +496,8 @@ def render_analysis_page():
                 )
                 # 數值轉換
                 pop_long["人口數"] = pd.to_numeric(pop_long["人口數"].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0).astype(int)
-                # 年份轉換
-                pop_long["年份"] = pop_long["年度季度"].str.extract(r"(\d+)").astype(int) + 1911
+                # 保留民國年
+                pop_long["民國年"] = pop_long["年度季度"].str.extract(r"(\d+)").astype(int)
                 pop_long["縣市"] = pop_long["縣市"].str.strip()
                 pop_long["行政區"] = pop_long["行政區"].str.strip()
         
@@ -533,7 +533,8 @@ def render_analysis_page():
         
             filtered_real_estate["縣市"] = filtered_real_estate["縣市"].astype(str).str.strip()
             filtered_real_estate["行政區"] = filtered_real_estate["行政區"].astype(str).str.strip()
-            filtered_real_estate["年份"] = filtered_real_estate["季度"].str[:3].astype(int) + 1911
+            # 取民國年
+            filtered_real_estate["民國年"] = filtered_real_estate["季度"].str[:3].astype(int)
         
             # -----------------------------
             # 顯示篩選結果資料
@@ -570,7 +571,7 @@ def render_analysis_page():
                 # 安全計算平均值函數
                 # -----------------------------
                 def safe_mean(df, year, build_type):
-                    s = df[(df["年份"] == year) & (df["BUILD"] == build_type)]["平均單價元平方公尺"]
+                    s = df[(df["民國年"] == year) & (df["BUILD"] == build_type)]["平均單價元平方公尺"]
                     if s.empty:
                         return 0
                     return int(s.mean())
@@ -579,8 +580,8 @@ def render_analysis_page():
                 # 1️⃣ 不動產價格趨勢分析
                 # -----------------------------
                 if chart_type == "不動產價格趨勢分析" and not filtered_real_estate.empty:
-                    yearly_avg = filtered_real_estate.groupby(["年份", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
-                    years = sorted(yearly_avg["年份"].unique())
+                    yearly_avg = filtered_real_estate.groupby(["民國年", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
+                    years = sorted(yearly_avg["民國年"].unique())
                     new_data = [safe_mean(yearly_avg, y, "新成屋") for y in years]
                     old_data = [safe_mean(yearly_avg, y, "中古屋") for y in years]
         
@@ -638,20 +639,20 @@ def render_analysis_page():
                     if filtered_population.empty or filtered_real_estate.empty:
                         st.info("人口或交易資料不足，無法分析")
                     else:
-                        trans_grouped = filtered_real_estate.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index()
-                        pop_grouped = filtered_population.groupby(["縣市", "行政區", "年份"])["人口數"].sum().reset_index()
+                        trans_grouped = filtered_real_estate.groupby(["縣市", "行政區", "民國年"])["交易筆數"].sum().reset_index()
+                        pop_grouped = filtered_population.groupby(["縣市", "行政區", "民國年"])["人口數"].sum().reset_index()
         
                         merged = pd.merge(
                             pop_grouped,
                             trans_grouped,
-                            on=["縣市", "行政區", "年份"],
+                            on=["縣市", "行政區", "民國年"],
                             how="left"
-                        ).fillna(0).sort_values(["縣市", "行政區", "年份"]).copy()
+                        ).fillna(0).sort_values(["縣市", "行政區", "民國年"]).copy()
         
                         option = {
                             "tooltip": {"trigger": "axis"},
                             "legend": {"data": ["人口數", "成交量"]},
-                            "xAxis": {"type": "category", "data": merged["年份"].astype(int).astype(str).tolist()},
+                            "xAxis": {"type": "category", "data": merged["民國年"].astype(int).astype(str).tolist()},
                             "yAxis": [
                                 {"type": "value", "name": "人口數"},
                                 {"type": "value", "name": "成交量"}
