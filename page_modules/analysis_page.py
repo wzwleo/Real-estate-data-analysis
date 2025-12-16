@@ -459,16 +459,18 @@ def render_analysis_page():
                 st.write(resp.text)
 
     
+        # ============================
+        # Tab3: 市場趨勢分析（整合人口資料）
+        # ============================
         with tab3:
             st.subheader("📊 市場趨勢分析")
         
-            # -----------------------------
-            # 載入資料
-            # -----------------------------
+            # 載入房產資料
             combined_df = load_real_estate_csv(folder="./page_modules")
             if combined_df.empty:
                 st.info("📂 無可用不動產資料")
         
+            # 載入人口資料
             population_df = load_population_csv(folder="./page_modules")
             if population_df.empty:
                 st.info("📂 找不到 PEOPLE.csv 或檔案為空")
@@ -477,28 +479,41 @@ def render_analysis_page():
         
                 # 清理欄位名稱
                 population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
+                population_df["區域別"] = population_df["區域別"].astype(str).str.strip().replace("　", "")
         
-                # 確保縣市與行政區欄位存在
-                if "縣市" not in population_df.columns or "行政區" not in population_df.columns:
-                    st.error("PEOPLE.csv 缺少縣市或行政區欄位")
-                    st.stop()
+                # 拆出縣市與行政區
+                def split_city_district(area):
+                    area = str(area)
+                    if len(area) <= 3:
+                        return area, ""
+                    else:
+                        return area[:3], area[3:]
         
-                # 將人口欄位轉整數
-                pop_cols = [c for c in population_df.columns if c not in ["縣市", "行政區"]]
+                population_df["縣市"], population_df["行政區"] = zip(*population_df["區域別"].apply(split_city_district))
+        
+                # 處理年份欄位，只保留數字
+                pop_cols = []
+                for c in population_df.columns:
+                    if c not in ["區域別", "縣市", "行政區"]:
+                        year_str = ''.join(filter(str.isdigit, str(c)))  # 只保留數字
+                        pop_cols.append(year_str)
+                        population_df.rename(columns={c: year_str}, inplace=True)
+        
+                # 人口欄位轉整數
                 for col in pop_cols:
                     population_df[col] = pd.to_numeric(
                         population_df[col].astype(str).str.replace(",", "").str.strip(),
                         errors="coerce"
                     ).fillna(0).astype(int)
         
-                # 寬轉長格式
+                # 長格式
                 pop_long = population_df.melt(
                     id_vars=["縣市", "行政區"],
                     value_vars=pop_cols,
                     var_name="年份",
                     value_name="人口數"
                 )
-                pop_long["年份"] = pd.to_numeric(pop_long["年份"].astype(str).str.strip(), errors="coerce").fillna(0).astype(int)
+                pop_long["年份"] = pd.to_numeric(pop_long["年份"], errors="coerce").astype(int)
                 pop_long = pop_long.sort_values(["縣市", "行政區", "年份"])
                 st.dataframe(pop_long, use_container_width=True)
         
@@ -524,7 +539,7 @@ def render_analysis_page():
                     st.session_state.show_filtered_data = False
         
             # -----------------------------
-            # 篩選資料
+            # 顯示資料與圖表
             # -----------------------------
             with col1:
                 filtered_df = combined_df.copy()
@@ -538,9 +553,7 @@ def render_analysis_page():
                 st.write(f"共 {len(filtered_df)} 筆資料")
                 st.dataframe(filtered_df, use_container_width=True)
         
-                # -----------------------------
                 # 選擇圖表類型
-                # -----------------------------
                 chart_type = st.selectbox(
                     "選擇圖表類型",
                     [
@@ -557,7 +570,10 @@ def render_analysis_page():
                 # -----------------------------
                 if chart_type == "不動產價格趨勢分析" and len(filtered_df) > 0:
                     filtered_df["年份"] = filtered_df["季度"].str[:3].astype(int) + 1911
-                    yearly_avg = filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
+                    yearly_avg = (
+                        filtered_df.groupby(["年份", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
+                    )
+        
                     years = sorted(yearly_avg["年份"].unique())
                     year_labels = [str(y) for y in years]
         
@@ -607,7 +623,13 @@ def render_analysis_page():
                                     "type": "pie",
                                     "radius": "50%",
                                     "data": pie_data,
-                                    "emphasis": {"itemStyle": {"shadowBlur": 10, "shadowOffsetX": 0, "shadowColor": "rgba(0,0,0,0.5)"}}
+                                    "emphasis": {
+                                        "itemStyle": {
+                                            "shadowBlur": 10,
+                                            "shadowOffsetX": 0,
+                                            "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                        }
+                                    }
                                 }
                             ]
                         }
@@ -636,7 +658,7 @@ def render_analysis_page():
                         option = {
                             "tooltip": {"trigger": "axis"},
                             "legend": {"data": ["人口數", "成交量"]},
-                            "xAxis": {"type": "category", "data": merged["年份"].astype(str).tolist()},
+                            "xAxis": {"type": "category", "data": merged["年份"].astype(int).tolist()},
                             "yAxis": [
                                 {"type": "value", "name": "人口數"},
                                 {"type": "value", "name": "成交量"}
@@ -656,8 +678,11 @@ def render_analysis_page():
                         st.info("人口或房價資料不足，無法分析")
                     else:
                         latest_year = sorted(pop_cols)[-1]
-                        pop_latest = population_df[["縣市", "行政區", latest_year]].copy()
-                        pop_latest.columns = ["縣市", "行政區", "人口數"]
+                        pop_latest = population_df[["區域別", latest_year]].copy()
+                        pop_latest.columns = ["區域別", "人口數"]
+                        pop_latest["人口數"] = pd.to_numeric(pop_latest["人口數"].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0).astype(int)
+                        pop_latest["縣市"] = pop_latest["區域別"].str[:3]
+                        pop_latest["行政區"] = pop_latest["區域別"].str[3:]
         
                         price_df = filtered_df.groupby(["縣市", "行政區"])["平均單價元平方公尺"].mean().reset_index()
                         merged = pd.merge(pop_latest, price_df, on=["縣市", "行政區"], how="inner")
@@ -671,6 +696,7 @@ def render_analysis_page():
                             ]
                         }
                         st_echarts(option, height="400px")
+
 
 
 
