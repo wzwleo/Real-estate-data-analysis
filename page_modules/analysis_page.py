@@ -486,7 +486,7 @@ def render_analysis_page():
             # -----------------------------
             # 原本房產資料圖表
             # -----------------------------
-           chart_type = st.selectbox(
+        chart_type = st.selectbox(
                 "選擇圖表類型",
                 [
                     "不動產價格趨勢分析",
