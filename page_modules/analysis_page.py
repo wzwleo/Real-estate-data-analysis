@@ -486,7 +486,16 @@ def render_analysis_page():
         # -----------------------------
         # 原本房產資料圖表
         # -----------------------------
-        chart_type = st.selectbox("選擇圖表類型", ["不動產價格趨勢分析", "交易筆數分布"])
+        chart_type = st.selectbox(
+            "選擇圖表類型",
+            [
+                "不動產價格趨勢分析",
+                "交易筆數分布",
+                "人口 × 成交量（市場是否被壓抑）",
+                "人口 × 房價（潛力 / 風險）"
+            ]
+        )
+
         col1, col2 = st.columns([3, 1])
     
         # 選縣市與行政區
@@ -515,6 +524,7 @@ def render_analysis_page():
                     filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
                 if st.session_state.selected_district:
                     filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
+                    
     
             st.markdown("## 📂 篩選結果資料")
             st.write(f"共 {len(filtered_df)} 筆資料")
@@ -593,6 +603,70 @@ def render_analysis_page():
                     st_echarts(option, height="400px")
                 else:
                     st.info("⚠️ 無交易資料，無法顯示圓餅圖")
+
+            # -----------------
+            # 人口 × 成交量（市場是否被壓抑）
+            # -----------------
+            elif chart_type == "人口 × 成交量（市場是否被壓抑）":
+                if population_df.empty or combined_df.empty:
+                    st.info("人口或交易資料不足，無法分析")
+                else:
+                    # 整理人口資料（假設欄位：區域別, 110, 111, 112, 113）
+                    pop_long = population_df.melt(
+                        id_vars=["區域別"],
+                        var_name="年份",
+                        value_name="人口數"
+                    )
+                    pop_long["年份"] = pop_long["年份"].astype(int)
+            
+                    # 整理交易資料
+                    trans_df = combined_df.copy()
+                    trans_df["年份"] = trans_df["季度"].str[:3].astype(int) + 1911
+            
+                    if st.session_state.selected_city:
+                        trans_df = trans_df[trans_df["縣市"] == st.session_state.selected_city]
+            
+                    if st.session_state.selected_district:
+                        pop_long = pop_long[pop_long["區域別"].str.contains(st.session_state.selected_district)]
+                        trans_df = trans_df[trans_df["行政區"] == st.session_state.selected_district]
+            
+                    yearly_trans = (
+                        trans_df.groupby("年份")
+                        .size()
+                        .reset_index(name="成交量")
+                    )
+            
+                    merged = pd.merge(pop_long, yearly_trans, on="年份", how="left").fillna(0)
+                    merged = merged.sort_values("年份")
+            
+                    option = {
+                        "tooltip": {"trigger": "axis"},
+                        "legend": {"data": ["人口數", "成交量"]},
+                        "xAxis": {"type": "category", "data": merged["年份"].astype(str).tolist()},
+                        "yAxis": [
+                            {"type": "value", "name": "人口數"},
+                            {"type": "value", "name": "成交量"}
+                        ],
+                        "series": [
+                            {
+                                "name": "人口數",
+                                "type": "line",
+                                "data": merged["人口數"].astype(int).tolist(),
+                                "smooth": True
+                            },
+                            {
+                                "name": "成交量",
+                                "type": "line",
+                                "yAxisIndex": 1,
+                                "data": merged["成交量"].astype(int).tolist()
+                            }
+                        ]
+                    }
+            
+                    st_echarts(option, height="400px")
+               
+            
+
 
 
 
