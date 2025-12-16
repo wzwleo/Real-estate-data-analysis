@@ -569,104 +569,107 @@ def render_analysis_page():
             # -----------------------------
             # 交易筆數分布
             # -----------------------------
-            elif chart_type == "交易筆數分布":
-                if city_choice == "全台":
-                    trans_counts = combined_df.groupby("縣市")["交易筆數"].sum().reset_index()
-                    pie_data = [{"value": int(row["交易筆數"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
-                else:
-                    df_city = combined_df[combined_df["縣市"] == city_choice]
-                    trans_counts = df_city.groupby("行政區")["交易筆數"].sum().reset_index()
-                    pie_data = [{"value": int(row["交易筆數"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
-    
-                if pie_data:
-                    option = {
-                        "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
-                        "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
-                        "series": [
-                            {
-                                "name": "交易筆數",
-                                "type": "pie",
-                                "radius": "50%",
-                                "data": pie_data,
-                                "emphasis": {
-                                    "itemStyle": {
-                                        "shadowBlur": 10,
-                                        "shadowOffsetX": 0,
-                                        "shadowColor": "rgba(0, 0, 0, 0.5)"
+                elif chart_type == "交易筆數分布":
+                    if city_choice == "全台":
+                        trans_counts = combined_df.groupby("縣市")["交易筆數"].sum().reset_index()
+                        pie_data = [{"value": int(row["交易筆數"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
+                    else:
+                        df_city = combined_df[combined_df["縣市"] == city_choice]
+                        trans_counts = df_city.groupby("行政區")["交易筆數"].sum().reset_index()
+                        pie_data = [{"value": int(row["交易筆數"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
+        
+                    if pie_data:
+                        option = {
+                            "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
+                            "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
+                            "series": [
+                                {
+                                    "name": "交易筆數",
+                                    "type": "pie",
+                                    "radius": "50%",
+                                    "data": pie_data,
+                                    "emphasis": {
+                                        "itemStyle": {
+                                            "shadowBlur": 10,
+                                            "shadowOffsetX": 0,
+                                            "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                        }
                                     }
                                 }
-                            }
-                        ]
+                            ]
+                        }
+                        st_echarts(option, height="400px")
+                    else:
+                        st.info("⚠️ 無交易資料，無法顯示圓餅圖")
+        
+                # -----------------------------
+                # 人口 × 成交量
+                # -----------------------------
+                elif chart_type == "人口 × 成交量（市場是否被壓抑）":
+        if population_df.empty or combined_df.empty:
+            st.info("人口或交易資料不足，無法分析")
+        else:
+            # 將人口欄位轉為長格式
+            pop_long = population_df.melt(
+                id_vars=["區域別"],
+                var_name="年份",
+                value_name="人口數"
+            )
+            pop_long["人口數"] = pop_long["人口數"].astype(str).str.replace(",", "", regex=False)
+            pop_long["人口數"] = pd.to_numeric(pop_long["人口數"], errors="coerce").fillna(0)
+            pop_long["年份"] = pop_long["年份"].astype(int)
+    
+            # 成交量資料
+            trans_df = combined_df.copy()
+            trans_df["年份"] = trans_df["季度"].str[:3].astype(int) + 1911
+            trans_df_grouped = trans_df.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index()
+    
+            # 將區域別拆成縣市/行政區，用於合併
+            pop_long["縣市"] = pop_long["區域別"].str[:3]
+            pop_long["行政區"] = pop_long["區域別"].str[3:]
+    
+            # 篩選
+            if city_choice != "全台":
+                pop_long = pop_long[pop_long["縣市"] == city_choice]
+                trans_df_grouped = trans_df_grouped[trans_df_grouped["縣市"] == city_choice]
+            if st.session_state.selected_district:
+                pop_long = pop_long[pop_long["行政區"].str.contains(st.session_state.selected_district)]
+                trans_df_grouped = trans_df_grouped[trans_df_grouped["行政區"] == st.session_state.selected_district]
+    
+            # 合併
+            merged = pd.merge(
+                pop_long,
+                trans_df_grouped,
+                on=["縣市", "行政區", "年份"],
+                how="left"
+            ).fillna(0)
+            merged = merged.sort_values("年份")
+    
+            option = {
+                "tooltip": {"trigger": "axis"},
+                "legend": {"data": ["人口數", "成交量"]},
+                "xAxis": {"type": "category", "data": merged["年份"].astype(str).tolist()},
+                "yAxis": [
+                    {"type": "value", "name": "人口數"},
+                    {"type": "value", "name": "成交量"}
+                ],
+                "series": [
+                    {
+                        "name": "人口數",
+                        "type": "line",
+                        "data": merged["人口數"].astype(int).tolist(),
+                        "smooth": True
+                    },
+                    {
+                        "name": "成交量",
+                        "type": "line",
+                        "yAxisIndex": 1,
+                        "data": merged["交易筆數"].astype(int).tolist()
                     }
-                    st_echarts(option, height="400px")
-                else:
-                    st.info("⚠️ 無交易資料，無法顯示圓餅圖")
-    
-            # -----------------------------
-            # 人口 × 成交量
-            # -----------------------------
-            elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-                if population_df.empty or combined_df.empty:
-                    st.info("人口或交易資料不足，無法分析")
-                else:
-                    # 人口資料
-                    pop_long = population_df.melt(
-                        id_vars=["區域別"],
-                        var_name="年份",
-                        value_name="人口數"
-                    )
-                    pop_long["人口數"] = pop_long["人口數"].astype(str).str.replace(",", "", regex=False)
-                    pop_long["人口數"] = pd.to_numeric(pop_long["人口數"], errors="coerce").fillna(0)
-                    pop_long["年份"] = pop_long["年份"].astype(int)
-                    pop_long["縣市"] = pop_long["區域別"].str[:3]
-                    pop_long["行政區"] = pop_long["區域別"].str[3:]
-    
-                    # 成交量資料
-                    trans_df = combined_df.copy()
-                    trans_df["年份"] = trans_df["季度"].str[:3].astype(int) + 1911
-                    trans_df_grouped = trans_df.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index()
-    
-                    if city_choice != "全台":
-                        pop_long = pop_long[pop_long["縣市"] == city_choice]
-                        trans_df_grouped = trans_df_grouped[trans_df_grouped["縣市"] == city_choice]
-    
-                    if st.session_state.selected_district:
-                        pop_long = pop_long[pop_long["行政區"].str.contains(st.session_state.selected_district)]
-                        trans_df_grouped = trans_df_grouped[trans_df_grouped["行政區"] == st.session_state.selected_district]
-    
-                    merged = pd.merge(
-                        pop_long,
-                        trans_df_grouped,
-                        on=["縣市", "行政區", "年份"],
-                        how="left"
-                    ).fillna(0)
-    
-                    merged = merged.sort_values("年份")
-    
-                    option = {
-                        "tooltip": {"trigger": "axis"},
-                        "legend": {"data": ["人口數", "成交量"]},
-                        "xAxis": {"type": "category", "data": merged["年份"].astype(int).astype(str).tolist()},
-                        "yAxis": [
-                            {"type": "value", "name": "人口數"},
-                            {"type": "value", "name": "成交量"}
-                        ],
-                        "series": [
-                            {
-                                "name": "人口數",
-                                "type": "line",
-                                "data": merged["人口數"].astype(int).tolist(),
-                                "smooth": True
-                            },
-                            {
-                                "name": "成交量",
-                                "type": "line",
-                                "yAxisIndex": 1,
-                                "data": merged["交易筆數"].astype(int).tolist()
-                            }
-                        ]
-                    }
-                    st_echarts(option, height="400px")
+                ]
+            }
+            st_echarts(option, height="400px")
+
     
             # -----------------------------
             # 人口 × 房價（潛力 / 風險）
