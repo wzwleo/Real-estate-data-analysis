@@ -460,7 +460,7 @@ def render_analysis_page():
 
     
         # ============================
-        # Tab3: 市場趨勢分析（分房市與人口篩選器）
+        # Tab3: 市場趨勢分析（合併後臺，圖表依篩選器決定）
         # ============================
         with tab3:
             st.subheader("📊 市場趨勢分析")
@@ -492,7 +492,7 @@ def render_analysis_page():
                 ).fillna(0).astype(int)
         
             # ============================
-            # 1️⃣ 房市資料篩選器（影響四個圖表和房產表）
+            # 1️⃣ 房市資料篩選器（影響房市圖表及房市表）
             # ============================
             st.markdown("### 🏠 房市篩選器")
             col1, col2 = st.columns([3, 1])
@@ -519,7 +519,7 @@ def render_analysis_page():
                 st.dataframe(filtered_real_estate, use_container_width=True)
         
             # ============================
-            # 2️⃣ 人口資料篩選器（只影響人口統計表）
+            # 2️⃣ 人口資料篩選器（影響人口表及人口圖表）
             # ============================
             st.markdown("### 👥 人口篩選器")
             col3, col4 = st.columns([3, 1])
@@ -552,7 +552,7 @@ def render_analysis_page():
                 st.info("⚠️ 無人口資料可顯示")
         
             # ============================
-            # 選擇圖表類型（房市分析用）
+            # 選擇圖表類型
             # ============================
             chart_type = st.selectbox(
                 "選擇圖表類型",
@@ -565,29 +565,33 @@ def render_analysis_page():
                 key="tab3_chart_type"
             )
         
-            # 安全函數避免 int(nan) 報錯
+            # 安全函數
             def safe_mean(series):
                 if series.empty: return 0
                 val = series.mean()
                 return int(val) if not pd.isna(val) else 0
         
+            # ============================
+            # 根據圖表決定資料來源
+            # ============================
+            if chart_type in ["不動產價格趨勢分析", "交易筆數分布"]:
+                df_chart = filtered_real_estate
+                pop_chart = filtered_population  # 可選擇忽略或顯示在 tooltip
+            else:  # 人口 × 成交量 / 房價
+                df_chart = filtered_population
+                filtered_real_estate_chart = filtered_real_estate
+        
             # -----------------------------
             # 1️⃣ 不動產價格趨勢分析
             # -----------------------------
-            if chart_type == "不動產價格趨勢分析" and not filtered_real_estate.empty:
-                filtered_real_estate["年份"] = filtered_real_estate["季度"].str[:3].astype(int) + 1911
-                yearly_avg = filtered_real_estate.groupby(["年份", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
+            if chart_type == "不動產價格趨勢分析" and not df_chart.empty:
+                df_chart["年份"] = df_chart["季度"].str[:3].astype(int) + 1911
+                yearly_avg = df_chart.groupby(["年份", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
                 years = sorted(yearly_avg["年份"].unique())
                 year_labels = [str(y) for y in years]
         
-                new_data = [
-                    safe_mean(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")]["平均單價元平方公尺"])
-                    for y in years
-                ]
-                old_data = [
-                    safe_mean(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")]["平均單價元平方公尺"])
-                    for y in years
-                ]
+                new_data = [safe_mean(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")]["平均單價元平方公尺"]) for y in years]
+                old_data = [safe_mean(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")]["平均單價元平方公尺"]) for y in years]
         
                 option = {
                     "tooltip": {"trigger": "axis"},
@@ -606,10 +610,10 @@ def render_analysis_page():
             # -----------------------------
             elif chart_type == "交易筆數分布":
                 if city_choice_real == "全台":
-                    trans_counts = filtered_real_estate.groupby("縣市")["交易筆數"].sum().reset_index()
+                    trans_counts = df_chart.groupby("縣市")["交易筆數"].sum().reset_index()
                     pie_data = [{"value": int(row["交易筆數"]), "name": row["縣市"]} for _, row in trans_counts.iterrows()]
                 else:
-                    df_city = filtered_real_estate
+                    df_city = df_chart
                     trans_counts = df_city.groupby("行政區")["交易筆數"].sum().reset_index()
                     pie_data = [{"value": int(row["交易筆數"]), "name": row["行政區"]} for _, row in trans_counts.iterrows()]
         
@@ -641,21 +645,16 @@ def render_analysis_page():
             # 3️⃣ 人口 × 成交量
             # -----------------------------
             elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-                if filtered_population.empty or filtered_real_estate.empty:
+                if df_chart.empty or filtered_real_estate_chart.empty:
                     st.info("人口或交易資料不足，無法分析")
                 else:
-                    filtered_real_estate["年份"] = filtered_real_estate["季度"].str[:3].astype(int) + 1911
-                    trans_grouped = filtered_real_estate.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index()
-                    pop_grouped = filtered_population.copy()
+                    filtered_real_estate_chart["年份"] = filtered_real_estate_chart["季度"].str[:3].astype(int) + 1911
+                    trans_grouped = filtered_real_estate_chart.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index()
+                    pop_grouped = df_chart.copy()
                     pop_grouped["年份"] = pop_grouped["年度季度"].str[:3].astype(int) + 1911
                     pop_grouped = pop_grouped.groupby(["縣市", "行政區", "年份"])["人口數"].sum().reset_index()
         
-                    merged = pd.merge(
-                        pop_grouped,
-                        trans_grouped,
-                        on=["縣市", "行政區", "年份"],
-                        how="left"
-                    ).fillna(0).sort_values("年份")
+                    merged = pd.merge(pop_grouped, trans_grouped, on=["縣市", "行政區", "年份"], how="left").fillna(0).sort_values("年份")
         
                     option = {
                         "tooltip": {"trigger": "axis"},
@@ -676,11 +675,11 @@ def render_analysis_page():
             # 4️⃣ 人口 × 房價
             # -----------------------------
             elif chart_type == "人口 × 房價（潛力 / 風險）":
-                if filtered_population.empty or filtered_real_estate.empty:
+                if df_chart.empty or filtered_real_estate_chart.empty:
                     st.info("人口或房價資料不足，無法分析")
                 else:
-                    pop_latest = filtered_population.groupby(["縣市", "行政區"])["人口數"].sum().reset_index()
-                    price_df = filtered_real_estate.groupby(["縣市", "行政區"])["平均單價元平方公尺"].mean().reset_index()
+                    pop_latest = df_chart.groupby(["縣市", "行政區"])["人口數"].sum().reset_index()
+                    price_df = filtered_real_estate_chart.groupby(["縣市", "行政區"])["平均單價元平方公尺"].mean().reset_index()
                     merged = pd.merge(pop_latest, price_df, on=["縣市", "行政區"], how="inner")
         
                     option = {
@@ -692,6 +691,7 @@ def render_analysis_page():
                         ]
                     }
                     st_echarts(option, height="400px")
+
 
 
 
