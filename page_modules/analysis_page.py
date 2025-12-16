@@ -556,6 +556,15 @@ def render_analysis_page():
                 )
         
                 # -----------------------------
+                # 安全計算平均值函數
+                # -----------------------------
+                def safe_mean(df, year, build_type):
+                    s = df[(df["年份"] == year) & (df["BUILD"] == build_type)]["平均單價元平方公尺"]
+                    if s.empty:
+                        return 0
+                    return int(s.mean())
+        
+                # -----------------------------
                 # 1️⃣ 不動產價格趨勢分析
                 # -----------------------------
                 if chart_type == "不動產價格趨勢分析" and not filtered_real_estate.empty:
@@ -564,14 +573,8 @@ def render_analysis_page():
                     years = sorted(yearly_avg["年份"].unique())
                     year_labels = [str(y) for y in years]
         
-                    new_data = [
-                        int(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "新成屋")]["平均單價元平方公尺"].mean() or 0)
-                        for y in years
-                    ]
-                    old_data = [
-                        int(yearly_avg[(yearly_avg["年份"] == y) & (yearly_avg["BUILD"] == "中古屋")]["平均單價元平方公尺"].mean() or 0)
-                        for y in years
-                    ]
+                    new_data = [safe_mean(yearly_avg, y, "新成屋") for y in years]
+                    old_data = [safe_mean(yearly_avg, y, "中古屋") for y in years]
         
                     option = {
                         "tooltip": {"trigger": "axis"},
@@ -666,7 +669,12 @@ def render_analysis_page():
                         latest_col = pop_cols[-1]
                         pop_latest = filtered_population[["縣市", "行政區", "年度季度", "人口數"]].copy()
                         price_df = filtered_real_estate.groupby(["縣市", "行政區"])["平均單價元平方公尺"].mean().reset_index()
-                        merged = pd.merge(pop_latest.groupby(["縣市", "行政區"])["人口數"].sum().reset_index(), price_df, on=["縣市", "行政區"], how="inner")
+                        merged = pd.merge(
+                            pop_latest.groupby(["縣市", "行政區"])["人口數"].sum().reset_index(),
+                            price_df,
+                            on=["縣市", "行政區"],
+                            how="inner"
+                        )
         
                         option = {
                             "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
