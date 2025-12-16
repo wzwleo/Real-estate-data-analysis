@@ -459,10 +459,10 @@ def render_analysis_page():
                 st.write(resp.text)
 
     
-    # ============================
-    # Tab3: 市場趨勢分析（整合人口資料）
-    # ============================
-    with tab3:
+        # ============================
+        # Tab3: 市場趨勢分析（整合人口資料）
+        # ============================
+        with tab3:
         st.subheader("📊 市場趨勢分析")
     
         # 載入房產資料
@@ -609,26 +609,20 @@ def render_analysis_page():
                 if population_df.empty or combined_df.empty:
                     st.info("人口或交易資料不足，無法分析")
                 else:
-                    # 將人口欄位轉為長格式
                     pop_long = population_df.melt(
                         id_vars=["區域別"],
                         var_name="年份",
                         value_name="人口數"
                     )
-                    pop_long["人口數"] = pop_long["人口數"].astype(str).str.replace(",", "", regex=False)
-                    pop_long["人口數"] = pd.to_numeric(pop_long["人口數"], errors="coerce").fillna(0)
+                    pop_long["人口數"] = pd.to_numeric(pop_long["人口數"].astype(str).str.replace(",", "", regex=False), errors="coerce").fillna(0)
                     pop_long["年份"] = pop_long["年份"].astype(int)
+                    pop_long["縣市"] = pop_long["區域別"].str[:3]
+                    pop_long["行政區"] = pop_long["區域別"].str[3:]
     
-                    # 成交量資料
                     trans_df = combined_df.copy()
                     trans_df["年份"] = trans_df["季度"].str[:3].astype(int) + 1911
                     trans_df_grouped = trans_df.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index()
     
-                    # 將區域別拆成縣市/行政區，用於合併
-                    pop_long["縣市"] = pop_long["區域別"].str[:3]
-                    pop_long["行政區"] = pop_long["區域別"].str[3:]
-    
-                    # 篩選
                     if city_choice != "全台":
                         pop_long = pop_long[pop_long["縣市"] == city_choice]
                         trans_df_grouped = trans_df_grouped[trans_df_grouped["縣市"] == city_choice]
@@ -636,14 +630,12 @@ def render_analysis_page():
                         pop_long = pop_long[pop_long["行政區"].str.contains(st.session_state.selected_district)]
                         trans_df_grouped = trans_df_grouped[trans_df_grouped["行政區"] == st.session_state.selected_district]
     
-                    # 合併
                     merged = pd.merge(
                         pop_long,
                         trans_df_grouped,
                         on=["縣市", "行政區", "年份"],
                         how="left"
-                    ).fillna(0)
-                    merged = merged.sort_values("年份")
+                    ).fillna(0).sort_values("年份")
     
                     option = {
                         "tooltip": {"trigger": "axis"},
@@ -654,18 +646,8 @@ def render_analysis_page():
                             {"type": "value", "name": "成交量"}
                         ],
                         "series": [
-                            {
-                                "name": "人口數",
-                                "type": "line",
-                                "data": merged["人口數"].astype(int).tolist(),
-                                "smooth": True
-                            },
-                            {
-                                "name": "成交量",
-                                "type": "line",
-                                "yAxisIndex": 1,
-                                "data": merged["交易筆數"].astype(int).tolist()
-                            }
+                            {"name": "人口數", "type": "line", "data": merged["人口數"].astype(int).tolist(), "smooth": True},
+                            {"name": "成交量", "type": "line", "yAxisIndex": 1, "data": merged["交易筆數"].astype(int).tolist()}
                         ]
                     }
                     st_echarts(option, height="400px")
@@ -677,13 +659,9 @@ def render_analysis_page():
                 if population_df.empty or filtered_df.empty:
                     st.info("人口或房價資料不足，無法分析")
                 else:
-                    # 人口資料
                     pop_latest = population_df[["區域別", sorted(population_df.columns[1:])[-1]]].copy()
                     pop_latest.columns = ["區域別", "人口數"]
-                    pop_latest["人口數"] = pd.to_numeric(
-                        pop_latest["人口數"].astype(str).str.replace(",", "", regex=False),
-                        errors="coerce"
-                    ).fillna(0)
+                    pop_latest["人口數"] = pd.to_numeric(pop_latest["人口數"].astype(str).str.replace(",", "", regex=False), errors="coerce").fillna(0)
                     pop_latest["縣市"] = pop_latest["區域別"].str[:3]
                     pop_latest["行政區"] = pop_latest["區域別"].str[3:]
     
@@ -696,14 +674,11 @@ def render_analysis_page():
                         "xAxis": {"type": "value", "name": "人口數"},
                         "yAxis": {"type": "value", "name": "平均房價"},
                         "series": [
-                            {
-                                "name": "人口 × 房價",
-                                "type": "scatter",
-                                "data": merged[["人口數", "平均單價元平方公尺"]].values.tolist()
-                            }
+                            {"name": "人口 × 房價", "type": "scatter", "data": merged[["人口數", "平均單價元平方公尺"]].values.tolist()}
                         ]
                     }
                     st_echarts(option, height="400px")
+
 
 
 
