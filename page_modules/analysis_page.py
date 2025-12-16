@@ -465,16 +465,12 @@ def render_analysis_page():
         with tab3:
             st.subheader("📊 市場趨勢分析")
         
-            # -----------------------------
             # 載入房產資料
-            # -----------------------------
             combined_df = load_real_estate_csv(folder="./page_modules")
             if combined_df.empty:
                 st.info("📂 無可用不動產資料")
         
-            # -----------------------------
             # 載入人口資料
-            # -----------------------------
             population_df = load_population_csv(folder="./page_modules")
             if population_df.empty:
                 st.info("📂 找不到 PEOPLE.csv 或檔案為空")
@@ -486,7 +482,7 @@ def render_analysis_page():
                 population_df["縣市"] = population_df["縣市"].astype(str).str.strip()
                 population_df["行政區"] = population_df["行政區"].astype(str).str.strip()
         
-                # 長格式化人口資料
+                # 長格式化
                 pop_cols = [c for c in population_df.columns if c not in ["縣市", "行政區"]]
                 pop_long = population_df.melt(
                     id_vars=["縣市", "行政區"],
@@ -494,12 +490,10 @@ def render_analysis_page():
                     var_name="年度季度",
                     value_name="人口數"
                 )
-                # 數值轉換
                 pop_long["人口數"] = pd.to_numeric(pop_long["人口數"].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0).astype(int)
-                # 保留民國年
-                pop_long["民國年"] = pop_long["年度季度"].str.extract(r"(\d+)").astype(int)
-                pop_long["縣市"] = pop_long["縣市"].str.strip()
-                pop_long["行政區"] = pop_long["行政區"].str.strip()
+        
+                # 解析民國年
+                pop_long["民國年"] = pop_long["年度季度"].str[:3].astype(int)
         
             # -----------------------------
             # 縣市與行政區選擇
@@ -531,11 +525,6 @@ def render_analysis_page():
                 filtered_real_estate = filtered_real_estate[filtered_real_estate["行政區"] == district_choice]
                 filtered_population = filtered_population[filtered_population["行政區"] == district_choice]
         
-            filtered_real_estate["縣市"] = filtered_real_estate["縣市"].astype(str).str.strip()
-            filtered_real_estate["行政區"] = filtered_real_estate["行政區"].astype(str).str.strip()
-            # 取民國年
-            filtered_real_estate["民國年"] = filtered_real_estate["季度"].str[:3].astype(int)
-        
             # -----------------------------
             # 顯示篩選結果資料
             # -----------------------------
@@ -544,7 +533,7 @@ def render_analysis_page():
                 st.write(f"共 {len(filtered_real_estate)} 筆房產資料")
                 st.dataframe(filtered_real_estate, use_container_width=True)
         
-                # 顯示人口統計表
+                # 顯示人口統計表（以表格為主）
                 st.markdown("## 👥 人口統計表")
                 st.dataframe(
                     filtered_population.pivot_table(
@@ -580,15 +569,18 @@ def render_analysis_page():
                 # 1️⃣ 不動產價格趨勢分析
                 # -----------------------------
                 if chart_type == "不動產價格趨勢分析" and not filtered_real_estate.empty:
+                    filtered_real_estate["民國年"] = filtered_real_estate["季度"].str[:3].astype(int)
                     yearly_avg = filtered_real_estate.groupby(["民國年", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
                     years = sorted(yearly_avg["民國年"].unique())
+                    year_labels = [str(y) for y in years]
+        
                     new_data = [safe_mean(yearly_avg, y, "新成屋") for y in years]
                     old_data = [safe_mean(yearly_avg, y, "中古屋") for y in years]
         
                     option = {
                         "tooltip": {"trigger": "axis"},
                         "legend": {"data": ["新成屋", "中古屋"]},
-                        "xAxis": {"type": "category", "data": [str(y) for y in years]},
+                        "xAxis": {"type": "category", "data": year_labels},
                         "yAxis": {"type": "value"},
                         "series": [
                             {"name": "新成屋", "type": "line", "data": new_data},
@@ -618,13 +610,7 @@ def render_analysis_page():
                                     "type": "pie",
                                     "radius": "50%",
                                     "data": pie_data,
-                                    "emphasis": {
-                                        "itemStyle": {
-                                            "shadowBlur": 10,
-                                            "shadowOffsetX": 0,
-                                            "shadowColor": "rgba(0, 0, 0, 0.5)"
-                                        }
-                                    }
+                                    "emphasis": {"itemStyle": {"shadowBlur": 10, "shadowOffsetX": 0, "shadowColor": "rgba(0, 0, 0, 0.5)"}}
                                 }
                             ]
                         }
@@ -640,19 +626,21 @@ def render_analysis_page():
                         st.info("人口或交易資料不足，無法分析")
                     else:
                         trans_grouped = filtered_real_estate.groupby(["縣市", "行政區", "民國年"])["交易筆數"].sum().reset_index()
-                        pop_grouped = filtered_population.groupby(["縣市", "行政區", "民國年"])["人口數"].sum().reset_index()
+                        pop_grouped = filtered_population.sort_values("年度季度", ascending=True).groupby(
+                            ["縣市", "行政區", "民國年"], as_index=False
+                        )["人口數"].last()
         
                         merged = pd.merge(
                             pop_grouped,
                             trans_grouped,
                             on=["縣市", "行政區", "民國年"],
                             how="left"
-                        ).fillna(0).sort_values(["縣市", "行政區", "民國年"]).copy()
+                        ).fillna(0).sort_values(["縣市", "行政區", "民國年"])
         
                         option = {
                             "tooltip": {"trigger": "axis"},
                             "legend": {"data": ["人口數", "成交量"]},
-                            "xAxis": {"type": "category", "data": merged["民國年"].astype(int).astype(str).tolist()},
+                            "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
                             "yAxis": [
                                 {"type": "value", "name": "人口數"},
                                 {"type": "value", "name": "成交量"}
@@ -671,10 +659,14 @@ def render_analysis_page():
                     if filtered_population.empty or filtered_real_estate.empty:
                         st.info("人口或房價資料不足，無法分析")
                     else:
-                        pop_latest = filtered_population.groupby(["縣市", "行政區"])["人口數"].sum().reset_index()
+                        # 取每年最新季度人口
+                        pop_latest_per_year = filtered_population.sort_values("年度季度", ascending=True).groupby(
+                            ["縣市", "行政區", "民國年"], as_index=False
+                        )["人口數"].last()
+        
                         price_df = filtered_real_estate.groupby(["縣市", "行政區"])["平均單價元平方公尺"].mean().reset_index()
                         merged = pd.merge(
-                            pop_latest,
+                            pop_latest_per_year.groupby(["縣市", "行政區"])["人口數"].sum().reset_index(),
                             price_df,
                             on=["縣市", "行政區"],
                             how="inner"
@@ -689,6 +681,7 @@ def render_analysis_page():
                             ]
                         }
                         st_echarts(option, height="400px")
+
 
 
 
