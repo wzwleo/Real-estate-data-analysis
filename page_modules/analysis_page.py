@@ -479,7 +479,7 @@ def render_analysis_page():
         
                 # 清理欄位
                 population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
-                
+        
                 # 將縣市、行政區分開
                 if "縣市" not in population_df.columns or "行政區" not in population_df.columns:
                     if "區域別" in population_df.columns:
@@ -511,77 +511,93 @@ def render_analysis_page():
                 )
                 pop_long = pop_long.sort_values(["縣市", "行政區", "年度季度"])
         
-            # -----------------------------
-            # 選擇縣市與行政區
-            # -----------------------------
+            # ============================
+            # 兩套篩選器：房市 vs 人口
+            # ============================
+        
+            st.markdown("### 🏠 房市篩選")
             col1, col2 = st.columns([3, 1])
             with col2:
-                cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
-                city_choice = st.selectbox("選擇縣市", cities)
+                # 房市篩選器
+                market_cities = ["全台"] + sorted(combined_df["縣市"].dropna().unique().tolist())
+                market_city_choice = st.selectbox("選擇縣市（房市）", market_cities, key="market_city")
         
-                if city_choice != "全台":
-                    st.session_state.selected_city = city_choice
+                if market_city_choice != "全台":
                     district_names = ["全部"] + sorted(
-                        combined_df[combined_df["縣市"] == city_choice]["行政區"].dropna().unique().tolist()
+                        combined_df[combined_df["縣市"] == market_city_choice]["行政區"].dropna().unique().tolist()
                     )
-                    district_choice = st.selectbox("選擇行政區", district_names)
-                    st.session_state.selected_district = None if district_choice == "全部" else district_choice
-                    st.session_state.show_filtered_data = True
+                    market_district_choice = st.selectbox("選擇行政區（房市）", district_names, key="market_district")
                 else:
-                    st.session_state.selected_city = None
-                    st.session_state.selected_district = None
-                    st.session_state.show_filtered_data = False
+                    market_district_choice = "全部"
         
             # -----------------------------
-            # 篩選資料
+            # 房市資料篩選
             # -----------------------------
-            with col1:
-                # 房產資料篩選
-                filtered_df = combined_df.copy()
-                if st.session_state.show_filtered_data:
-                    if st.session_state.selected_city:
-                        filtered_df = filtered_df[filtered_df["縣市"] == st.session_state.selected_city]
-                    if st.session_state.selected_district:
-                        filtered_df = filtered_df[filtered_df["行政區"] == st.session_state.selected_district]
+            filtered_df = combined_df.copy()
+            if market_city_choice != "全台":
+                filtered_df = filtered_df[filtered_df["縣市"] == market_city_choice]
+            if market_district_choice != "全部":
+                filtered_df = filtered_df[filtered_df["行政區"] == market_district_choice]
         
-                st.markdown("## 📂 篩選結果資料")
-                st.write(f"共 {len(filtered_df)} 筆資料")
-                st.dataframe(filtered_df, use_container_width=True)
+            st.markdown("## 📂 篩選後房市資料")
+            st.write(f"共 {len(filtered_df)} 筆資料")
+            st.dataframe(filtered_df, use_container_width=True)
         
-                # 人口資料篩選
-                filtered_population = pop_long.copy()
-                if st.session_state.show_filtered_data and st.session_state.selected_city:
-                    filtered_population = filtered_population[filtered_population["縣市"] == st.session_state.selected_city]
-                if st.session_state.show_filtered_data and st.session_state.selected_district:
-                    filtered_population = filtered_population[filtered_population["行政區"] == st.session_state.selected_district]
+            # -----------------------------
+            # 人口篩選器
+            # -----------------------------
+            st.markdown("### 👥 人口篩選")
+            col3, col4 = st.columns([3, 1])
+            with col4:
+                pop_cities = ["全台"] + sorted(pop_long["縣市"].dropna().unique().tolist())
+                pop_city_choice = st.selectbox("選擇縣市（人口）", pop_cities, key="pop_city")
         
-                # 顯示人口統計表
-                if not filtered_population.empty:
-                    pop_table = filtered_population.pivot_table(
-                        index=["縣市", "行政區"],
-                        columns="年度季度",
-                        values="人口數",
-                        aggfunc="sum"
-                    ).fillna(0).astype(int)
-                    pop_table = pop_table[sorted(pop_table.columns, key=lambda x: int(str(x)[:3]) if str(x)[:3].isdigit() else 0)]
-                    st.markdown("## 👥 人口統計表")
-                    st.dataframe(pop_table, use_container_width=True)
+                if pop_city_choice != "全台":
+                    pop_districts = ["全部"] + sorted(
+                        pop_long[pop_long["縣市"] == pop_city_choice]["行政區"].dropna().unique().tolist()
+                    )
+                    pop_district_choice = st.selectbox("選擇行政區（人口）", pop_districts, key="pop_district")
                 else:
-                    st.info("⚠️ 無人口資料可顯示")
+                    pop_district_choice = "全部"
         
-                # -----------------------------
-                # 選擇圖表類型
-                # -----------------------------
-                chart_type = st.selectbox(
-                    "選擇圖表類型",
-                    [
-                        "不動產價格趨勢分析",
-                        "交易筆數分布",
-                        "人口 × 成交量（市場是否被壓抑）",
-                        "人口 × 房價（潛力 / 風險）"
-                    ],
-                    key="tab3_chart_type"
-                )
+            # -----------------------------
+            # 人口資料篩選
+            # -----------------------------
+            filtered_population = pop_long.copy()
+            if pop_city_choice != "全台":
+                filtered_population = filtered_population[filtered_population["縣市"] == pop_city_choice]
+            if pop_district_choice != "全部":
+                filtered_population = filtered_population[filtered_population["行政區"] == pop_district_choice]
+        
+            if not filtered_population.empty:
+                pop_table = filtered_population.pivot_table(
+                    index=["縣市", "行政區"],
+                    columns="年度季度",
+                    values="人口數",
+                    aggfunc="sum"
+                ).fillna(0).astype(int)
+                pop_table = pop_table[sorted(pop_table.columns, key=lambda x: int(str(x)[:3]) if str(x)[:3].isdigit() else 0)]
+                st.markdown("## 👥 人口統計表")
+                st.dataframe(pop_table, use_container_width=True)
+            else:
+                st.info("⚠️ 無人口資料可顯示")
+        
+            # -----------------------------
+            # 圖表選擇（房市圖表基於房市篩選器）
+            # -----------------------------
+            chart_type = st.selectbox(
+                "選擇圖表類型（房市）",
+                [
+                    "不動產價格趨勢分析",
+                    "交易筆數分布",
+                    "人口 × 成交量（市場是否被壓抑）",
+                    "人口 × 房價（潛力 / 風險）"
+                ],
+                key="tab3_chart_type"
+            )
+
+
+
         
                 # -----------------------------
                 # 1️⃣ 不動產價格趨勢分析
