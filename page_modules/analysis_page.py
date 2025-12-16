@@ -527,14 +527,12 @@ def render_analysis_page():
             # -----------------------------
             # 篩選房產資料與人口資料
             # -----------------------------
-            # 篩選房產資料
             filtered_realestate = combined_df.copy()
             if city_choice != "全台":
                 filtered_realestate = filtered_realestate[filtered_realestate["縣市"] == city_choice]
             if district_choice != "全部":
                 filtered_realestate = filtered_realestate[filtered_realestate["行政區"] == district_choice]
         
-            # 篩選人口資料
             filtered_population = pop_long.copy()
             if city_choice != "全台":
                 filtered_population = filtered_population[filtered_population["縣市"] == city_choice]
@@ -601,12 +599,19 @@ def render_analysis_page():
                 st_echarts(option, height="400px")
         
             elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-                merged = pd.merge(
-                    filtered_population.groupby(["縣市", "行政區", "年份"])["人口數"].sum().reset_index(),
-                    filtered_realestate.groupby(["縣市", "行政區", filtered_realestate["季度"].str[:3].astype(int)+1911]["交易筆數"].sum().reset_index(name="交易筆數")),
-                    on=["縣市", "行政區", "年份"],
-                    how="left"
-                ).fillna(0).sort_values("年份")
+                # 先產生年份欄位
+                filtered_realestate["年份"] = filtered_realestate["季度"].str[:3].astype(int) + 1911
+        
+                # 分組交易筆數
+                realestate_grouped = filtered_realestate.groupby(["縣市", "行政區", "年份"])["交易筆數"].sum().reset_index(name="交易筆數")
+        
+                # 分組人口數
+                population_grouped = filtered_population.groupby(["縣市", "行政區", "年份"])["人口數"].sum().reset_index()
+        
+                # 合併
+                merged = pd.merge(population_grouped, realestate_grouped,
+                                  on=["縣市", "行政區", "年份"],
+                                  how="left").fillna(0).sort_values("年份")
         
                 option = {
                     "tooltip": {"trigger": "axis"},
