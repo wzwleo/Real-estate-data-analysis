@@ -469,6 +469,9 @@ def render_analysis_page():
             combined_df = load_real_estate_csv(folder="./page_modules")
             if combined_df.empty:
                 st.info("📂 無可用不動產資料")
+            else:
+                # 建立民國年欄位（避免 KeyError）
+                combined_df["民國年"] = combined_df["季度"].str[:3].astype(int)
         
             # 載入人口資料
             population_df = load_population_csv(folder="./page_modules")
@@ -476,13 +479,10 @@ def render_analysis_page():
                 st.info("📂 找不到 PEOPLE.csv 或檔案為空")
             else:
                 st.caption("資料來源：內政部歷年人口統計（年底人口數）")
-        
-                # 清理欄位
                 population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
                 population_df["縣市"] = population_df["縣市"].astype(str).str.strip()
                 population_df["行政區"] = population_df["行政區"].astype(str).str.strip()
         
-                # 長格式化
                 pop_cols = [c for c in population_df.columns if c not in ["縣市", "行政區"]]
                 pop_long = population_df.melt(
                     id_vars=["縣市", "行政區"],
@@ -491,8 +491,6 @@ def render_analysis_page():
                     value_name="人口數"
                 )
                 pop_long["人口數"] = pd.to_numeric(pop_long["人口數"].astype(str).str.replace(",", "").str.strip(), errors="coerce").fillna(0).astype(int)
-        
-                # 解析民國年
                 pop_long["民國年"] = pop_long["年度季度"].str[:3].astype(int)
         
             # -----------------------------
@@ -533,7 +531,6 @@ def render_analysis_page():
                 st.write(f"共 {len(filtered_real_estate)} 筆房產資料")
                 st.dataframe(filtered_real_estate, use_container_width=True)
         
-                # 顯示人口統計表（以表格為主）
                 st.markdown("## 👥 人口統計表")
                 st.dataframe(
                     filtered_population.pivot_table(
@@ -544,7 +541,6 @@ def render_analysis_page():
                     use_container_width=True
                 )
         
-                # 選擇圖表類型
                 chart_type = st.selectbox(
                     "選擇圖表類型",
                     [
@@ -557,30 +553,25 @@ def render_analysis_page():
                 )
         
                 # -----------------------------
-                # 安全計算平均值函數
+                # 安全平均函數
                 # -----------------------------
                 def safe_mean(df, year, build_type):
                     s = df[(df["民國年"] == year) & (df["BUILD"] == build_type)]["平均單價元平方公尺"]
-                    if s.empty:
-                        return 0
-                    return int(s.mean())
+                    return int(s.mean()) if not s.empty else 0
         
                 # -----------------------------
                 # 1️⃣ 不動產價格趨勢分析
                 # -----------------------------
                 if chart_type == "不動產價格趨勢分析" and not filtered_real_estate.empty:
-                    filtered_real_estate["民國年"] = filtered_real_estate["季度"].str[:3].astype(int)
                     yearly_avg = filtered_real_estate.groupby(["民國年", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
                     years = sorted(yearly_avg["民國年"].unique())
-                    year_labels = [str(y) for y in years]
-        
                     new_data = [safe_mean(yearly_avg, y, "新成屋") for y in years]
                     old_data = [safe_mean(yearly_avg, y, "中古屋") for y in years]
         
                     option = {
                         "tooltip": {"trigger": "axis"},
                         "legend": {"data": ["新成屋", "中古屋"]},
-                        "xAxis": {"type": "category", "data": year_labels},
+                        "xAxis": {"type": "category", "data": [str(y) for y in years]},
                         "yAxis": {"type": "value"},
                         "series": [
                             {"name": "新成屋", "type": "line", "data": new_data},
@@ -605,13 +596,7 @@ def render_analysis_page():
                             "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
                             "legend": {"orient": "vertical", "left": "left", "data": [d["name"] for d in pie_data]},
                             "series": [
-                                {
-                                    "name": "交易筆數",
-                                    "type": "pie",
-                                    "radius": "50%",
-                                    "data": pie_data,
-                                    "emphasis": {"itemStyle": {"shadowBlur": 10, "shadowOffsetX": 0, "shadowColor": "rgba(0, 0, 0, 0.5)"}}
-                                }
+                                {"name": "交易筆數", "type": "pie", "radius": "50%", "data": pie_data}
                             ]
                         }
                         st_echarts(option, height="400px")
@@ -641,10 +626,7 @@ def render_analysis_page():
                             "tooltip": {"trigger": "axis"},
                             "legend": {"data": ["人口數", "成交量"]},
                             "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
-                            "yAxis": [
-                                {"type": "value", "name": "人口數"},
-                                {"type": "value", "name": "成交量"}
-                            ],
+                            "yAxis": [{"type": "value", "name": "人口數"}, {"type": "value", "name": "成交量"}],
                             "series": [
                                 {"name": "人口數", "type": "line", "data": merged["人口數"].astype(int).tolist(), "smooth": True},
                                 {"name": "成交量", "type": "line", "yAxisIndex": 1, "data": merged["交易筆數"].astype(int).tolist()}
@@ -659,7 +641,6 @@ def render_analysis_page():
                     if filtered_population.empty or filtered_real_estate.empty:
                         st.info("人口或房價資料不足，無法分析")
                     else:
-                        # 取每年最新季度人口
                         pop_latest_per_year = filtered_population.sort_values("年度季度", ascending=True).groupby(
                             ["縣市", "行政區", "民國年"], as_index=False
                         )["人口數"].last()
@@ -673,14 +654,13 @@ def render_analysis_page():
                         )
         
                         option = {
-                            "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+                            "tooltip": {"trigger": "axis"},
                             "xAxis": {"type": "value", "name": "人口數"},
                             "yAxis": {"type": "value", "name": "平均房價"},
-                            "series": [
-                                {"name": "人口 × 房價", "type": "scatter", "data": merged[["人口數", "平均單價元平方公尺"]].values.tolist()}
-                            ]
+                            "series": [{"name": "人口 × 房價", "type": "scatter", "data": merged[["人口數", "平均單價元平方公尺"]].values.tolist()}]
                         }
                         st_echarts(option, height="400px")
+
 
 
 
