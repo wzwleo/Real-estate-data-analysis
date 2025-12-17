@@ -129,7 +129,7 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
         ))
     return results
 def load_population_csv(folder="./page_modules"):
-    path = os.path.join(folder, "PEOPLE.csv")
+    path = os.path.join(folder, "NEWWWW.csv"")
     if not os.path.exists(path):
         return pd.DataFrame()
 
