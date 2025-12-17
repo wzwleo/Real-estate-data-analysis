@@ -143,7 +143,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
             st.write("\n")
-            analyze_clicked = st.button("開始分析1", use_container_width=True, key="solo_analysis_button")
+            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
@@ -229,7 +229,7 @@ def tab1_module():
                     query_vec = embeddings[selected_idx:selected_idx+1]
 
                     # 查詢相似房屋（包含自己，所以查 11 筆）
-                    top_k = 11
+                    top_k = 21
                     labels, distances = index.knn_query(query_vec, k=top_k)
 
                     # 取得相似房屋資料（過濾掉自己）
