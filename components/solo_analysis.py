@@ -229,7 +229,7 @@ def tab1_module():
                     query_vec = embeddings[selected_idx:selected_idx+1]
 
                     # 查詢相似房屋（包含自己，所以查 11 筆）
-                    top_k = 21
+                    top_k = 11
                     labels, distances = index.knn_query(query_vec, k=top_k)
 
                     # 取得相似房屋資料（過濾掉自己）
