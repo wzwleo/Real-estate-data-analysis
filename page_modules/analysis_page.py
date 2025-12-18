@@ -619,12 +619,15 @@ def render_analysis_page():
                     trans_counts = re_df.groupby("縣市")["交易筆數"].sum().reset_index()
                     pie_data = [{"value": int(r["交易筆數"]), "name": r["縣市"]} for _, r in trans_counts.iterrows()]
                 else:
-                    if district_choice == "全部":
-                        trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
-                    else:
-                        trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+                    # 依行政區統計
+                    trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+                    # 取前30%
+                    n_top = round(len(trans_counts) * 0.3)
+                    if n_top < 1:  # 至少取1個
+                        n_top = 1
+                    trans_counts = trans_counts.sort_values("交易筆數", ascending=False).head(n_top)
                     pie_data = [{"value": int(r["交易筆數"]), "name": r["行政區"]} for _, r in trans_counts.iterrows()]
-        
+            
                 if pie_data:
                     option = {
                         "tooltip": {"trigger": "item", "formatter": "{b}: {c} ({d}%)"},
@@ -634,6 +637,7 @@ def render_analysis_page():
                     st_echarts(option, height="400px")
                 else:
                     st.info("⚠️ 無交易資料，無法顯示圓餅圖")
+
         
             # -----------------------------
             # 3️⃣ 人口 × 成交量
