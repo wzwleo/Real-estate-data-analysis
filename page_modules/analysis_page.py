@@ -509,7 +509,8 @@ def render_analysis_page():
                 city_choice = st.selectbox("選擇縣市", cities)
         
                 if city_choice != "全台":
-                    district_choice = st.selectbox("選擇行政區", ["全部"])
+                    districts = ["全部"] + sorted(population_df[population_df["縣市"] == city_choice]["行政區"].unique())
+                    district_choice = st.selectbox("選擇行政區", districts)
                 else:
                     district_choice = "全部"
         
@@ -532,6 +533,8 @@ def render_analysis_page():
         
             if city_choice != "全台":
                 re_df = re_df[re_df["縣市"] == city_choice]
+                if district_choice != "全部":
+                    re_df = re_df[re_df["行政區"] == district_choice]
         
             # -----------------------------
             # 篩選人口資料
@@ -545,8 +548,12 @@ def render_analysis_page():
                 # 全台 → 只保留縣市本身
                 pop_df = pop_df[pop_df["縣市"] == pop_df["行政區"]]
             else:
-                # 縣市 + 全部 → 只取縣市總人口
-                pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == city_choice)]
+                if district_choice == "全部":
+                    # 選縣市+全部 → 只取縣市總人口
+                    pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == city_choice)]
+                else:
+                    # 選縣市+特定行政區 → 取該行政區人口
+                    pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == district_choice)]
         
             # -----------------------------
             # 顯示表格（所有圖表共用）
@@ -612,7 +619,10 @@ def render_analysis_page():
                     trans_counts = re_df.groupby("縣市")["交易筆數"].sum().reset_index()
                     pie_data = [{"value": int(r["交易筆數"]), "name": r["縣市"]} for _, r in trans_counts.iterrows()]
                 else:
-                    trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+                    if district_choice == "全部":
+                        trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+                    else:
+                        trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
                     pie_data = [{"value": int(r["交易筆數"]), "name": r["行政區"]} for _, r in trans_counts.iterrows()]
         
                 if pie_data:
@@ -660,6 +670,7 @@ def render_analysis_page():
                     "series": [{"name": "人口 × 房價", "type": "scatter", "data": merged[["人口數", "平均單價元平方公尺"]].values.tolist()}]
                 }
                 st_echarts(option, height="400px")
+
 
 
 
