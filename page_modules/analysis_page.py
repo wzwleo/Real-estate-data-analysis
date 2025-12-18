@@ -622,32 +622,52 @@ def render_analysis_page():
                 st_echarts(option, height="400px")
         
             # =====================================================
-            # 3️⃣ 人口 × 成交量（重點修正）
+           # =====================================================
+            # 3️⃣ 人口 × 成交量（市場是否被壓抑）
             # =====================================================
             elif chart_type == "🧠 人口 × 成交量（市場是否被壓抑）":
+            
+                # ---------- 決定分析層級 ----------
+                if city_choice == "全台":
+                    group_cols = ["縣市", "民國年"]
+                    display_col = "縣市"
+                elif district_choice == "全部":
+                    group_cols = ["行政區", "民國年"]
+                    display_col = "行政區"
+                else:
+                    group_cols = ["行政區", "民國年"]
+                    display_col = "行政區"
+            
+                # ---------- 人口資料（不亂加總，只取該年的行政區人口） ----------
                 pop_latest = (
                     pop_long.sort_values("民國年")
-                    .groupby(["縣市", "行政區", "民國年"], as_index=False)
+                    .groupby(group_cols, as_index=False)
                     .last()
                 )
-        
+            
+                # ---------- 成交量 ----------
                 trans = (
-                    real_df.groupby(["縣市", "行政區", "民國年"])["交易筆數"]
+                    real_df.groupby(group_cols)["交易筆數"]
                     .sum()
                     .reset_index()
                 )
-        
+            
+                # ---------- 合併 ----------
                 merged = pd.merge(
                     pop_latest,
                     trans,
-                    on=["縣市", "行政區", "民國年"],
+                    on=group_cols,
                     how="left"
                 ).fillna(0)
-        
+            
+                # ---------- 圖表 ----------
                 option = {
                     "tooltip": {"trigger": "axis"},
                     "legend": {"data": ["人口數", "成交量"]},
-                    "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
+                    "xAxis": {
+                        "type": "category",
+                        "data": merged["民國年"].astype(str).tolist()
+                    },
                     "yAxis": [
                         {"type": "value", "name": "人口數"},
                         {"type": "value", "name": "成交量"}
@@ -656,8 +676,8 @@ def render_analysis_page():
                         {
                             "name": "人口數",
                             "type": "line",
-                            "data": merged["人口數"].tolist(),
-                            "smooth": True
+                            "smooth": True,
+                            "data": merged["人口數"].tolist()
                         },
                         {
                             "name": "成交量",
@@ -667,7 +687,30 @@ def render_analysis_page():
                         }
                     ]
                 }
+            
                 st_echarts(option, height="400px")
+            
+                st.divider()
+            
+                # ---------- 表格顯示 ----------
+                col1, col2 = st.columns(2)
+            
+                with col1:
+                    st.markdown("### 👥 人口資料")
+                    st.dataframe(
+                        pop_latest[[display_col, "民國年", "人口數"]]
+                        .sort_values([display_col, "民國年"]),
+                        use_container_width=True
+                    )
+            
+                with col2:
+                    st.markdown("### 🏠 成交量資料")
+                    st.dataframe(
+                        trans[[display_col, "民國年", "交易筆數"]]
+                        .sort_values([display_col, "民國年"]),
+                        use_container_width=True
+                    )
+
         
             # =====================================================
             # 4️⃣ 人口 × 房價
