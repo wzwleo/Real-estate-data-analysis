@@ -655,33 +655,51 @@ def render_analysis_page():
             # 4️⃣ 人口 × 房價（潛力 / 風險）
             # -----------------------------
             elif chart_type == "人口 × 房價（潛力 / 風險）":
-                # 按行政區 + 季加權平均房價
+                # 篩選單一行政區或全部
                 if district_choice != "全部":
                     df_filtered = re_df[re_df["行政區"] == district_choice]
                 else:
                     df_filtered = re_df.copy()
-        
-                df_weighted = df_filtered.groupby(["縣市", "行政區", "季度名稱", "BUILD"]).apply(
-                    lambda x: pd.Series({
-                        "加權平均房價": (x["平均單價元平方公尺"] * x["交易筆數"]).sum() / x["交易筆數"].sum(),
-                        "交易總數": x["交易筆數"].sum()
-                    })
-                ).reset_index()
-        
-                # 合併人口資料（依行政區 + 年份）
-                df_weighted["民國年"] = df_weighted["季度名稱"].str[:3].astype(int)
-                pop_grouped_district = pop_long.groupby(["縣市", "行政區", "民國年"])["人口數"].last().reset_index()
+            
+                # 計算每筆資料的加權房價（成交量 × 單價）
+                df_filtered["加權平均房價"] = df_filtered["平均單價元平方公尺"]  # 單筆就是單價
+                df_filtered["民國年"] = df_filtered["季度"].str[:3].astype(int)
+            
+                # 合併人口資料
+                pop_grouped = pop_long.copy()
+                if district_choice != "全部":
+                    pop_grouped = pop_grouped[(pop_grouped["縣市"] == city_choice) & (pop_grouped["行政區"] == district_choice)]
+                else:
+                    if city_choice != "全台":
+                        pop_grouped = pop_grouped[(pop_grouped["縣市"] == city_choice) & (pop_grouped["行政區"] == city_choice)]
+                    else:
+                        pop_grouped = pop_grouped[pop_grouped["縣市"] == pop_grouped["行政區"]]
+            
+                # 對應每筆資料對應人口
+                merged = pd.merge(
+                    df_filtered,
+                    pop_grouped[["縣市", "行政區", "民國年", "人口數"]],
+                    on=["縣市", "行政區", "民國年"],
+                    how="left"
+                )
+            
+                # 移除空值
                 merged_clean = merged.dropna(subset=["人口數", "加權平均房價"])
-                option = {
-                    "tooltip": {"trigger": "axis"},
-                    "xAxis": {"type": "value", "name": "人口數"},
-                    "yAxis": {"type": "value", "name": "平均房價"},
-                    "series": [
-                        {"name": "人口 × 房價", "type": "scatter",
-                         "data": merged_clean[["人口數", "加權平均房價"]].values.tolist()}
-                    ]
-                }
-                st_echarts(option, height="400px")
+            
+                if merged_clean.empty:
+                    st.info("⚠️ 無資料可顯示人口 × 房價圖表")
+                else:
+                    option = {
+                        "tooltip": {"trigger": "axis"},
+                        "xAxis": {"type": "value", "name": "人口數"},
+                        "yAxis": {"type": "value", "name": "平均房價"},
+                        "series": [
+                            {"name": "人口 × 房價", "type": "scatter",
+                             "data": merged_clean[["人口數", "加權平均房價"]].values.tolist()}
+                        ]
+                    }
+                    st_echarts(option, height="400px")
+
 
 
 
