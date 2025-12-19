@@ -437,7 +437,7 @@ def render_analysis_page():
 
                 # Gemini 分析
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-1.5-pro")
+                model = genai.GenerativeModel("gemini-2.0-flash")
 
                 places_a_text = format_places(places_a) if places_a else "無周邊資料"
                 places_b_text = format_places(places_b) if places_b else "無周邊資料"
