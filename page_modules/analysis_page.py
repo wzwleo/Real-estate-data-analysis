@@ -526,7 +526,7 @@ def render_analysis_page():
                 )
         
             # -----------------------------
-            # 篩選房產資料
+            # 篩選房產資料（表一）
             # -----------------------------
             re_df = combined_df[
                 (combined_df["民國年"] >= year_range[0]) &
@@ -538,30 +538,27 @@ def render_analysis_page():
                 re_df = re_df[re_df["行政區"] == district_choice]
         
             # -----------------------------
-            # 篩選人口資料
+            # 篩選人口資料（表二）
             # -----------------------------
             pop_df = pop_long[
                 (pop_long["民國年"] >= year_range[0]) &
                 (pop_long["民國年"] <= year_range[1])
             ]
             if city_choice == "全台":
-                # 全台 → 顯示各縣市人口
                 pop_df = pop_df[pop_df["縣市"] == pop_df["行政區"]]
             elif district_choice == "全部":
-                # 單縣市、全部行政區 → 顯示縣市總人口
                 pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == city_choice)]
             else:
-                # 單一行政區 → 顯示該行政區每季人口（保留每筆資料）
                 pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == district_choice)]
         
             # -----------------------------
-            # 顯示表格（共用）
+            # 顯示表格（表一、表二都要顯示）
             # -----------------------------
             with col_filter:
-                st.markdown("## 📂 不動產資料")
+                st.markdown("## 📂 表一：不動產資料")
                 st.dataframe(re_df, use_container_width=True)
         
-                st.markdown("## 👥 人口資料")
+                st.markdown("## 👥 表二：人口資料（按年度）")
                 st.dataframe(
                     pop_df.pivot_table(
                         index=["縣市", "行政區"],
@@ -590,7 +587,7 @@ def render_analysis_page():
                 return int(s.mean()) if not s.empty else 0
         
             # -----------------------------
-            # 1️⃣ 不動產價格趨勢分析
+            # 1️⃣ 不動產價格趨勢分析（暫不改）
             # -----------------------------
             if chart_type == "不動產價格趨勢分析":
                 yearly_avg = re_df.groupby(["民國年", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
@@ -611,7 +608,7 @@ def render_analysis_page():
                 st_echarts(option, height="400px")
         
             # -----------------------------
-            # 2️⃣ 交易筆數分布
+            # 2️⃣ 交易筆數分布（暫不改）
             # -----------------------------
             elif chart_type == "交易筆數分布":
                 if city_choice == "全台":
@@ -619,7 +616,7 @@ def render_analysis_page():
                     pie_data = [{"value": int(r["交易筆數"]), "name": r["縣市"]} for _, r in trans_counts.iterrows()]
                 else:
                     trans_counts = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
-                    top_n = max(1, round(len(trans_counts)*0.3))  # 取前30%
+                    top_n = max(1, round(len(trans_counts) * 0.3))
                     trans_counts = trans_counts.sort_values("交易筆數", ascending=False).head(top_n)
                     pie_data = [{"value": int(r["交易筆數"]), "name": r["行政區"]} for _, r in trans_counts.iterrows()]
         
@@ -634,7 +631,7 @@ def render_analysis_page():
                     st.info("⚠️ 無交易資料，無法顯示圓餅圖")
         
             # -----------------------------
-            # 3️⃣ 人口 × 成交量
+            # 3️⃣ 人口 × 成交量（暫不改）
             # -----------------------------
             elif chart_type == "人口 × 成交量（市場是否被壓抑）":
                 trans_grouped = re_df.groupby("民國年")["交易筆數"].sum().reset_index()
@@ -654,10 +651,9 @@ def render_analysis_page():
                 st_echarts(option, height="400px")
         
             # -----------------------------
-            # 4️⃣ 人口 × 房價
+            # 4️⃣ 人口 × 房價（單一行政區保留每筆資料）
             # -----------------------------
             elif chart_type == "人口 × 房價（潛力 / 風險）":
-                # 單一行政區 → 保留每筆資料
                 if district_choice != "全部":
                     merged = re_df.copy()
                     merged = merged.merge(
@@ -666,7 +662,6 @@ def render_analysis_page():
                         how="left"
                     )
                 else:
-                    # 多行政區 → 以行政區平均
                     pop_latest = pop_df.groupby("行政區")["人口數"].last().reset_index()
                     price_avg = re_df.groupby("行政區")["平均單價元平方公尺"].mean().reset_index()
                     merged = pd.merge(pop_latest, price_avg, on="行政區", how="inner")
@@ -678,6 +673,7 @@ def render_analysis_page():
                     "series": [{"name": "人口 × 房價", "type": "scatter", "data": merged[["人口數", "平均單價元平方公尺"]].values.tolist()}]
                 }
                 st_echarts(option, height="400px")
+
 
 
 
