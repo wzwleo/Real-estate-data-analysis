@@ -676,20 +676,18 @@ def render_analysis_page():
                 }, height="400px")
             
                 # -----------------------------
-                # 每年交易筆數 Top 3
+                # 每年交易筆數 Top 3（隱藏區塊）
                 # -----------------------------
-                st.markdown("### 🏆 每年交易筆數 Top 3 行政區")
-                years = sorted(re_df["民國年"].unique())
-                yearly_top3_data = {}
-            
-                for y in years:
-                    df_y = re_df[re_df["民國年"] == y]
-                    top3 = df_y.groupby("行政區")["交易筆數"].sum().reset_index()
-                    top3 = top3.sort_values("交易筆數", ascending=False).head(3)
-                    yearly_top3_data[y] = top3
-            
-                    st.markdown(f"#### {y} 年")
-                    st.dataframe(top3, use_container_width=True)
+                with st.expander("📂 查看每年交易筆數 Top 3 行政區"):
+                    years = sorted(re_df["民國年"].unique())
+                    for y in years:
+                        df_y = re_df[re_df["民國年"] == y]
+                        top3 = df_y.groupby("行政區")["交易筆數"].sum().reset_index()
+                        top3 = top3.sort_values("交易筆數", ascending=False).head(3)
+                        
+                        st.markdown(f"#### {y} 年")
+                        st.dataframe(top3, use_container_width=True)
+
 
         
             # =====================================================
