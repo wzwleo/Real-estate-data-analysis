@@ -460,192 +460,223 @@ def render_analysis_page():
 
     
         # ============================
-        # Tab3: 市場趨勢分析（整合人口資料）
-        # ============================
-        with tab3:
-            st.subheader("📊 市場趨勢分析")
-        
-            # -----------------------------
-            # 載入資料
-            # -----------------------------
-            combined_df = load_real_estate_csv(folder="./page_modules")
-            population_df = load_population_csv(folder="./page_modules")
-        
-            if combined_df.empty or population_df.empty:
-                st.info("📂 找不到房產或人口資料")
-                st.stop()
-        
-            # -----------------------------
-            # 基本清理
-            # -----------------------------
-            combined_df["民國年"] = combined_df["季度"].str[:3].astype(int)
-        
-            population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
-            population_df["縣市"] = population_df["縣市"].astype(str).str.strip()
-            population_df["行政區"] = population_df["行政區"].astype(str).str.strip()
-        
-            # 人口轉長格式
-            year_cols = [c for c in population_df.columns if "年" in c]
-            pop_long = population_df.melt(
-                id_vars=["縣市", "行政區"],
-                value_vars=year_cols,
-                var_name="年度",
-                value_name="人口數"
+# ============================
+# Tab3: 市場趨勢分析（整合人口資料）
+# ============================
+with tab3:
+    st.subheader("📊 市場趨勢分析")
+
+    # -----------------------------
+    # 載入資料
+    # -----------------------------
+    combined_df = load_real_estate_csv(folder="./page_modules")
+    population_df = load_population_csv(folder="./page_modules")
+
+    if combined_df.empty or population_df.empty:
+        st.info("📂 找不到房產或人口資料")
+        st.stop()
+
+    # -----------------------------
+    # 基本清理
+    # -----------------------------
+    combined_df["民國年"] = combined_df["季度"].str[:3].astype(int)
+
+    population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
+    population_df["縣市"] = population_df["縣市"].astype(str).str.strip()
+    population_df["行政區"] = population_df["行政區"].astype(str).str.strip()
+
+    # -----------------------------
+    # 人口資料轉長格式
+    # -----------------------------
+    year_cols = [c for c in population_df.columns if "年" in c]
+    pop_long = population_df.melt(
+        id_vars=["縣市", "行政區"],
+        value_vars=year_cols,
+        var_name="年度",
+        value_name="人口數"
+    )
+    pop_long["人口數"] = (
+        pop_long["人口數"]
+        .astype(str)
+        .str.replace(",", "")
+        .astype(int)
+    )
+    pop_long["民國年"] = pop_long["年度"].str[:3].astype(int)
+
+    # -----------------------------
+    # 篩選條件
+    # -----------------------------
+    col_filter, col_blank = st.columns([3, 1])
+
+    with col_blank:
+        cities = ["全台"] + sorted(combined_df["縣市"].unique())
+        city_choice = st.selectbox("選擇縣市", cities)
+
+        if city_choice != "全台":
+            district_choice = st.selectbox(
+                "選擇行政區",
+                ["全部"] + sorted(
+                    combined_df[combined_df["縣市"] == city_choice]["行政區"].unique()
+                )
             )
-            pop_long["人口數"] = (
-                pop_long["人口數"]
-                .astype(str)
-                .str.replace(",", "")
-                .astype(int)
+        else:
+            district_choice = "全部"
+
+        year_min = int(min(combined_df["民國年"].min(), pop_long["民國年"].min()))
+        year_max = int(max(combined_df["民國年"].max(), pop_long["民國年"].max()))
+        year_range = st.slider(
+            "選擇分析年份",
+            min_value=year_min,
+            max_value=year_max,
+            value=(year_min, year_max)
+        )
+
+    # -----------------------------
+    # 表一：不動產資料
+    # -----------------------------
+    re_df = combined_df[
+        (combined_df["民國年"] >= year_range[0]) &
+        (combined_df["民國年"] <= year_range[1])
+    ]
+    if city_choice != "全台":
+        re_df = re_df[re_df["縣市"] == city_choice]
+    if district_choice != "全部":
+        re_df = re_df[re_df["行政區"] == district_choice]
+
+    # -----------------------------
+    # 表二：人口資料
+    # -----------------------------
+    pop_df = pop_long[
+        (pop_long["民國年"] >= year_range[0]) &
+        (pop_long["民國年"] <= year_range[1])
+    ]
+    if city_choice == "全台":
+        pop_df = pop_df[pop_df["縣市"] == pop_df["行政區"]]
+    elif district_choice == "全部":
+        pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == city_choice)]
+    else:
+        pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == district_choice)]
+
+    # -----------------------------
+    # 顯示兩張表格
+    # -----------------------------
+    with col_filter:
+        st.markdown("## 📂 表一：不動產資料")
+        st.dataframe(re_df, use_container_width=True)
+
+        st.markdown("## 👥 表二：人口資料（按年度）")
+        st.dataframe(
+            pop_df.pivot_table(
+                index=["縣市", "行政區"],
+                columns="民國年",
+                values="人口數",
+                aggfunc="last"
+            ).fillna(0).astype(int),
+            use_container_width=True
+        )
+
+        chart_type = st.selectbox(
+            "選擇分析類型",
+            [
+                "不動產價格趨勢分析",
+                "交易筆數分布",
+                "人口 × 成交量（市場是否被壓抑）"
+            ]
+        )
+
+    # -----------------------------
+    # 安全平均
+    # -----------------------------
+    def safe_mean(df, year, build_type):
+        s = df[(df["民國年"] == year) & (df["BUILD"] == build_type)]["平均單價元平方公尺"]
+        return int(s.mean()) if not s.empty else 0
+
+    # ============================
+    # 1️⃣ 不動產價格趨勢分析
+    # ============================
+    if chart_type == "不動產價格趨勢分析":
+        yearly_avg = re_df.groupby(["民國年", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
+        years = sorted(yearly_avg["民國年"].unique())
+
+        new_data = [safe_mean(yearly_avg, y, "新成屋") for y in years]
+        old_data = [safe_mean(yearly_avg, y, "中古屋") for y in years]
+
+        st_echarts({
+            "tooltip": {"trigger": "axis"},
+            "legend": {"data": ["新成屋", "中古屋"]},
+            "xAxis": {"type": "category", "data": [str(y) for y in years]},
+            "yAxis": {"type": "value"},
+            "series": [
+                {"name": "新成屋", "type": "line", "data": new_data},
+                {"name": "中古屋", "type": "line", "data": old_data}
+            ]
+        }, height="400px")
+
+        # 📈 價格趨勢說明
+        if len(years) >= 2:
+            st.markdown("### 🧠 價格趨勢說明")
+            st.markdown(
+                f"""
+                - 新成屋變化：{new_data[-1] - new_data[0]:+,} 元/㎡  
+                - 中古屋變化：{old_data[-1] - old_data[0]:+,} 元/㎡  
+
+                **市場解讀：**  
+                {"新舊屋同步上升，屬於結構性成長市場。" if new_data[-1] > new_data[0] and old_data[-1] > old_data[0]
+                else "價格走勢分歧，需留意是否為推案或短期拉抬。"}
+                """
             )
-            pop_long["民國年"] = pop_long["年度"].str[:3].astype(int)
-        
-            # -----------------------------
-            # 篩選條件
-            # -----------------------------
-            col_filter, col_blank = st.columns([3, 1])
-        
-            with col_blank:
-                cities = ["全台"] + sorted(combined_df["縣市"].unique())
-                city_choice = st.selectbox("選擇縣市", cities)
-        
-                if city_choice != "全台":
-                    district_choice = st.selectbox(
-                        "選擇行政區",
-                        ["全部"] + sorted(
-                            combined_df[combined_df["縣市"] == city_choice]["行政區"].unique()
-                        )
-                    )
-                else:
-                    district_choice = "全部"
-        
-                year_min = int(min(combined_df["民國年"].min(), pop_long["民國年"].min()))
-                year_max = int(max(combined_df["民國年"].max(), pop_long["民國年"].max()))
-                year_range = st.slider(
-                    "選擇分析年份",
-                    min_value=year_min,
-                    max_value=year_max,
-                    value=(year_min, year_max)
-                )
-        
-            # -----------------------------
-            # 表一：不動產資料
-            # -----------------------------
-            re_df = combined_df[
-                (combined_df["民國年"] >= year_range[0]) &
-                (combined_df["民國年"] <= year_range[1])
+
+    # ============================
+    # 2️⃣ 交易筆數分布
+    # ============================
+    elif chart_type == "交易筆數分布":
+        if city_choice == "全台":
+            trans = re_df.groupby("縣市")["交易筆數"].sum().reset_index()
+            pie_data = [{"name": r["縣市"], "value": int(r["交易筆數"])} for _, r in trans.iterrows()]
+        else:
+            trans = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+            top_n = max(1, round(len(trans) * 0.3))
+            trans = trans.sort_values("交易筆數", ascending=False).head(top_n)
+            pie_data = [{"name": r["行政區"], "value": int(r["交易筆數"])} for _, r in trans.iterrows()]
+
+        st_echarts({
+            "tooltip": {"trigger": "item"},
+            "series": [{"type": "pie", "radius": "55%", "data": pie_data}]
+        }, height="400px")
+
+        # 📊 交易結構說明
+        st.markdown("### 🧩 交易結構說明")
+        if not trans.empty:
+            top_ratio = trans.iloc[0]["交易筆數"] / trans["交易筆數"].sum()
+            st.markdown(
+                f"""
+                - 最大交易區占比：{top_ratio:.1%}
+
+                **市場解讀：**  
+                {"交易高度集中，可能為推案或短期熱區。" if top_ratio > 0.5
+                else "交易分布均衡，屬於健康市場結構。"}
+                """
+            )
+
+    # ============================
+    # 3️⃣ 人口 × 成交量
+    # ============================
+    elif chart_type == "人口 × 成交量（市場是否被壓抑）":
+        trans = re_df.groupby("民國年")["交易筆數"].sum().reset_index()
+        pop = pop_df.groupby("民國年")["人口數"].last().reset_index()
+        merged = pd.merge(pop, trans, on="民國年", how="left").fillna(0)
+
+        st_echarts({
+            "tooltip": {"trigger": "axis"},
+            "legend": {"data": ["人口數", "成交量"]},
+            "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
+            "yAxis": [{"type": "value"}, {"type": "value"}],
+            "series": [
+                {"name": "人口數", "type": "line", "data": merged["人口數"].tolist()},
+                {"name": "成交量", "type": "line", "yAxisIndex": 1, "data": merged["交易筆數"].tolist()}
             ]
-            if city_choice != "全台":
-                re_df = re_df[re_df["縣市"] == city_choice]
-            if district_choice != "全部":
-                re_df = re_df[re_df["行政區"] == district_choice]
-        
-            # -----------------------------
-            # 表二：人口資料
-            # -----------------------------
-            pop_df = pop_long[
-                (pop_long["民國年"] >= year_range[0]) &
-                (pop_long["民國年"] <= year_range[1])
-            ]
-            if city_choice == "全台":
-                pop_df = pop_df[pop_df["縣市"] == pop_df["行政區"]]
-            elif district_choice == "全部":
-                pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == city_choice)]
-            else:
-                pop_df = pop_df[(pop_df["縣市"] == city_choice) & (pop_df["行政區"] == district_choice)]
-        
-            # -----------------------------
-            # 顯示兩張表格
-            # -----------------------------
-            with col_filter:
-                st.markdown("## 📂 表一：不動產資料")
-                st.dataframe(re_df, use_container_width=True)
-        
-                st.markdown("## 👥 表二：人口資料（按年度）")
-                st.dataframe(
-                    pop_df.pivot_table(
-                        index=["縣市", "行政區"],
-                        columns="民國年",
-                        values="人口數",
-                        aggfunc="last"
-                    ).fillna(0).astype(int),
-                    use_container_width=True
-                )
-        
-                chart_type = st.selectbox(
-                    "選擇分析類型",
-                    [
-                        "不動產價格趨勢分析",
-                        "交易筆數分布",
-                        "人口 × 成交量（市場是否被壓抑）"
-                    ]
-                )
-        
-            # -----------------------------
-            # 安全平均
-            # -----------------------------
-            def safe_mean(df, year, build_type):
-                s = df[(df["民國年"] == year) & (df["BUILD"] == build_type)]["平均單價元平方公尺"]
-                return int(s.mean()) if not s.empty else 0
-        
-            # -----------------------------
-            # 1️⃣ 價格趨勢
-            # -----------------------------
-            if chart_type == "不動產價格趨勢分析":
-                yearly_avg = re_df.groupby(["民國年", "BUILD"])["平均單價元平方公尺"].mean().reset_index()
-                years = sorted(yearly_avg["民國年"].unique())
-        
-                new_data = [safe_mean(yearly_avg, y, "新成屋") for y in years]
-                old_data = [safe_mean(yearly_avg, y, "中古屋") for y in years]
-        
-                st_echarts({
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": ["新成屋", "中古屋"]},
-                    "xAxis": {"type": "category", "data": [str(y) for y in years]},
-                    "yAxis": {"type": "value"},
-                    "series": [
-                        {"name": "新成屋", "type": "line", "data": new_data},
-                        {"name": "中古屋", "type": "line", "data": old_data}
-                    ]
-                }, height="400px")
-        
-            # -----------------------------
-            # 2️⃣ 交易筆數分布
-            # -----------------------------
-            elif chart_type == "交易筆數分布":
-                if city_choice == "全台":
-                    trans = re_df.groupby("縣市")["交易筆數"].sum().reset_index()
-                    pie_data = [{"name": r["縣市"], "value": int(r["交易筆數"])} for _, r in trans.iterrows()]
-                else:
-                    trans = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
-                    top_n = max(1, round(len(trans) * 0.3))
-                    trans = trans.sort_values("交易筆數", ascending=False).head(top_n)
-                    pie_data = [{"name": r["行政區"], "value": int(r["交易筆數"])} for _, r in trans.iterrows()]
-        
-                st_echarts({
-                    "tooltip": {"trigger": "item"},
-                    "series": [{"type": "pie", "radius": "55%", "data": pie_data}]
-                }, height="400px")
-        
-            # -----------------------------
-            # 3️⃣ 人口 × 成交量
-            # -----------------------------
-            elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-                trans = re_df.groupby("民國年")["交易筆數"].sum().reset_index()
-                pop = pop_df.groupby("民國年")["人口數"].last().reset_index()
-        
-                merged = pd.merge(pop, trans, on="民國年", how="left").fillna(0)
-        
-                st_echarts({
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": ["人口數", "成交量"]},
-                    "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
-                    "yAxis": [{"type": "value"}, {"type": "value"}],
-                    "series": [
-                        {"name": "人口數", "type": "line", "data": merged["人口數"].tolist()},
-                        {"name": "成交量", "type": "line", "yAxisIndex": 1, "data": merged["交易筆數"].tolist()}
-                    ]
-                }, height="400px")
+        }, height="400px")
+
             
 
 
