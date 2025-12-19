@@ -655,25 +655,42 @@ def render_analysis_page():
             # ② 交易筆數分布（結構）
             # =====================================================
             elif chart_type == "交易筆數分布（結構）":
-        
-                trans = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
-                trans = trans.sort_values("交易筆數", ascending=True).tail(10)
-        
+            
+                # -----------------------------
+                # 原本總交易筆數 Top 10
+                # -----------------------------
+                total_trans = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+                total_trans = total_trans.sort_values("交易筆數", ascending=True).tail(10)
+            
                 st.markdown("### 📊 行政區交易量排行（Top 10）")
                 st_echarts({
                     "tooltip": {"trigger": "axis"},
                     "xAxis": {"type": "value"},
                     "yAxis": {
                         "type": "category",
-                        "data": trans["行政區"].tolist()
+                        "data": total_trans["行政區"].tolist()
                     },
                     "series": [
-                        {
-                            "type": "bar",
-                            "data": trans["交易筆數"].astype(int).tolist()
-                        }
+                        {"type": "bar", "data": total_trans["交易筆數"].astype(int).tolist()}
                     ]
                 }, height="400px")
+            
+                # -----------------------------
+                # 每年交易筆數 Top 3
+                # -----------------------------
+                st.markdown("### 🏆 每年交易筆數 Top 3 行政區")
+                years = sorted(re_df["民國年"].unique())
+                yearly_top3_data = {}
+            
+                for y in years:
+                    df_y = re_df[re_df["民國年"] == y]
+                    top3 = df_y.groupby("行政區")["交易筆數"].sum().reset_index()
+                    top3 = top3.sort_values("交易筆數", ascending=False).head(3)
+                    yearly_top3_data[y] = top3
+            
+                    st.markdown(f"#### {y} 年")
+                    st.dataframe(top3, use_container_width=True)
+
         
             # =====================================================
             # ③ 人口 × 成交量
