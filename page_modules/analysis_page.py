@@ -655,12 +655,11 @@ def render_analysis_page():
             # -----------------------------
             elif chart_type == "人口 × 房價（潛力 / 風險）":
                 if district_choice != "全部":
-                    merged = re_df.copy()
-                    merged = merged.merge(
-                        pop_df[["縣市", "行政區", "人口數"]],
-                        on=["縣市", "行政區"],
-                        how="left"
-                    )
+                merged = re_df.merge(
+                    pop_df[["縣市", "行政區", "民國年", "人口數"]],
+                    on=["縣市", "行政區", "民國年"],
+                    how="left"
+                )
                 else:
                     pop_latest = pop_df.groupby("行政區")["人口數"].last().reset_index()
                     price_avg = re_df.groupby("行政區")["平均單價元平方公尺"].mean().reset_index()
