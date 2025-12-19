@@ -6,435 +6,228 @@ from sentence_transformers import SentenceTransformer
 import os
 import numpy as np
 import plotly.express as px
-import json
 import plotly.graph_objects as go
+import json
 import re
 
-# 在檔案開頭,name_map 下方加入反向對照表
+# 檔名對照
 name_map = {
     "Taichung-city_buy_properties.csv": "台中市",
     "Taipei-city_buy_properties.csv": "台北市"
 }
-# 建立反向對照表:中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
 def plot_radar(scores):
     categories = list(scores.keys())
     values = list(scores.values())
-
-    # 關閉環線前需要把首點補上（Plotly 要環狀）
     categories.append(categories[0])
     values.append(values[0])
 
     fig = go.Figure()
-
-    fig.add_trace(go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself',
-        name='AI 評分'
-    ))
-
+    fig.add_trace(go.Scatterpolar(r=values, theta=categories, fill='toself', name='AI 評分'))
     fig.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 10]   # 0～10 分
-            )
-        ),
+        polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
         showlegend=False,
         title="AI 房屋評分雷達圖"
     )
-
     return fig
 
 def get_favorites_data():
-    """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
         return pd.DataFrame()
-
-    all_df = None
-    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-        all_df = st.session_state.all_properties_df
-    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-        all_df = st.session_state.filtered_df
-
+    all_df = st.session_state.get('all_properties_df') or st.session_state.get('filtered_df')
     if all_df is None or all_df.empty:
         return pd.DataFrame()
-
     fav_ids = st.session_state.favorites
-    fav_df = all_df[all_df['編號'].isin(fav_ids)].copy()
-    return fav_df
+    return all_df[all_df['編號'].isin(fav_ids)].copy()
+
+def read_city_csv(city_name):
+    """讀取城市 CSV 並回傳 DataFrame"""
+    filename = reverse_name_map.get(city_name)
+    if not filename:
+        return pd.DataFrame()
+    file_path = os.path.join("./Data", filename)
+    if not os.path.exists(file_path):
+        return pd.DataFrame()
+    return pd.read_csv(file_path)
+
+def compute_avg_price(df, house_type=None):
+    """計算各區平均建坪單價"""
+    df = df[df['建坪'] > 0.1].copy()
+    df['地坪單價(萬/坪)'] = df['總價(萬)'] / df['建坪']
+    if house_type:
+        df = df[df['類型'].str.contains(house_type, na=False)]
+    df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0]
+    avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
+    avg_price['區域'] = avg_price['區域'] + '區'
+    return avg_price
 
 def tab1_module():
     fav_df = get_favorites_data()
     if fav_df.empty:
-            st.header("個別分析")
-            st.info("⭐ 尚未有收藏房產，無法比較")
-    else:
-        options = fav_df['標題']
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            st.header("個別分析")
-        with col2:
-            choice = st.selectbox("選擇房屋", options, key="analysis_solo")
-        # 篩選出選中的房子
-        selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
+        st.header("個別分析")
+        st.info("⭐ 尚未有收藏房產，無法比較")
+        return
 
-        # 顯示卡片，標題直排，詳細資訊橫排
+    options = fav_df['標題']
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        st.header("個別分析")
+    with col2:
+        choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+
+    selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
+
+    # 卡片顯示
+    st.markdown(f"""
+    <div style="border:2px solid #4CAF50; border-radius:10px; padding:10px; background-color:#1f1f1f; text-align:center; color:white;">
+        <div style="font-size:40px; font-weight:bold;">{selected_row.get('標題','未提供')}</div>
+        <div style="font-size:20px;">📍 {selected_row.get('地址','未提供')}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 總價與坪單價
+    raw_price = selected_row.get('總價(萬)')
+    try:
+        total_price = int(raw_price) * 10000
+    except:
+        total_price = 0
+
+    area = selected_row.get('建坪')
+    Actual_space = selected_row.get('主+陽')
+
+    area_text = f"{area} 坪" if area else "未提供"
+    Actual_space_text = f"{Actual_space} 坪" if Actual_space else "未提供"
+
+    area_Price_per = f"{total_price / area:,.0f}" if area else "無資料"
+    Actual_space_Price_per = f"{total_price / Actual_space:,.0f}" if Actual_space else "無資料"
+
+    col1, col2 = st.columns([1, 1])
+    with col1:
         st.markdown(f"""
-        <div style="
-            border:2px solid #4CAF50;
-            border-radius:10px;
-            padding:10px;
-            background-color:#1f1f1f;
-            text-align:center;
-            color:white;
-        ">
-            <div style="font-size:40px; font-weight:bold;">{selected_row.get('標題','未提供')}</div>
-            <div style="font-size:20px;">📍 {selected_row.get('地址','未提供')}</div>
+        <div style="border:2px solid #4CAF50; border-radius:10px; padding:10px; background-color:#1f1f1f; text-align:left; font-size:20px; color:white;">
+            <div> 類型：{selected_row.get('類型','未提供')}</div>
+            <div> 建坪：{area_text}</div>
+            <div> 實際坪數：{Actual_space_text}</div>
+            <div> 格局：{selected_row.get('格局','未提供')}</div>
+            <div> 樓層：{selected_row.get('樓層','未提供')}</div>
+            <div> 屋齡：{selected_row.get('屋齡','未提供')}</div>
+            <div> 車位：{selected_row.get('車位','未提供')}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.write("\n")
+        analyze_clicked = st.button("1開始分析", use_container_width=True, key="solo_analysis_button")
+    with col2:
+        st.markdown(f"""
+        <div style="border:2px solid #4CAF50; border-radius:10px; padding:10px; background-color:#1f1f1f; text-align:center; font-size:30px; color:white; min-height:247px; display:flex; flex-direction:column; justify-content:center;">
+            <div>💰 總價：{total_price:,} 元</div>
+            <div style="font-size:14px; color:#cccccc; margin-top:5px;">建坪單價：{area_Price_per} 元/坪</div>
+            <div style="font-size:14px; color:#cccccc; margin-top:5px;">實際單價：{Actual_space_Price_per} 元/坪</div>
         </div>
         """, unsafe_allow_html=True)
 
         st.write("\n")
-        # 取得總價，並處理格式
-        raw_price = selected_row.get('總價(萬)')
-        if raw_price is None or raw_price == '' or raw_price == '未提供':
-            formatted_price = '未提供'
-        else:
-            try:
-                # 轉成數字後加上萬單位後的0，並加逗號
-                formatted_price = f"{int(raw_price)*10000:,}"  # 乘 10000，把萬轉成元，並加逗號
-            except:
-                formatted_price = raw_price
+        chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
 
-        # 先處理建坪文字
-        area = selected_row.get('建坪', '未提供')
-        area_text = f"{area} 坪" if area != '未提供' else area
+    gemini_key = st.session_state.get("GEMINI_KEY","")
+    ai_score_clean = None
 
-        # 先處理坪數文字
-        Actual_space = selected_row.get('主+陽', '未提供')
-        Actual_space_text = f"{Actual_space} 坪" if Actual_space != '未提供' else Actual_space
+    if analyze_clicked:
+        if not gemini_key:
+            st.error("❌ 右側 gemini API Key 有誤")
+            st.stop()
+        try:
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
 
-        #建坪單價/實際單價
-        total_price = int(raw_price) * 10000
-        area_Price_per = f"{int(total_price)/area:,.0f}"
-        Actual_space_Price_per = f"{int(total_price)/Actual_space:,.0f}"
-
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            st.markdown(f"""
-            <div style="
-                border:2px solid #4CAF50;
-                border-radius:10px;
-                padding:10px;
-                background-color:#1f1f1f;
-                text-align:left;
-                font-size:20px;
-                color:white;
-            ">
-                <div> 類型：{selected_row.get('類型','未提供')}</div>
-                <div> 建坪：{area_text}</div>
-                <div> 實際坪數：{Actual_space_text}</div>
-                <div> 格局：{selected_row.get('格局','未提供')}</div>
-                <div> 樓層：{selected_row.get('樓層','未提供')}</div>
-                <div> 屋齡：{selected_row.get('屋齡','未提供')}</div>
-                <div> 車位：{selected_row.get('車位','未提供')}</div>
-            </div>
-            """, unsafe_allow_html=True)
-            st.write("\n")
-            analyze_clicked = st.button("1開始分析", use_container_width=True, key="solo_analysis_button")
-        with col2:
-            st.markdown(f"""
-            <div style="
-                border:2px solid #4CAF50;
-                border-radius:10px;
-                padding:10px;
-                background-color:#1f1f1f;
-                text-align:center;
-                font-size:30px;
-                color:white;
-                min-height:247px;
-                display:flex;
-                flex-direction:column;  /* 垂直排列 */
-                justify-content:center;
-            ">
-                <div>💰 總價：{formatted_price} 元</div>
-                <div style="font-size:14px; color:#cccccc; margin-top:5px;">
-                    建坪單價：{area_Price_per} 元/坪
-                </div>
-                <div style="font-size:14px; color:#cccccc; margin-top:5px;">
-                    實際單價：{Actual_space_Price_per} 元/坪
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.write("\n")
-            chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
-
-        gemini_key = st.session_state.get("GEMINI_KEY","")
-        ai_score = None
-        if analyze_clicked:
-            if not gemini_key:
-                st.error("❌ 右側 gemini API Key 有誤")
+            city = selected_row['地址'][:3]
+            df = read_city_csv(city)
+            if df.empty:
+                st.error("❌ 無法讀取城市 CSV")
                 st.stop()
-            try:
 
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
+            house_title = str(selected_row.get('標題','')).strip()
+            selected_df_rows = df[df['標題'] == house_title]
+            if selected_df_rows.empty:
+                st.error("❌ CSV 中找不到此房屋資料")
+                st.stop()
+            selected_row_csv = selected_df_rows.iloc[0]
 
-                address = selected_row.get('地址')
-                city = address[:3]
+            # 轉文字
+            embed_model = SentenceTransformer('all-MiniLM-L6-v2')
+            def row_to_text(row):
+                return f"地址:{row['地址']}, 建坪:{row['建坪']}, 主+陽:{row['主+陽']}, 總價:{row['總價(萬)']}萬, 屋齡:{row['屋齡']}, 類型:{row['類型']}, 格局:{row['格局']}, 樓層:{row['樓層']}, 車位:{row['車位']}"
+            texts = df.apply(row_to_text, axis=1).tolist()
+            embeddings = np.array(embed_model.encode(texts, show_progress_bar=True), dtype='float32')
 
-                # 轉換成英文檔名
-                english_filename = reverse_name_map.get(city)
-                file_path = os.path.join("./Data", english_filename)
+            # HNSW index
+            dimension = embeddings.shape[1]
+            num_elements = len(embeddings)
+            index = hnswlib.Index(space='l2', dim=dimension)
+            index.init_index(max_elements=num_elements, ef_construction=200, M=16)
+            index.add_items(embeddings, np.arange(num_elements))
+            index.set_ef(50)
 
-                # 讀取 CSV 檔案
-                df = pd.read_csv(file_path)
-                house_title = str(selected_row.get('標題','')).strip()
-                # 根據標題篩選房型
-                selected_row = df[df['標題'] == house_title].iloc[0]
+            selected_idx = df[df['標題'] == house_title].index[0]
+            query_vec = embeddings[selected_idx:selected_idx+1]
+            labels, distances = index.knn_query(query_vec, k=11)
 
-                embed_model = SentenceTransformer('all-MiniLM-L6-v2')
-                with st.spinner("正在將資料進行向量化處理..."):
-                    def row_to_text(row):
-                        """將每列資料轉為文字描述"""
-                        return (
-                            f"地址:{row['地址']}, 建坪:{row['建坪']}, 主+陽:{row['主+陽']}, "
-                            f"總價:{row['總價(萬)']}萬, 屋齡:{row['屋齡']}, 類型:{row['類型']}, "
-                            f"格局:{row['格局']}, 樓層:{row['樓層']}, 車位:{row['車位']}"
-                        )
-                    texts = df.apply(row_to_text, axis=1).tolist()
-                    embeddings = embed_model.encode(texts, show_progress_bar=True)
-                    embeddings = np.array(embeddings).astype('float32')
+            relevant_data = []
+            for idx in labels[0]:
+                if idx != selected_idx:
+                    relevant_data.append(df.iloc[idx].to_dict())
 
-                    dimension = embeddings.shape[1]
-                    num_elements = len(embeddings)
+            selected_text_display = f"{house_title} - {row_to_text(selected_row_csv)}"
+            relevant_text = "\n".join([f"{r['標題']} - {row_to_text(r)}" for r in relevant_data])
 
-                    # 初始化索引
-                    index = hnswlib.Index(space='l2', dim=dimension)
-
-                    # 建立索引（ef_construction 越大越精確但越慢）
-                    index.init_index(max_elements=num_elements, ef_construction=200, M=16)
-
-                    index.add_items(embeddings, np.arange(num_elements))
-
-                    # 設定查詢參數（ef 越大越精確）
-                    index.set_ef(50)
-
-                    # 找到選中房屋的索引
-                    selected_idx = df[df['標題'] == house_title].index[0]
-                    selected_text = row_to_text(selected_row)
-                    query_vec = embeddings[selected_idx:selected_idx+1]
-
-                    # 查詢相似房屋（包含自己，所以查 11 筆）
-                    top_k = 11
-                    labels, distances = index.knn_query(query_vec, k=top_k)
-
-                    # 取得相似房屋資料（過濾掉自己）
-                    relevant_data = []
-                    for i, (idx, dist) in enumerate(zip(labels[0], distances[0])):
-                        if idx != selected_idx:
-                            house_data = df.iloc[idx].to_dict()
-                            relevant_data.append(house_data)
-
-                    # 準備文字輸入
-                    selected_text_display = f"{selected_row['標題']} - {selected_text}"
-                    relevant_text = "\n".join([f"{r['標題']} - {row_to_text(r)}" for r in relevant_data])
-
-                    # 組合提示詞
-                    prompt = f"""
-                    你是一位台灣不動產市場專家，具有多年房屋估價與市場分析經驗。
-                    請根據以下房屋資料生成中文市場分析：
-                    
-                    目標房型：
-                    {selected_text_display}
-                    
-                    相似房屋資料：
-                    {relevant_text}
-                    
-                    請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
-                    """
-                    
-                    prompt_score = f"""
-                    你是一位台灣不動產估價師，專門根據市場行情與地段條件為住宅進行客觀量化評分。
-                    請根據下列六項指標，對『目標房型』進行 0～10 分的評分。
-                    
-                    【評分指標與說明】
-                    1. 價格：依同區相似物件的單價與總價相對位置（越划算越高）。
-                    2. 坪數：依建坪與主+陽坪數的大小與使用性（越大越高）。
-                    3. 屋齡：越新越高。
-                    4. 樓層：依樓層在大樓中相對位置與噪音、採光（中高樓層通常較佳）。
-                    5. 格局：依房數、衛浴數、實用性與一般市場偏好綜合評估。
-                    6. 地段：依地址評估（交通便利性、生活機能、學區、商圈成熟度、區域價值、鄰近重大建設）。
-                    
-                    【目標房型資料】
-                    {selected_text_display}
-                    
-                    【相似房屋資料】
-                    {relevant_text}
-                    
-                    請根據以上資訊，對六項指標各自評分 0～10 分。
-                    以純 JSON 回覆，不要加入任何解釋文字。
-                    
-                    請直接回傳純 JSON 格式，**不要添加任何說明、文字或換行**，JSON 格式如下：
-                    {{
-                      "價格": 0,
-                      "坪數": 0,
-                      "屋齡": 0,
-                      "樓層": 0,
-                      "格局": 0,
-                      "地段": 0
-                    }}
-                    """
-        # -------------------- 存入 session_state --------------------
-                with st.spinner("Gemini 正在分析中..."):
-                    response = model.generate_content(prompt)
-                    response_score = model.generate_content(prompt_score)
-                    ai_score_clean = (response_score.text or "").strip()
-                
-                st.session_state['current_analysis_result'] = {
-                    "house_title": house_title,
-                    "result_text": response.text,
-                    "similar_data": relevant_data
-                }
-            except Exception as e:
-                st.error(f"❌ 分析過程發生錯誤：{e}")
-        # -------------------- 顯示分析結果 --------------------
-        # 顯示分析結果
-        if 'current_analysis_result' in st.session_state:
-            st.success("✅ 分析完成")
-            st.markdown("### 🧠 **Gemini 市場分析結果**")
-            st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
-            
-            match = re.search(r'\{.*\}', ai_score_clean, re.DOTALL)
-            if match:
-                try:
-                    scores = json.loads(match.group())
-                except json.JSONDecodeError as e:
-                    st.error(f"❌ JSON 解析錯誤: {e}")
-                    st.text(ai_score)
-                    scores = None
-            else:
-                st.error("❌ 無法從 AI 回傳中找到 JSON")
-                st.text(ai_score)
-                scores = None
-            
-            if scores:
-                st.plotly_chart(plot_radar(scores), use_container_width=True)
-                
-            # 安全存取相似房型資料
-            similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
-            if similar_data:
-                similar_df = pd.DataFrame(similar_data)
-                display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位']
-                # 避免 KeyError
-                similar_df = similar_df[[col for col in display_cols if col in similar_df.columns]]
-                with st.expander("相似房型資料"):
-                    st.dataframe(similar_df)
-            else:
-                st.write("沒有找到相似房型")
-        
-            # -------------------- 儲存分析結果 --------------------
-            if st.button("🗃️儲存分析結果", use_container_width=True, key="data_storage"):
-                if 'ai_results' not in st.session_state:
-                    st.session_state.ai_results = []
-                st.session_state.ai_results.append(st.session_state['current_analysis_result'])
-                st.success("✅ 已儲存分析結果")
-
-
-            
-        if chart_clicked:
-            house_input_text_chart = f"""
-            地址：{selected_row.get('地址','未提供')}
-            建坪：{area_text}
-            建坪單價：{area_Price_per} 元/坪
-            類型：{selected_row.get('類型','未提供')}
-            格局：{selected_row.get('格局','未提供')}
-            樓層：{selected_row.get('樓層','未提供')}
-            屋齡：{selected_row.get('屋齡','未提供')}
-            車位：{selected_row.get('車位','未提供')}
+            prompt_score = f"""
+            你是一位台灣不動產估價師，請對下列房屋進行0~10分評分：價格、坪數、屋齡、樓層、格局、地段
+            目標房型資料：
+            {selected_text_display}
+            相似房屋資料：
+            {relevant_text}
+            以純 JSON 回覆，不要加入任何解釋文字。
+            {{ "價格":0,"坪數":0,"屋齡":0,"樓層":0,"格局":0,"地段":0 }}
             """
 
-            try:
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
+            with st.spinner("Gemini 正在分析中..."):
+                response_score = model.generate_content(prompt_score)
+                ai_score_clean = (response_score.text or "").strip()
+                st.session_state['current_analysis_result'] = {
+                    "house_title": house_title,
+                    "result_text": "",  # 可改成完整分析文字
+                    "similar_data": relevant_data
+                }
 
-                address = selected_row.get('地址')
-                city = address[:3]
+        except Exception as e:
+            st.error(f"❌ 分析過程發生錯誤：{e}")
 
-                # 轉換成英文檔名
-                english_filename = reverse_name_map.get(city)
-                file_path = os.path.join("./Data", english_filename)
+    # 顯示雷達圖
+    if ai_score_clean:
+        try:
+            scores = json.loads(ai_score_clean)
+            st.plotly_chart(plot_radar(scores), use_container_width=True)
+        except Exception as e:
+            st.error(f"❌ JSON 解析錯誤: {e}")
+            st.text(ai_score_clean)
 
-                # 讀取 CSV 檔案
-                df = pd.read_csv(file_path)
-
-                # 2️⃣ 從地址擷取「區域」
-                df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0]
-
-                # 3️⃣ 排除建坪 ≤ 0.1 的資料
-                df = df[df['建坪'] > 0.1].copy()
-
-                # 4️⃣ 計算地坪單價（萬/坪）
-                df['地坪單價(萬/坪)'] = df['總價(萬)'] / df['建坪']
-
-                # 5️⃣ 類別篩選
-                selected_type = f"{selected_row.get('類型')}"
-                if selected_type:
-                    df = df[df['類型'].str.contains(selected_type, na=False)]
-
-                # 6️⃣ 各區平均地坪單價
-                avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
-                avg_price['區域'] = avg_price['區域'] + '區'
-
-                # 7️⃣ 畫出柱狀圖
-                fig = px.bar(
-                    avg_price,
-                    x='區域',
-                    y='地坪單價(萬/坪)',
-                    color='區域',
-                    title=f'{city}平均建坪單價柱狀圖'
-                )
-                fig.update_traces(textposition='outside')
-                fig.update_layout(
-                    xaxis_title='行政區',
-                    yaxis_title='平均建坪單價 (萬/坪)',
-                    title_x=0.5,
-                    showlegend=False,
-                    template='plotly_white'
-                )
-                st.plotly_chart(fig, use_container_width=True)
-                if st.button("請AI分析", key="bar_chart_analysis"):
-                    if not gemini_key:
-                        st.error("❌ 右側 gemini API Key 有誤")
-                        st.stop()
-                    try:    
-                        avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']} 萬/坪" 
-                              for _, row in avg_price.iterrows()])
-                        # 生成可給 Gemini 的文字
-
-                        prompt = f"""
-                        你是一位台灣不動產市場專家，請針對下列目標房屋的建坪單價和區域平均建坪單價資訊，提供簡短的價格評估：
-                        目標房屋：
-                        {gemini_input_text_chart}
-                        
-                        區域平均建坪單價：
-                        {avg_text}
-                        
-                        指出是否高於或低於平均水平。
-                        """
-
-                        with st.spinner("Gemini 正在分析中..."):
-                            response = model.generate_content(prompt)
-
-                        st.success("✅ 分析完成")
-                        st.markdown("### 📊 **Gemini 建坪圖表分析解果**")
-                        # 顯示 Gemini 分析結果
-                        st.markdown(response.text)
-
-                    except Exception as e:
-                        st.error(f"❌ 分析過程發生錯誤：{e}")
-            except Exception as e:
-                st.error(f"❌ 圖表生成過程發生錯誤：{e}")
+    # 可視化柱狀圖
+    if chart_clicked:
+        house_input_text_chart = f"""
+        地址：{selected_row.get('地址','未提供')}
+        建坪：{area_text}
+        建坪單價：{area_Price_per} 元/坪
+        類型：{selected_row.get('類型','未提供')}
+        格局：{selected_row.get('格局','未提供')}
+        樓層：{selected_row.get('樓層','未提供')}
+        屋齡：{selected_row.get('屋齡','未提供')}
+        車位：{selected_row.get('車位','未提供')}
+        """
+        try:
+            avg_price = compute_avg_price(df, selected_row.get('類型'))
+            fig = px.bar(avg_price, x='區域', y='地坪單價(萬/坪)', color='區域', title=f'{city}平均建坪單價柱狀圖')
+            fig.update_traces(textposition='outside')
+            fig.update_layout(xaxis_title='行政區', yaxis_title='平均建坪單價 (萬/坪)', title_x=0.5, showlegend=False, template='plotly_white')
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"❌ 圖表生成過程發生錯誤：{e}")
