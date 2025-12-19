@@ -181,7 +181,7 @@ def tab1_module():
             try:
 
                 genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.5-flash")
+                model = genai.GenerativeModel("gemini-2.0-flash")
 
                 address = selected_row.get('地址')
                 city = address[:3]
