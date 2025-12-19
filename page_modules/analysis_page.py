@@ -414,12 +414,16 @@ def render_analysis_page():
                     if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
                         selected_categories.append(cat)
 
+            # 修改檢查條件
             if st.button("開始比較"):
                 if not _get_browser_key():
                     st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**")
                     st.stop()
-                if not server_key or not deepseek_key:
-                    st.error("❌ 請在側邊欄填入 Server Key 與 DeepSeek Key")
+                if not server_key:
+                    st.error("❌ 請在側邊欄填入 Google Maps **Server Key**")
+                    st.stop()
+                if not deepseek_key:
+                    st.error("❌ 請在側邊欄填入 **DeepSeek API Key**")
                     st.stop()
                 if choice_a == choice_b:
                     st.warning("⚠️ 請選擇兩個不同房屋")
