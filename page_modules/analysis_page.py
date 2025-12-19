@@ -671,18 +671,18 @@ def render_analysis_page():
                 # 合併人口資料（依行政區 + 年份）
                 df_weighted["民國年"] = df_weighted["季度名稱"].str[:3].astype(int)
                 pop_grouped_district = pop_long.groupby(["縣市", "行政區", "民國年"])["人口數"].last().reset_index()
-                merged = pd.merge(df_weighted, pop_grouped_district, on=["縣市", "行政區", "民國年"], how="left")
-        
+                merged_clean = merged.dropna(subset=["人口數", "加權平均房價"])
                 option = {
                     "tooltip": {"trigger": "axis"},
                     "xAxis": {"type": "value", "name": "人口數"},
                     "yAxis": {"type": "value", "name": "平均房價"},
                     "series": [
                         {"name": "人口 × 房價", "type": "scatter",
-                         "data": merged[["人口數", "加權平均房價"]].values.tolist()}
+                         "data": merged_clean[["人口數", "加權平均房價"]].values.tolist()}
                     ]
                 }
                 st_echarts(option, height="400px")
+
 
 
 
