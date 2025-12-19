@@ -510,9 +510,13 @@ def render_analysis_page():
                 city_choice = st.selectbox("選擇縣市", cities)
         
                 if city_choice != "全台":
-                    district_choice = st.selectbox("選擇行政區", ["全部"])
+                    # 抓取該縣市所有行政區，排序
+                    districts = sorted(combined_df[combined_df["縣市"] == city_choice]["行政區"].unique())
+                    # 加上「全部」選項
+                    district_choice = st.selectbox("選擇行政區", ["全部"] + districts)
                 else:
                     district_choice = "全部"
+
         
                 year_min = int(min(combined_df["民國年"].min(), pop_long["民國年"].min()))
                 year_max = int(max(combined_df["民國年"].max(), pop_long["民國年"].max()))
