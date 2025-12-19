@@ -12,3 +12,4 @@ hnswlib
 sentence-transformers>=2.2.2
 plotly
 streamlit_echarts
+openai
