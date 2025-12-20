@@ -330,6 +330,138 @@ def load_real_estate_csv(folder="./page_modules"):
     return pd.DataFrame()
 
 
+# ============================
+# 專業提示詞準備函數（移到 render_analysis_page 之前）
+# ============================
+def prepare_market_analysis_prompt(chart_type, data, real_estate_df, population_df):
+    """準備專業的市場分析提示詞"""
+    
+    base_context = f"""
+    你是一位資深不動產分析師，擁有10年市場分析經驗。
+    請針對以下數據提供專業、客觀的分析報告。
+    
+    分析範圍：
+    - 地區：{data.get('city', '全台')} - {data.get('district', '全部')}
+    - 時間：{data.get('year_range', ())} 年
+    - 數據類型：{chart_type}
+    """
+    
+    if chart_type == "不動產價格趨勢分析（含交易結構）":
+        prompt = base_context + f"""
+        
+        具體數據：
+        1. 價格趨勢：
+           - 分析期間：{data.get('years', [])} 年
+           - 新成屋價格趨勢：{data.get('new_price', [])}
+           - 中古屋價格趨勢：{data.get('old_price', [])}
+        
+        2. 交易結構：
+           - 新成屋交易量：{data.get('new_trans', [])}
+           - 中古屋交易量：{data.get('old_trans', [])}
+        
+        請提供以下分析：
+        1. 【價格走勢解讀】
+           - 新舊房屋價格差異與趨勢
+           - 價格加速度（上漲/下跌速度變化）
+           - 關鍵轉折點分析
+        
+        2. 【交易結構分析】
+           - 市場主力是新成屋還是中古屋？
+           - 交易量與價格的關係（價量關係）
+           - 是否存在「價漲量縮」或「價跌量增」現象？
+        
+        3. 【市場健康度評估】
+           - 市場是否過熱或過冷？
+           - 新舊房屋的市場競爭態勢
+        
+        4. 【投資建議】
+           - 對自住買家的建議
+           - 對投資客的建議
+           - 風險提示
+        
+        5. 【未來展望】
+           - 短期（1年）趨勢預測
+           - 長期（3-5年）可能發展
+        
+        請用專業但易懂的語言，避免過度技術術語。
+        """
+        
+    elif chart_type == "交易筆數分布（結構）":
+        prompt = base_context + f"""
+        
+        具體數據：
+        1. 交易量Top 10行政區：{data.get('top_districts', [])}
+        2. 每年Top 3行政區：{data.get('yearly_top3', {})}
+        
+        請提供以下分析：
+        1. 【區域熱度分析】
+           - 哪些行政區交易最熱絡？原因可能為何？
+           - 交易集中度分析（是否過度集中特定區域）
+        
+        2. 【時間變化趨勢】
+           - 熱門行政區是否隨時間改變？
+           - 是否有新興熱區或沒落區域？
+        
+        3. 【市場結構分析】
+           - 交易是否健康分散或多樣化？
+           - 是否存在區域發展不平衡？
+        
+        4. 【政策與發展關聯】
+           - 交易熱區與都市計畫、交通建設的關聯
+           - 地方政府政策影響
+        
+        5. 【投資策略建議】
+           - 熱區的投資風險與機會
+           - 潛力區域的識別指標
+        
+        請結合當地發展背景進行分析。
+        """
+        
+    elif chart_type == "人口 × 成交量（市場是否被壓抑）":
+        prompt = base_context + f"""
+        
+        具體數據：
+        人口與成交量趨勢：{data.get('population_trend', [])}
+        
+        請提供以下分析：
+        1. 【人口與成交量關係解讀】
+           - 兩者走勢是同步還是脫鉤？
+           - 計算人口成長率 vs 交易量成長率
+        
+        2. 【市場壓抑程度評估】
+           - 判斷市場是否被壓抑的指標
+           - 如果人口成長但成交量未成長，可能原因：
+             * 購買力不足
+             * 供給限制
+             * 政策影響（如信用管制）
+             * 價格過高
+        
+        3. 【需求與供給分析】
+           - 潛在需求估算
+           - 市場吸收率分析
+        
+        4. 【政策影響評估】
+           - 哪些政策可能影響市場供需？
+           - 現行政策的效果評估
+        
+        5. 【市場預測與建議】
+           - 如果政策放鬆，可能釋放的購買力
+           - 對不同族群（首購、換屋、投資）的影響
+           - 風險管理建議
+        
+        6. 【長期結構性問題】
+           - 少子化、高齡化對市場的長期影響
+           - 住宅類型需求的結構性變化
+        
+        請提供具體的數據解讀與實務建議。
+        """
+    
+    else:
+        prompt = base_context + "\n請提供一般性的市場趨勢分析。"
+    
+    return prompt
+
+
 # ===========================
 # 分析頁面主程式
 # ===========================
@@ -508,671 +640,546 @@ def render_analysis_page():
                 st.write(st.session_state.gemini_result)
 
 
-        # ============================
-        # Tab3: 市場趨勢分析（整合人口資料）
-        # ============================
-        with tab3:
-            st.subheader("📊 市場趨勢分析")
-            
-            # 初始化 session state
-            if 'market_analysis_result' not in st.session_state:
-                st.session_state.market_analysis_result = None
-            if 'market_analysis_key' not in st.session_state:
-                st.session_state.market_analysis_key = None
+    # ============================
+    # Tab3: 市場趨勢分析（整合人口資料）
+    # ============================
+    with tab3:
+        st.subheader("📊 市場趨勢分析")
         
-            # -----------------------------
-            # 載入資料
-            # -----------------------------
-            combined_df = load_real_estate_csv(folder="./page_modules")
-            population_df = load_population_csv(folder="./page_modules")
-        
-            if combined_df.empty or population_df.empty:
-                st.info("📂 找不到房產或人口資料")
-                st.stop()
-        
-            # -----------------------------
-            # 基本清理
-            # -----------------------------
-            combined_df["民國年"] = combined_df["季度"].str[:3].astype(int)
-        
-            population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
-            population_df["縣市"] = population_df["縣市"].astype(str).str.strip()
-            population_df["行政區"] = population_df["行政區"].astype(str).str.strip()
-        
-            # -----------------------------
-            # 人口資料轉長格式
-            # -----------------------------
-            year_cols = [c for c in population_df.columns if "年" in c]
-            pop_long = population_df.melt(
-                id_vars=["縣市", "行政區"],
-                value_vars=year_cols,
-                var_name="年度",
-                value_name="人口數"
-            )
-        
-            pop_long["人口數"] = (
-                pop_long["人口數"].astype(str).str.replace(",", "").astype(int)
-            )
-            pop_long["民國年"] = pop_long["年度"].str[:3].astype(int)
-        
-            # -----------------------------
-            # 篩選條件
-            # -----------------------------
-            col_main, col_filter = st.columns([3, 1])
-        
-            with col_filter:
-                cities = ["全台"] + sorted(combined_df["縣市"].unique())
-                city_choice = st.selectbox("選擇縣市", cities)
-        
-                if city_choice != "全台":
-                    district_choice = st.selectbox(
-                        "選擇行政區",
-                        ["全部"] + sorted(
-                            combined_df[combined_df["縣市"] == city_choice]["行政區"].unique()
-                        )
-                    )
-                else:
-                    district_choice = "全部"
-        
-                year_min = int(min(combined_df["民國年"].min(), pop_long["民國年"].min()))
-                year_max = int(max(combined_df["民國年"].max(), pop_long["民國年"].max()))
-        
-                year_range = st.slider(
-                    "選擇分析年份",
-                    min_value=year_min,
-                    max_value=year_max,
-                    value=(year_min, year_max)
-                )
-        
-            # -----------------------------
-            # 不動產資料篩選
-            # -----------------------------
-            re_df = combined_df[
-                (combined_df["民國年"] >= year_range[0]) &
-                (combined_df["民國年"] <= year_range[1])
-            ]
-        
+        # 初始化 session state
+        if 'market_analysis_result' not in st.session_state:
+            st.session_state.market_analysis_result = None
+        if 'market_analysis_key' not in st.session_state:
+            st.session_state.market_analysis_key = None
+
+        # -----------------------------
+        # 載入資料
+        # -----------------------------
+        combined_df = load_real_estate_csv(folder="./page_modules")
+        population_df = load_population_csv(folder="./page_modules")
+
+        if combined_df.empty or population_df.empty:
+            st.info("📂 找不到房產或人口資料")
+            st.stop()
+
+        # -----------------------------
+        # 基本清理
+        # -----------------------------
+        combined_df["民國年"] = combined_df["季度"].str[:3].astype(int)
+
+        population_df.columns = [str(c).strip().replace("　", "") for c in population_df.columns]
+        population_df["縣市"] = population_df["縣市"].astype(str).str.strip()
+        population_df["行政區"] = population_df["行政區"].astype(str).str.strip()
+
+        # -----------------------------
+        # 人口資料轉長格式
+        # -----------------------------
+        year_cols = [c for c in population_df.columns if "年" in c]
+        pop_long = population_df.melt(
+            id_vars=["縣市", "行政區"],
+            value_vars=year_cols,
+            var_name="年度",
+            value_name="人口數"
+        )
+
+        pop_long["人口數"] = (
+            pop_long["人口數"].astype(str).str.replace(",", "").astype(int)
+        )
+        pop_long["民國年"] = pop_long["年度"].str[:3].astype(int)
+
+        # -----------------------------
+        # 篩選條件
+        # -----------------------------
+        col_main, col_filter = st.columns([3, 1])
+
+        with col_filter:
+            cities = ["全台"] + sorted(combined_df["縣市"].unique())
+            city_choice = st.selectbox("選擇縣市", cities)
+
             if city_choice != "全台":
-                re_df = re_df[re_df["縣市"] == city_choice]
-                if district_choice != "全部":
-                    re_df = re_df[re_df["行政區"] == district_choice]
-        
-            # -----------------------------
-            # 人口資料篩選
-            # -----------------------------
-            pop_df = pop_long[
-                (pop_long["民國年"] >= year_range[0]) &
-                (pop_long["民國年"] <= year_range[1])
-            ]
-        
-            if city_choice == "全台":
-                pop_df = pop_df[pop_df["縣市"] == pop_df["行政區"]]
-            elif district_choice == "全部":
-                pop_df = pop_df[
-                    (pop_df["縣市"] == city_choice) &
-                    (pop_df["行政區"] == city_choice)
-                ]
-            else:
-                pop_df = pop_df[
-                    (pop_df["縣市"] == city_choice) &
-                    (pop_df["行政區"] == district_choice)
-                ]
-        
-            # -----------------------------
-            # 顯示資料表（保留原有的兩個表格）
-            # -----------------------------
-            with col_main:
-                # 表格 1：不動產資料
-                with st.expander("📂 表一：不動產資料（點擊展開）", expanded=True):
-                    if not re_df.empty:
-                        st.dataframe(re_df, use_container_width=True)
-                        st.caption(f"共 {len(re_df)} 筆不動產交易記錄")
-                    else:
-                        st.warning("該條件下無不動產資料")
-        
-                # 表格 2：人口資料（年度）
-                with st.expander("👥 表二：人口資料（年度，點擊展開）", expanded=False):
-                    if not pop_df.empty:
-                        # 建立樞紐表顯示年度人口
-                        pivot_df = pop_df.pivot_table(
-                            index=["縣市", "行政區"],
-                            columns="民國年",
-                            values="人口數",
-                            aggfunc="last"
-                        ).fillna(0).astype(int)
-                        
-                        st.dataframe(pivot_df, use_container_width=True)
-                        st.caption(f"人口資料範圍：{year_range[0]} - {year_range[1]} 年")
-                    else:
-                        st.warning("該條件下無人口資料")
-        
-            # -----------------------------
-            # 選擇分析類型
-            # -----------------------------
-            st.markdown("---")
-            st.subheader("📈 圖表分析")
-            
-            chart_type = st.selectbox(
-                "選擇分析類型",
-                [
-                    "不動產價格趨勢分析（含交易結構）",
-                    "交易筆數分布（結構）",
-                    "人口 × 成交量（市場是否被壓抑）"
-                ],
-                key="market_chart_type"
-            )
-        
-            # =====================================================
-            # ① 價格趨勢分析（＋交易結構）
-            # =====================================================
-            if chart_type == "不動產價格趨勢分析（含交易結構）":
-        
-                # ---- 價格趨勢 ----
-                price_df = re_df.groupby(
-                    ["民國年", "BUILD"]
-                )["平均單價元平方公尺"].mean().reset_index()
-        
-                years = sorted(price_df["民國年"].unique())
-        
-                def safe_mean_price(year, build):
-                    s = price_df[
-                        (price_df["民國年"] == year) &
-                        (price_df["BUILD"] == build)
-                    ]["平均單價元平方公尺"]
-                    return int(s.mean()) if not s.empty else 0
-        
-                new_price = [safe_mean_price(y, "新成屋") for y in years]
-                old_price = [safe_mean_price(y, "中古屋") for y in years]
-        
-                st.markdown("### 📈 價格趨勢（新成屋 vs 中古屋）")
-                st_echarts({
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": ["新成屋", "中古屋"]},
-                    "xAxis": {"type": "category", "data": [str(y) for y in years]},
-                    "yAxis": {"type": "value"},
-                    "series": [
-                        {"name": "新成屋", "type": "line", "data": new_price},
-                        {"name": "中古屋", "type": "line", "data": old_price}
-                    ]
-                }, height="350px")
-        
-                # 顯示數據摘要
-                col1, col2 = st.columns(2)
-                with col1:
-                    if new_price:
-                        latest_new = new_price[-1]
-                        first_new = new_price[0]
-                        change = ((latest_new - first_new) / first_new * 100) if first_new > 0 else 0
-                        st.metric("新成屋價格變化", f"{latest_new:,.0f} 元/㎡", 
-                                 f"{change:+.1f}%")
-                
-                with col2:
-                    if old_price:
-                        latest_old = old_price[-1]
-                        first_old = old_price[0]
-                        change = ((latest_old - first_old) / first_old * 100) if first_old > 0 else 0
-                        st.metric("中古屋價格變化", f"{latest_old:,.0f} 元/㎡", 
-                                 f"{change:+.1f}%")
-        
-                # ---- 交易結構（堆疊） ----
-                trans_df = re_df.groupby(
-                    ["民國年", "BUILD"]
-                )["交易筆數"].sum().reset_index()
-        
-                def safe_sum_trans(year, build):
-                    s = trans_df[
-                        (trans_df["民國年"] == year) &
-                        (trans_df["BUILD"] == build)
-                    ]["交易筆數"]
-                    return int(s.sum()) if not s.empty else 0
-        
-                new_trans = [safe_sum_trans(y, "新成屋") for y in years]
-                old_trans = [safe_sum_trans(y, "中古屋") for y in years]
-        
-                st.markdown("### 📊 交易結構（量的來源）")
-                st_echarts({
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": ["新成屋", "中古屋"]},
-                    "xAxis": {"type": "category", "data": [str(y) for y in years]},
-                    "yAxis": {"type": "value"},
-                    "series": [
-                        {"name": "新成屋", "type": "bar", "stack": "total", "data": new_trans},
-                        {"name": "中古屋", "type": "bar", "stack": "total", "data": old_trans}
-                    ]
-                }, height="350px")
-        
-                # 儲存資料供 Gemini 分析
-                price_data = {
-                    "years": years,
-                    "new_price": new_price,
-                    "old_price": old_price,
-                    "new_trans": new_trans,
-                    "old_trans": old_trans,
-                    "city": city_choice,
-                    "district": district_choice,
-                    "year_range": year_range,
-                    "chart_type": "價格趨勢與交易結構",
-                    "total_transactions": sum(new_trans) + sum(old_trans)
-                }
-                
-            # =====================================================
-            # ② 交易筆數分布（結構）
-            # =====================================================
-            elif chart_type == "交易筆數分布（結構）":
-        
-                # 行政區交易量排行（Top 10）
-                total_trans = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
-                total_trans = total_trans.sort_values("交易筆數", ascending=True).tail(10)
-        
-                st.markdown("### 📊 行政區交易量排行（Top 10）")
-                st_echarts({
-                    "tooltip": {"trigger": "axis"},
-                    "xAxis": {"type": "value"},
-                    "yAxis": {
-                        "type": "category",
-                        "data": total_trans["行政區"].tolist()
-                    },
-                    "series": [
-                        {"type": "bar", "data": total_trans["交易筆數"].astype(int).tolist()}
-                    ]
-                }, height="400px")
-        
-                # 顯示統計摘要
-                if not total_trans.empty:
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        total = total_trans["交易筆數"].sum()
-                        st.metric("總交易筆數", f"{total:,}")
-                    with col2:
-                        avg = total_trans["交易筆數"].mean()
-                        st.metric("平均交易筆數", f"{avg:,.0f}")
-                    with col3:
-                        top_area = total_trans.iloc[-1]["行政區"]
-                        top_value = total_trans.iloc[-1]["交易筆數"]
-                        st.metric("交易最熱區", top_area, f"{top_value:,} 筆")
-        
-                # 每年交易筆數 Top 3
-                with st.expander("📂 查看每年交易筆數 Top 3 行政區"):
-                    years = sorted(re_df["民國年"].unique())
-                    yearly_top3_data = {}
-                    
-                    for y in years:
-                        df_y = re_df[re_df["民國年"] == y]
-                        top3 = df_y.groupby("行政區")["交易筆數"].sum().reset_index()
-                        top3 = top3.sort_values("交易筆數", ascending=False).head(3)
-                        yearly_top3_data[y] = top3
-                        
-                        st.markdown(f"#### {y} 年")
-                        st.dataframe(top3, use_container_width=True)
-        
-                # 儲存資料供 Gemini 分析
-                transaction_data = {
-                    "top_districts": total_trans.to_dict('records'),
-                    "yearly_top3": yearly_top3_data,
-                    "city": city_choice,
-                    "district": district_choice,
-                    "year_range": year_range,
-                    "chart_type": "交易筆數分布",
-                    "total_years": len(years)
-                }
-                
-            # =====================================================
-            # ③ 人口 × 成交量
-            # =====================================================
-            elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-        
-                pop_year = pop_df.groupby("民國年")["人口數"].last().reset_index()
-                trans_year = re_df.groupby("民國年")["交易筆數"].sum().reset_index()
-        
-                merged = pd.merge(pop_year, trans_year, on="民國年", how="left").fillna(0)
-        
-                st.markdown("### 📊 人口與成交量趨勢對比")
-                st_echarts({
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": ["人口數", "成交量"]},
-                    "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
-                    "yAxis": [{"type": "value"}, {"type": "value"}],
-                    "series": [
-                        {"name": "人口數", "type": "line", "data": merged["人口數"].tolist()},
-                        {"name": "成交量", "type": "line", "yAxisIndex": 1, "data": merged["交易筆數"].tolist()}
-                    ]
-                }, height="400px")
-        
-                # 計算市場壓抑指數（簡單版）
-                if len(merged) > 1:
-                    pop_change = ((merged["人口數"].iloc[-1] - merged["人口數"].iloc[0]) / merged["人口數"].iloc[0]) * 100
-                    trans_change = ((merged["交易筆數"].iloc[-1] - merged["交易筆數"].iloc[0]) / merged["交易筆數"].iloc[0]) * 100
-                    
-                    # 簡單壓抑指標：人口成長率 - 交易量成長率
-                    suppression_index = pop_change - trans_change if pop_change > 0 else 0
-                    
-                    # 顯示指標
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        st.metric("人口成長率", f"{pop_change:+.1f}%")
-                    with col2:
-                        st.metric("交易量成長率", f"{trans_change:+.1f}%")
-                    with col3:
-                        st.metric("市場壓抑指標", f"{suppression_index:.1f}%")
-                    
-                    # 提供解讀
-                    if suppression_index > 15:
-                        st.error("🚨 高度壓抑市場：人口顯著成長但交易量停滯")
-                        st.info("可能原因：高房價、貸款限制、供給不足、政策打壓")
-                    elif suppression_index > 5:
-                        st.warning("⚠️ 中度壓抑市場：人口成長快於交易量")
-                        st.info("可能原因：購買力成長不足、市場觀望氣氛濃厚")
-                    elif suppression_index < -15:
-                        st.success("🚀 高度活躍市場：交易量成長遠超人口成長")
-                        st.info("可能原因：投資需求旺盛、預期心理、政策利多")
-                    elif suppression_index < -5:
-                        st.info("📈 活躍市場：交易量成長快於人口成長")
-                    else:
-                        st.success("✅ 平衡市場：人口與交易量同步發展")
-        
-                # 儲存資料供 Gemini 分析
-                population_data = {
-                    "population_trend": merged.to_dict('records'),
-                    "city": city_choice,
-                    "district": district_choice,
-                    "year_range": year_range,
-                    "chart_type": "人口與成交量關係",
-                    "pop_change": pop_change if len(merged) > 1 else 0,
-                    "trans_change": trans_change if len(merged) > 1 else 0,
-                    "suppression_index": suppression_index if len(merged) > 1 else 0
-                }
-        
-            # =====================================================
-            # AI 分析按鈕區塊
-            # =====================================================
-            st.markdown("---")
-            st.subheader("🤖 AI 市場趨勢分析")
-            
-            # 建立唯一的分析鍵值
-            analysis_params_key = f"{chart_type}_{city_choice}_{district_choice}_{year_range[0]}_{year_range[1]}"
-            
-            # 檢查是否需要重新分析
-            should_reanalyze = (
-                st.session_state.get("market_analysis_key") != analysis_params_key or
-                st.session_state.market_analysis_result is None
-            )
-            
-            # 如果有 Gemini Key，顯示分析按鈕
-            gemini_key = st.session_state.get("GEMINI_KEY", "")
-            
-            if gemini_key:
-                col1, col2, col3 = st.columns([1, 2, 2])
-                
-                with col1:
-                    if st.button("🚀 啟動 AI 分析", type="primary", use_container_width=True):
-                        # 防爆檢查
-                        now = time.time()
-                        last = st.session_state.get("last_market_gemini_call", 0)
-                        
-                        if now - last < 30:
-                            st.warning("⚠️ Gemini 分析請等待 30 秒後再試")
-                            st.stop()
-                        
-                        st.session_state.last_market_gemini_call = now
-                        
-                        # 根據圖表類型準備資料
-                        if chart_type == "不動產價格趨勢分析（含交易結構）":
-                            analysis_data = price_data
-                        elif chart_type == "交易筆數分布（結構）":
-                            analysis_data = transaction_data
-                        elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-                            analysis_data = population_data
-                        else:
-                            analysis_data = {}
-                        
-                        # 準備專業提示詞
-                        prompt = prepare_market_analysis_prompt(chart_type, analysis_data, re_df, pop_df)
-                        
-                        # 顯示提示詞預覽（可選）
-                        with st.expander("📝 查看分析提示詞"):
-                            st.text_area("Gemini 將收到的提示詞", prompt, height=300)
-                        
-                        # 呼叫 Gemini
-                        with st.spinner("🧠 AI 分析市場趨勢中..."):
-                            try:
-                                genai.configure(api_key=gemini_key)
-                                model = genai.GenerativeModel("gemini-2.0-flash")
-                                
-                                resp = model.generate_content(prompt)
-                                
-                                # 儲存結果
-                                st.session_state.market_analysis_result = resp.text
-                                st.session_state.market_analysis_key = analysis_params_key
-                                
-                                st.success("✅ AI 分析完成！")
-                                
-                            except Exception as e:
-                                st.error(f"❌ Gemini API 錯誤: {str(e)}")
-                                st.info("請檢查：\n1. API 金鑰是否正確\n2. 配額是否用盡\n3. 網路連線是否正常")
-                
-                with col2:
-                    # 顯示分析狀態
-                    if st.session_state.market_analysis_key == analysis_params_key:
-                        st.success("✅ 已有分析結果")
-                    elif should_reanalyze:
-                        st.info("🔄 需要重新分析")
-                    else:
-                        st.info("👆 點擊按鈕開始分析")
-                        
-                with col3:
-                    # 清除分析結果按鈕
-                    if st.button("🗑️ 清除分析結果", type="secondary", use_container_width=True):
-                        st.session_state.market_analysis_result = None
-                        st.session_state.market_analysis_key = None
-                        st.rerun()
-            
-            else:
-                st.warning("請在側邊欄填入 Gemini API 金鑰以使用 AI 分析功能")
-            
-            # =====================================================
-            # 顯示 AI 分析結果
-            # =====================================================
-            if st.session_state.market_analysis_result and st.session_state.market_analysis_key == analysis_params_key:
-                st.markdown("### 📊 AI 分析報告")
-                
-                # 美化顯示結果
-                with st.container():
-                    st.markdown("---")
-                    st.markdown(st.session_state.market_analysis_result)
-                    st.markdown("---")
-                
-                # 額外提問功能
-                st.subheader("💬 深入提問")
-                
-                col_quest, col_btn = st.columns([3, 1])
-                
-                with col_quest:
-                    user_question = st.text_area(
-                        "對分析結果有進一步問題嗎？",
-                        placeholder="例如：根據這個趨勢，未來一年的房價會如何變化？投資建議？風險評估？",
-                        label_visibility="collapsed"
+                district_choice = st.selectbox(
+                    "選擇行政區",
+                    ["全部"] + sorted(
+                        combined_df[combined_df["縣市"] == city_choice]["行政區"].unique()
                     )
-                
-                with col_btn:
-                    ask_disabled = not (user_question and gemini_key)
-                    if st.button("🔍 提問", type="secondary", use_container_width=True, disabled=ask_disabled):
-                        # 防爆檢查
-                        now = time.time()
-                        last = st.session_state.get("last_gemini_question", 0)
-                        
-                        if now - last < 15:
-                            st.warning("⚠️ 提問請等待 15 秒後再試")
-                            st.stop()
-                        
-                        st.session_state.last_gemini_question = now
-                        
-                        with st.spinner("思考中..."):
-                            try:
-                                genai.configure(api_key=gemini_key)
-                                model = genai.GenerativeModel("gemini-2.0-flash")
-                                
-                                follow_up_prompt = f"""
-                                根據先前的市場分析，回答用戶的後續問題。
-                                
-                                【先前分析摘要】
-                                {st.session_state.market_analysis_result[:1000]}...
-                                
-                                【用戶提問】
-                                {user_question}
-                                
-                                【分析地區與時間】
-                                - 地區：{city_choice} - {district_choice}
-                                - 時間範圍：{year_range[0]} - {year_range[1]} 年
-                                - 圖表類型：{chart_type}
-                                
-                                【請提供】
-                                1. 基於數據的直接回應
-                                2. 可能的影響因素（經濟、政策、供需等）
-                                3. 實用建議（自住、投資、風險管理等）
-                                4. 相關風險提醒
-                                
-                                回答請保持專業、客觀，避免過度推測。如數據不足請說明限制。
-                                """
-                                
-                                resp = model.generate_content(follow_up_prompt)
-                                
-                                st.markdown("### 💡 AI 回應")
-                                st.write(resp.text)
-                                
-                            except Exception as e:
-                                st.error(f"❌ 提問失敗: {str(e)}")
-            
-            elif should_reanalyze and gemini_key:
-                st.info("👆 點擊上方「啟動 AI 分析」按鈕，獲取專業市場分析報告")
-        
-        
-        # ============================
-        # 專業提示詞準備函數
-        # ============================
-        def prepare_market_analysis_prompt(chart_type, data, real_estate_df, population_df):
-            """準備專業的市場分析提示詞"""
-            
-            base_context = f"""
-            你是一位資深不動產分析師，擁有10年市場分析經驗。
-            請針對以下數據提供專業、客觀的分析報告。
-            
-            分析範圍：
-            - 地區：{data.get('city', '全台')} - {data.get('district', '全部')}
-            - 時間：{data.get('year_range', ())} 年
-            - 數據類型：{chart_type}
-            """
-            
-            if chart_type == "不動產價格趨勢分析（含交易結構）":
-                prompt = base_context + f"""
-                
-                具體數據：
-                1. 價格趨勢：
-                   - 分析期間：{data.get('years', [])} 年
-                   - 新成屋價格趨勢：{data.get('new_price', [])}
-                   - 中古屋價格趨勢：{data.get('old_price', [])}
-                
-                2. 交易結構：
-                   - 新成屋交易量：{data.get('new_trans', [])}
-                   - 中古屋交易量：{data.get('old_trans', [])}
-                
-                請提供以下分析：
-                1. 【價格走勢解讀】
-                   - 新舊房屋價格差異與趨勢
-                   - 價格加速度（上漲/下跌速度變化）
-                   - 關鍵轉折點分析
-                
-                2. 【交易結構分析】
-                   - 市場主力是新成屋還是中古屋？
-                   - 交易量與價格的關係（價量關係）
-                   - 是否存在「價漲量縮」或「價跌量增」現象？
-                
-                3. 【市場健康度評估】
-                   - 市場是否過熱或過冷？
-                   - 新舊房屋的市場競爭態勢
-                
-                4. 【投資建議】
-                   - 對自住買家的建議
-                   - 對投資客的建議
-                   - 風險提示
-                
-                5. 【未來展望】
-                   - 短期（1年）趨勢預測
-                   - 長期（3-5年）可能發展
-                
-                請用專業但易懂的語言，避免過度技術術語。
-                """
-                
-            elif chart_type == "交易筆數分布（結構）":
-                prompt = base_context + f"""
-                
-                具體數據：
-                1. 交易量Top 10行政區：{data.get('top_districts', [])}
-                2. 每年Top 3行政區：{data.get('yearly_top3', {})}
-                
-                請提供以下分析：
-                1. 【區域熱度分析】
-                   - 哪些行政區交易最熱絡？原因可能為何？
-                   - 交易集中度分析（是否過度集中特定區域）
-                
-                2. 【時間變化趨勢】
-                   - 熱門行政區是否隨時間改變？
-                   - 是否有新興熱區或沒落區域？
-                
-                3. 【市場結構分析】
-                   - 交易是否健康分散或多樣化？
-                   - 是否存在區域發展不平衡？
-                
-                4. 【政策與發展關聯】
-                   - 交易熱區與都市計畫、交通建設的關聯
-                   - 地方政府政策影響
-                
-                5. 【投資策略建議】
-                   - 熱區的投資風險與機會
-                   - 潛力區域的識別指標
-                
-                請結合當地發展背景進行分析。
-                """
-                
-            elif chart_type == "人口 × 成交量（市場是否被壓抑）":
-                prompt = base_context + f"""
-                
-                具體數據：
-                人口與成交量趨勢：{data.get('population_trend', [])}
-                
-                請提供以下分析：
-                1. 【人口與成交量關係解讀】
-                   - 兩者走勢是同步還是脫鉤？
-                   - 計算人口成長率 vs 交易量成長率
-                
-                2. 【市場壓抑程度評估】
-                   - 判斷市場是否被壓抑的指標
-                   - 如果人口成長但成交量未成長，可能原因：
-                     * 購買力不足
-                     * 供給限制
-                     * 政策影響（如信用管制）
-                     * 價格過高
-                
-                3. 【需求與供給分析】
-                   - 潛在需求估算
-                   - 市場吸收率分析
-                
-                4. 【政策影響評估】
-                   - 哪些政策可能影響市場供需？
-                   - 現行政策的效果評估
-                
-                5. 【市場預測與建議】
-                   - 如果政策放鬆，可能釋放的購買力
-                   - 對不同族群（首購、換屋、投資）的影響
-                   - 風險管理建議
-                
-                6. 【長期結構性問題】
-                   - 少子化、高齡化對市場的長期影響
-                   - 住宅類型需求的結構性變化
-                
-                請提供具體的數據解讀與實務建議。
-                """
-            
+                )
             else:
-                prompt = base_context + "\n請提供一般性的市場趨勢分析。"
+                district_choice = "全部"
+
+            year_min = int(min(combined_df["民國年"].min(), pop_long["民國年"].min()))
+            year_max = int(max(combined_df["民國年"].max(), pop_long["民國年"].max()))
+
+            year_range = st.slider(
+                "選擇分析年份",
+                min_value=year_min,
+                max_value=year_max,
+                value=(year_min, year_max)
+            )
+
+        # -----------------------------
+        # 不動產資料篩選
+        # -----------------------------
+        re_df = combined_df[
+            (combined_df["民國年"] >= year_range[0]) &
+            (combined_df["民國年"] <= year_range[1])
+        ]
+
+        if city_choice != "全台":
+            re_df = re_df[re_df["縣市"] == city_choice]
+            if district_choice != "全部":
+                re_df = re_df[re_df["行政區"] == district_choice]
+
+        # -----------------------------
+        # 人口資料篩選
+        # -----------------------------
+        pop_df = pop_long[
+            (pop_long["民國年"] >= year_range[0]) &
+            (pop_long["民國年"] <= year_range[1])
+        ]
+
+        if city_choice == "全台":
+            pop_df = pop_df[pop_df["縣市"] == pop_df["行政區"]]
+        elif district_choice == "全部":
+            pop_df = pop_df[
+                (pop_df["縣市"] == city_choice) &
+                (pop_df["行政區"] == city_choice)
+            ]
+        else:
+            pop_df = pop_df[
+                (pop_df["縣市"] == city_choice) &
+                (pop_df["行政區"] == district_choice)
+            ]
+
+        # -----------------------------
+        # 顯示資料表（保留原有的兩個表格）
+        # -----------------------------
+        with col_main:
+            # 表格 1：不動產資料
+            with st.expander("📂 表一：不動產資料（點擊展開）", expanded=True):
+                if not re_df.empty:
+                    st.dataframe(re_df, use_container_width=True)
+                    st.caption(f"共 {len(re_df)} 筆不動產交易記錄")
+                else:
+                    st.warning("該條件下無不動產資料")
+
+            # 表格 2：人口資料（年度）
+            with st.expander("👥 表二：人口資料（年度，點擊展開）", expanded=False):
+                if not pop_df.empty:
+                    # 建立樞紐表顯示年度人口
+                    pivot_df = pop_df.pivot_table(
+                        index=["縣市", "行政區"],
+                        columns="民國年",
+                        values="人口數",
+                        aggfunc="last"
+                    ).fillna(0).astype(int)
+                    
+                    st.dataframe(pivot_df, use_container_width=True)
+                    st.caption(f"人口資料範圍：{year_range[0]} - {year_range[1]} 年")
+                else:
+                    st.warning("該條件下無人口資料")
+
+        # -----------------------------
+        # 選擇分析類型
+        # -----------------------------
+        st.markdown("---")
+        st.subheader("📈 圖表分析")
+        
+        chart_type = st.selectbox(
+            "選擇分析類型",
+            [
+                "不動產價格趨勢分析（含交易結構）",
+                "交易筆數分布（結構）",
+                "人口 × 成交量（市場是否被壓抑）"
+            ],
+            key="market_chart_type"
+        )
+
+        # =====================================================
+        # ① 價格趨勢分析（＋交易結構）
+        # =====================================================
+        if chart_type == "不動產價格趨勢分析（含交易結構）":
+
+            # ---- 價格趨勢 ----
+            price_df = re_df.groupby(
+                ["民國年", "BUILD"]
+            )["平均單價元平方公尺"].mean().reset_index()
+
+            years = sorted(price_df["民國年"].unique())
+
+            def safe_mean_price(year, build):
+                s = price_df[
+                    (price_df["民國年"] == year) &
+                    (price_df["BUILD"] == build)
+                ]["平均單價元平方公尺"]
+                return int(s.mean()) if not s.empty else 0
+
+            new_price = [safe_mean_price(y, "新成屋") for y in years]
+            old_price = [safe_mean_price(y, "中古屋") for y in years]
+
+            st.markdown("### 📈 價格趨勢（新成屋 vs 中古屋）")
+            st_echarts({
+                "tooltip": {"trigger": "axis"},
+                "legend": {"data": ["新成屋", "中古屋"]},
+                "xAxis": {"type": "category", "data": [str(y) for y in years]},
+                "yAxis": {"type": "value"},
+                "series": [
+                    {"name": "新成屋", "type": "line", "data": new_price},
+                    {"name": "中古屋", "type": "line", "data": old_price}
+                ]
+            }, height="350px")
+
+            # 顯示數據摘要
+            col1, col2 = st.columns(2)
+            with col1:
+                if new_price:
+                    latest_new = new_price[-1]
+                    first_new = new_price[0]
+                    change = ((latest_new - first_new) / first_new * 100) if first_new > 0 else 0
+                    st.metric("新成屋價格變化", f"{latest_new:,.0f} 元/㎡", 
+                             f"{change:+.1f}%")
             
-            return prompt
+            with col2:
+                if old_price:
+                    latest_old = old_price[-1]
+                    first_old = old_price[0]
+                    change = ((latest_old - first_old) / first_old * 100) if first_old > 0 else 0
+                    st.metric("中古屋價格變化", f"{latest_old:,.0f} 元/㎡", 
+                             f"{change:+.1f}%")
+
+            # ---- 交易結構（堆疊） ----
+            trans_df = re_df.groupby(
+                ["民國年", "BUILD"]
+            )["交易筆數"].sum().reset_index()
+
+            def safe_sum_trans(year, build):
+                s = trans_df[
+                    (trans_df["民國年"] == year) &
+                    (trans_df["BUILD"] == build)
+                ]["交易筆數"]
+                return int(s.sum()) if not s.empty else 0
+
+            new_trans = [safe_sum_trans(y, "新成屋") for y in years]
+            old_trans = [safe_sum_trans(y, "中古屋") for y in years]
+
+            st.markdown("### 📊 交易結構（量的來源）")
+            st_echarts({
+                "tooltip": {"trigger": "axis"},
+                "legend": {"data": ["新成屋", "中古屋"]},
+                "xAxis": {"type": "category", "data": [str(y) for y in years]},
+                "yAxis": {"type": "value"},
+                "series": [
+                    {"name": "新成屋", "type": "bar", "stack": "total", "data": new_trans},
+                    {"name": "中古屋", "type": "bar", "stack": "total", "data": old_trans}
+                ]
+            }, height="350px")
+
+            # 儲存資料供 Gemini 分析
+            price_data = {
+                "years": years,
+                "new_price": new_price,
+                "old_price": old_price,
+                "new_trans": new_trans,
+                "old_trans": old_trans,
+                "city": city_choice,
+                "district": district_choice,
+                "year_range": year_range,
+                "chart_type": "價格趨勢與交易結構",
+                "total_transactions": sum(new_trans) + sum(old_trans)
+            }
+            
+            # 設置 analysis_data 變數
+            analysis_data = price_data
+            
+        # =====================================================
+        # ② 交易筆數分布（結構）
+        # =====================================================
+        elif chart_type == "交易筆數分布（結構）":
+
+            # 行政區交易量排行（Top 10）
+            total_trans = re_df.groupby("行政區")["交易筆數"].sum().reset_index()
+            total_trans = total_trans.sort_values("交易筆數", ascending=True).tail(10)
+
+            st.markdown("### 📊 行政區交易量排行（Top 10）")
+            st_echarts({
+                "tooltip": {"trigger": "axis"},
+                "xAxis": {"type": "value"},
+                "yAxis": {
+                    "type": "category",
+                    "data": total_trans["行政區"].tolist()
+                },
+                "series": [
+                    {"type": "bar", "data": total_trans["交易筆數"].astype(int).tolist()}
+                ]
+            }, height="400px")
+
+            # 顯示統計摘要
+            if not total_trans.empty:
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    total = total_trans["交易筆數"].sum()
+                    st.metric("總交易筆數", f"{total:,}")
+                with col2:
+                    avg = total_trans["交易筆數"].mean()
+                    st.metric("平均交易筆數", f"{avg:,.0f}")
+                with col3:
+                    top_area = total_trans.iloc[-1]["行政區"]
+                    top_value = total_trans.iloc[-1]["交易筆數"]
+                    st.metric("交易最熱區", top_area, f"{top_value:,} 筆")
+
+            # 每年交易筆數 Top 3
+            with st.expander("📂 查看每年交易筆數 Top 3 行政區"):
+                years = sorted(re_df["民國年"].unique())
+                yearly_top3_data = {}
+                
+                for y in years:
+                    df_y = re_df[re_df["民國年"] == y]
+                    top3 = df_y.groupby("行政區")["交易筆數"].sum().reset_index()
+                    top3 = top3.sort_values("交易筆數", ascending=False).head(3)
+                    yearly_top3_data[y] = top3
+                    
+                    st.markdown(f"#### {y} 年")
+                    st.dataframe(top3, use_container_width=True)
+
+            # 儲存資料供 Gemini 分析
+            transaction_data = {
+                "top_districts": total_trans.to_dict('records'),
+                "yearly_top3": yearly_top3_data,
+                "city": city_choice,
+                "district": district_choice,
+                "year_range": year_range,
+                "chart_type": "交易筆數分布",
+                "total_years": len(years)
+            }
+            
+            # 設置 analysis_data 變數
+            analysis_data = transaction_data
+            
+        # =====================================================
+        # ③ 人口 × 成交量
+        # =====================================================
+        elif chart_type == "人口 × 成交量（市場是否被壓抑）":
+
+            pop_year = pop_df.groupby("民國年")["人口數"].last().reset_index()
+            trans_year = re_df.groupby("民國年")["交易筆數"].sum().reset_index()
+
+            merged = pd.merge(pop_year, trans_year, on="民國年", how="left").fillna(0)
+
+            st.markdown("### 📊 人口與成交量趨勢對比")
+            st_echarts({
+                "tooltip": {"trigger": "axis"},
+                "legend": {"data": ["人口數", "成交量"]},
+                "xAxis": {"type": "category", "data": merged["民國年"].astype(str).tolist()},
+                "yAxis": [{"type": "value"}, {"type": "value"}],
+                "series": [
+                    {"name": "人口數", "type": "line", "data": merged["人口數"].tolist()},
+                    {"name": "成交量", "type": "line", "yAxisIndex": 1, "data": merged["交易筆數"].tolist()}
+                ]
+            }, height="400px")
+
+            # 計算市場壓抑指數（簡單版）
+            pop_change = 0
+            trans_change = 0
+            suppression_index = 0
+            
+            if len(merged) > 1:
+                pop_change = ((merged["人口數"].iloc[-1] - merged["人口數"].iloc[0]) / merged["人口數"].iloc[0]) * 100
+                trans_change = ((merged["交易筆數"].iloc[-1] - merged["交易筆數"].iloc[0]) / merged["交易筆數"].iloc[0]) * 100
+                
+                # 簡單壓抑指標：人口成長率 - 交易量成長率
+                suppression_index = pop_change - trans_change if pop_change > 0 else 0
+                
+                # 顯示指標
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("人口成長率", f"{pop_change:+.1f}%")
+                with col2:
+                    st.metric("交易量成長率", f"{trans_change:+.1f}%")
+                with col3:
+                    st.metric("市場壓抑指標", f"{suppression_index:.1f}%")
+                
+                # 提供解讀
+                if suppression_index > 15:
+                    st.error("🚨 高度壓抑市場：人口顯著成長但交易量停滯")
+                    st.info("可能原因：高房價、貸款限制、供給不足、政策打壓")
+                elif suppression_index > 5:
+                    st.warning("⚠️ 中度壓抑市場：人口成長快於交易量")
+                    st.info("可能原因：購買力成長不足、市場觀望氣氛濃厚")
+                elif suppression_index < -15:
+                    st.success("🚀 高度活躍市場：交易量成長遠超人口成長")
+                    st.info("可能原因：投資需求旺盛、預期心理、政策利多")
+                elif suppression_index < -5:
+                    st.info("📈 活躍市場：交易量成長快於人口成長")
+                else:
+                    st.success("✅ 平衡市場：人口與交易量同步發展")
+
+            # 儲存資料供 Gemini 分析
+            population_data = {
+                "population_trend": merged.to_dict('records'),
+                "city": city_choice,
+                "district": district_choice,
+                "year_range": year_range,
+                "chart_type": "人口與成交量關係",
+                "pop_change": pop_change,
+                "trans_change": trans_change,
+                "suppression_index": suppression_index
+            }
+            
+            # 設置 analysis_data 變數
+            analysis_data = population_data
+        
+        else:
+            # 如果 chart_type 不在預期範圍內，設置空資料
+            analysis_data = {}
+
+        # =====================================================
+        # AI 分析按鈕區塊
+        # =====================================================
+        st.markdown("---")
+        st.subheader("🤖 AI 市場趨勢分析")
+        
+        # 建立唯一的分析鍵值
+        analysis_params_key = f"{chart_type}_{city_choice}_{district_choice}_{year_range[0]}_{year_range[1]}"
+        
+        # 檢查是否需要重新分析
+        should_reanalyze = (
+            st.session_state.get("market_analysis_key") != analysis_params_key or
+            st.session_state.market_analysis_result is None
+        )
+        
+        # 如果有 Gemini Key，顯示分析按鈕
+        gemini_key = st.session_state.get("GEMINI_KEY", "")
+        
+        if gemini_key:
+            col1, col2, col3 = st.columns([1, 2, 2])
+            
+            with col1:
+                if st.button("🚀 啟動 AI 分析", type="primary", use_container_width=True):
+                    # 防爆檢查
+                    now = time.time()
+                    last = st.session_state.get("last_market_gemini_call", 0)
+                    
+                    if now - last < 30:
+                        st.warning("⚠️ Gemini 分析請等待 30 秒後再試")
+                        st.stop()
+                    
+                    st.session_state.last_market_gemini_call = now
+                    
+                    # 準備專業提示詞
+                    prompt = prepare_market_analysis_prompt(chart_type, analysis_data, re_df, pop_df)
+                    
+                    # 顯示提示詞預覽（可選）
+                    with st.expander("📝 查看分析提示詞"):
+                        st.text_area("Gemini 將收到的提示詞", prompt, height=300)
+                    
+                    # 呼叫 Gemini
+                    with st.spinner("🧠 AI 分析市場趨勢中..."):
+                        try:
+                            genai.configure(api_key=gemini_key)
+                            model = genai.GenerativeModel("gemini-2.0-flash")
+                            
+                            resp = model.generate_content(prompt)
+                            
+                            # 儲存結果
+                            st.session_state.market_analysis_result = resp.text
+                            st.session_state.market_analysis_key = analysis_params_key
+                            
+                            st.success("✅ AI 分析完成！")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Gemini API 錯誤: {str(e)}")
+                            st.info("請檢查：\n1. API 金鑰是否正確\n2. 配額是否用盡\n3. 網路連線是否正常")
+            
+            with col2:
+                # 顯示分析狀態
+                if st.session_state.market_analysis_key == analysis_params_key:
+                    st.success("✅ 已有分析結果")
+                elif should_reanalyze:
+                    st.info("🔄 需要重新分析")
+                else:
+                    st.info("👆 點擊按鈕開始分析")
+                    
+            with col3:
+                # 清除分析結果按鈕
+                if st.button("🗑️ 清除分析結果", type="secondary", use_container_width=True):
+                    st.session_state.market_analysis_result = None
+                    st.session_state.market_analysis_key = None
+                    st.rerun()
+        
+        else:
+            st.warning("請在側邊欄填入 Gemini API 金鑰以使用 AI 分析功能")
+        
+        # =====================================================
+        # 顯示 AI 分析結果
+        # =====================================================
+        if st.session_state.market_analysis_result and st.session_state.market_analysis_key == analysis_params_key:
+            st.markdown("### 📊 AI 分析報告")
+            
+            # 美化顯示結果
+            with st.container():
+                st.markdown("---")
+                st.markdown(st.session_state.market_analysis_result)
+                st.markdown("---")
+            
+            # 額外提問功能
+            st.subheader("💬 深入提問")
+            
+            col_quest, col_btn = st.columns([3, 1])
+            
+            with col_quest:
+                user_question = st.text_area(
+                    "對分析結果有進一步問題嗎？",
+                    placeholder="例如：根據這個趨勢，未來一年的房價會如何變化？投資建議？風險評估？",
+                    label_visibility="collapsed"
+                )
+            
+            with col_btn:
+                ask_disabled = not (user_question and gemini_key)
+                if st.button("🔍 提問", type="secondary", use_container_width=True, disabled=ask_disabled):
+                    # 防爆檢查
+                    now = time.time()
+                    last = st.session_state.get("last_gemini_question", 0)
+                    
+                    if now - last < 15:
+                        st.warning("⚠️ 提問請等待 15 秒後再試")
+                        st.stop()
+                    
+                    st.session_state.last_gemini_question = now
+                    
+                    with st.spinner("思考中..."):
+                        try:
+                            genai.configure(api_key=gemini_key)
+                            model = genai.GenerativeModel("gemini-2.0-flash")
+                            
+                            follow_up_prompt = f"""
+                            根據先前的市場分析，回答用戶的後續問題。
+                            
+                            【先前分析摘要】
+                            {st.session_state.market_analysis_result[:1000]}...
+                            
+                            【用戶提問】
+                            {user_question}
+                            
+                            【分析地區與時間】
+                            - 地區：{city_choice} - {district_choice}
+                            - 時間範圍：{year_range[0]} - {year_range[1]} 年
+                            - 圖表類型：{chart_type}
+                            
+                            【請提供】
+                            1. 基於數據的直接回應
+                            2. 可能的影響因素（經濟、政策、供需等）
+                            3. 實用建議（自住、投資、風險管理等）
+                            4. 相關風險提醒
+                            
+                            回答請保持專業、客觀，避免過度推測。如數據不足請說明限制。
+                            """
+                            
+                            resp = model.generate_content(follow_up_prompt)
+                            
+                            st.markdown("### 💡 AI 回應")
+                            st.write(resp.text)
+                            
+                        except Exception as e:
+                            st.error(f"❌ 提問失敗: {str(e)}")
+        
+        elif should_reanalyze and gemini_key:
+            st.info("👆 點擊上方「啟動 AI 分析」按鈕，獲取專業市場分析報告")
