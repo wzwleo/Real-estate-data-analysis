@@ -619,8 +619,39 @@ def render_analysis_page():
                 ]
         
             # -----------------------------
+            # 顯示資料表（保留原有的兩個表格）
+            # -----------------------------
+            with col_main:
+                # 表格 1：不動產資料
+                with st.expander("📂 表一：不動產資料（點擊展開）", expanded=True):
+                    if not re_df.empty:
+                        st.dataframe(re_df, use_container_width=True)
+                        st.caption(f"共 {len(re_df)} 筆不動產交易記錄")
+                    else:
+                        st.warning("該條件下無不動產資料")
+        
+                # 表格 2：人口資料（年度）
+                with st.expander("👥 表二：人口資料（年度，點擊展開）", expanded=False):
+                    if not pop_df.empty:
+                        # 建立樞紐表顯示年度人口
+                        pivot_df = pop_df.pivot_table(
+                            index=["縣市", "行政區"],
+                            columns="民國年",
+                            values="人口數",
+                            aggfunc="last"
+                        ).fillna(0).astype(int)
+                        
+                        st.dataframe(pivot_df, use_container_width=True)
+                        st.caption(f"人口資料範圍：{year_range[0]} - {year_range[1]} 年")
+                    else:
+                        st.warning("該條件下無人口資料")
+        
+            # -----------------------------
             # 選擇分析類型
             # -----------------------------
+            st.markdown("---")
+            st.subheader("📈 圖表分析")
+            
             chart_type = st.selectbox(
                 "選擇分析類型",
                 [
@@ -653,7 +684,7 @@ def render_analysis_page():
                 new_price = [safe_mean_price(y, "新成屋") for y in years]
                 old_price = [safe_mean_price(y, "中古屋") for y in years]
         
-                st.markdown("### 📈 價格趨勢")
+                st.markdown("### 📈 價格趨勢（新成屋 vs 中古屋）")
                 st_echarts({
                     "tooltip": {"trigger": "axis"},
                     "legend": {"data": ["新成屋", "中古屋"]},
@@ -664,6 +695,24 @@ def render_analysis_page():
                         {"name": "中古屋", "type": "line", "data": old_price}
                     ]
                 }, height="350px")
+        
+                # 顯示數據摘要
+                col1, col2 = st.columns(2)
+                with col1:
+                    if new_price:
+                        latest_new = new_price[-1]
+                        first_new = new_price[0]
+                        change = ((latest_new - first_new) / first_new * 100) if first_new > 0 else 0
+                        st.metric("新成屋價格變化", f"{latest_new:,.0f} 元/㎡", 
+                                 f"{change:+.1f}%")
+                
+                with col2:
+                    if old_price:
+                        latest_old = old_price[-1]
+                        first_old = old_price[0]
+                        change = ((latest_old - first_old) / first_old * 100) if first_old > 0 else 0
+                        st.metric("中古屋價格變化", f"{latest_old:,.0f} 元/㎡", 
+                                 f"{change:+.1f}%")
         
                 # ---- 交易結構（堆疊） ----
                 trans_df = re_df.groupby(
@@ -702,7 +751,8 @@ def render_analysis_page():
                     "city": city_choice,
                     "district": district_choice,
                     "year_range": year_range,
-                    "chart_type": "價格趨勢與交易結構"
+                    "chart_type": "價格趨勢與交易結構",
+                    "total_transactions": sum(new_trans) + sum(old_trans)
                 }
                 
             # =====================================================
@@ -727,6 +777,20 @@ def render_analysis_page():
                     ]
                 }, height="400px")
         
+                # 顯示統計摘要
+                if not total_trans.empty:
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        total = total_trans["交易筆數"].sum()
+                        st.metric("總交易筆數", f"{total:,}")
+                    with col2:
+                        avg = total_trans["交易筆數"].mean()
+                        st.metric("平均交易筆數", f"{avg:,.0f}")
+                    with col3:
+                        top_area = total_trans.iloc[-1]["行政區"]
+                        top_value = total_trans.iloc[-1]["交易筆數"]
+                        st.metric("交易最熱區", top_area, f"{top_value:,} 筆")
+        
                 # 每年交易筆數 Top 3
                 with st.expander("📂 查看每年交易筆數 Top 3 行政區"):
                     years = sorted(re_df["民國年"].unique())
@@ -748,7 +812,8 @@ def render_analysis_page():
                     "city": city_choice,
                     "district": district_choice,
                     "year_range": year_range,
-                    "chart_type": "交易筆數分布"
+                    "chart_type": "交易筆數分布",
+                    "total_years": len(years)
                 }
                 
             # =====================================================
@@ -761,6 +826,7 @@ def render_analysis_page():
         
                 merged = pd.merge(pop_year, trans_year, on="民國年", how="left").fillna(0)
         
+                st.markdown("### 📊 人口與成交量趨勢對比")
                 st_echarts({
                     "tooltip": {"trigger": "axis"},
                     "legend": {"data": ["人口數", "成交量"]},
@@ -780,16 +846,29 @@ def render_analysis_page():
                     # 簡單壓抑指標：人口成長率 - 交易量成長率
                     suppression_index = pop_change - trans_change if pop_change > 0 else 0
                     
-                    st.metric(
-                        "📊 市場壓抑指標",
-                        f"{suppression_index:.1f}%",
-                        delta=f"人口成長{pop_change:.1f}% vs 交易成長{trans_change:.1f}%"
-                    )
+                    # 顯示指標
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("人口成長率", f"{pop_change:+.1f}%")
+                    with col2:
+                        st.metric("交易量成長率", f"{trans_change:+.1f}%")
+                    with col3:
+                        st.metric("市場壓抑指標", f"{suppression_index:.1f}%")
                     
-                    if suppression_index > 10:
-                        st.warning("⚠️ 市場可能被壓抑：人口成長但交易量未同步成長")
-                    elif suppression_index < -10:
-                        st.info("📈 市場活躍：交易量成長超過人口成長")
+                    # 提供解讀
+                    if suppression_index > 15:
+                        st.error("🚨 高度壓抑市場：人口顯著成長但交易量停滯")
+                        st.info("可能原因：高房價、貸款限制、供給不足、政策打壓")
+                    elif suppression_index > 5:
+                        st.warning("⚠️ 中度壓抑市場：人口成長快於交易量")
+                        st.info("可能原因：購買力成長不足、市場觀望氣氛濃厚")
+                    elif suppression_index < -15:
+                        st.success("🚀 高度活躍市場：交易量成長遠超人口成長")
+                        st.info("可能原因：投資需求旺盛、預期心理、政策利多")
+                    elif suppression_index < -5:
+                        st.info("📈 活躍市場：交易量成長快於人口成長")
+                    else:
+                        st.success("✅ 平衡市場：人口與交易量同步發展")
         
                 # 儲存資料供 Gemini 分析
                 population_data = {
@@ -797,7 +876,10 @@ def render_analysis_page():
                     "city": city_choice,
                     "district": district_choice,
                     "year_range": year_range,
-                    "chart_type": "人口與成交量關係"
+                    "chart_type": "人口與成交量關係",
+                    "pop_change": pop_change if len(merged) > 1 else 0,
+                    "trans_change": trans_change if len(merged) > 1 else 0,
+                    "suppression_index": suppression_index if len(merged) > 1 else 0
                 }
         
             # =====================================================
@@ -819,10 +901,10 @@ def render_analysis_page():
             gemini_key = st.session_state.get("GEMINI_KEY", "")
             
             if gemini_key:
-                col1, col2 = st.columns([1, 3])
+                col1, col2, col3 = st.columns([1, 2, 2])
                 
                 with col1:
-                    if st.button("🚀 啟動 AI 分析", type="primary"):
+                    if st.button("🚀 啟動 AI 分析", type="primary", use_container_width=True):
                         # 防爆檢查
                         now = time.time()
                         last = st.session_state.get("last_market_gemini_call", 0)
@@ -867,6 +949,22 @@ def render_analysis_page():
                             except Exception as e:
                                 st.error(f"❌ Gemini API 錯誤: {str(e)}")
                                 st.info("請檢查：\n1. API 金鑰是否正確\n2. 配額是否用盡\n3. 網路連線是否正常")
+                
+                with col2:
+                    # 顯示分析狀態
+                    if st.session_state.market_analysis_key == analysis_params_key:
+                        st.success("✅ 已有分析結果")
+                    elif should_reanalyze:
+                        st.info("🔄 需要重新分析")
+                    else:
+                        st.info("👆 點擊按鈕開始分析")
+                        
+                with col3:
+                    # 清除分析結果按鈕
+                    if st.button("🗑️ 清除分析結果", type="secondary", use_container_width=True):
+                        st.session_state.market_analysis_result = None
+                        st.session_state.market_analysis_key = None
+                        st.rerun()
             
             else:
                 st.warning("請在側邊欄填入 Gemini API 金鑰以使用 AI 分析功能")
@@ -876,19 +974,28 @@ def render_analysis_page():
             # =====================================================
             if st.session_state.market_analysis_result and st.session_state.market_analysis_key == analysis_params_key:
                 st.markdown("### 📊 AI 分析報告")
-                st.write(st.session_state.market_analysis_result)
+                
+                # 美化顯示結果
+                with st.container():
+                    st.markdown("---")
+                    st.markdown(st.session_state.market_analysis_result)
+                    st.markdown("---")
                 
                 # 額外提問功能
-                st.markdown("---")
                 st.subheader("💬 深入提問")
                 
-                user_question = st.text_area(
-                    "對分析結果有進一步問題嗎？（例如：為什麼會有這樣的趨勢？未來預測？投資建議？）",
-                    placeholder="例如：根據這個趨勢，未來一年的房價會如何變化？"
-                )
+                col_quest, col_btn = st.columns([3, 1])
                 
-                if user_question and gemini_key:
-                    if st.button("🔍 提問", type="secondary"):
+                with col_quest:
+                    user_question = st.text_area(
+                        "對分析結果有進一步問題嗎？",
+                        placeholder="例如：根據這個趨勢，未來一年的房價會如何變化？投資建議？風險評估？",
+                        label_visibility="collapsed"
+                    )
+                
+                with col_btn:
+                    ask_disabled = not (user_question and gemini_key)
+                    if st.button("🔍 提問", type="secondary", use_container_width=True, disabled=ask_disabled):
                         # 防爆檢查
                         now = time.time()
                         last = st.session_state.get("last_gemini_question", 0)
@@ -913,13 +1020,18 @@ def render_analysis_page():
                                 【用戶提問】
                                 {user_question}
                                 
+                                【分析地區與時間】
+                                - 地區：{city_choice} - {district_choice}
+                                - 時間範圍：{year_range[0]} - {year_range[1]} 年
+                                - 圖表類型：{chart_type}
+                                
                                 【請提供】
                                 1. 基於數據的直接回應
-                                2. 可能的影響因素
-                                3. 實用建議
+                                2. 可能的影響因素（經濟、政策、供需等）
+                                3. 實用建議（自住、投資、風險管理等）
                                 4. 相關風險提醒
                                 
-                                回答請保持專業、客觀，避免過度推測。
+                                回答請保持專業、客觀，避免過度推測。如數據不足請說明限制。
                                 """
                                 
                                 resp = model.generate_content(follow_up_prompt)
@@ -929,6 +1041,7 @@ def render_analysis_page():
                                 
                             except Exception as e:
                                 st.error(f"❌ 提問失敗: {str(e)}")
+            
             elif should_reanalyze and gemini_key:
                 st.info("👆 點擊上方「啟動 AI 分析」按鈕，獲取專業市場分析報告")
         
