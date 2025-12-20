@@ -436,28 +436,76 @@ def render_analysis_page():
                 with col2:
                     render_map(lat_b, lng_b, places_b, radius, title="房屋 B")
 
-                # Gemini 分析
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
-
-                places_a_text = format_places(places_a) if places_a else "無周邊資料"
-                places_b_text = format_places(places_b) if places_b else "無周邊資料"
-
-                prompt = f"""你是一位房地產分析專家，請比較以下兩間房屋的生活機能：
-
-房屋 A:
-{places_a_text}
-
-房屋 B:
-{places_b_text}
-
-請列出每間房屋的優缺點，並給出綜合結論。
-"""
-
-                st.text_area("Gemini Prompt", prompt, height=300)
-                resp = model.generate_content(prompt)
+                # ============================
+                # Gemini 分析（防爆版）
+                # ============================
+                
+                # 建立唯一 key，確保不同房屋組合才重新分析
+                analysis_key = f"{choice_a}__{choice_b}__{keyword}__{','.join(selected_categories)}"
+                
+                if (
+                    "gemini_result" not in st.session_state
+                    or st.session_state.get("gemini_key") != analysis_key
+                ):
+                
+                    now = time.time()
+                    last = st.session_state.get("last_gemini_call", 0)
+                
+                    # 免費帳號冷卻時間（非常重要）
+                    if now - last < 30:
+                        st.warning("⚠️ Gemini 分析請等待 30 秒後再試")
+                        st.stop()
+                
+                    st.session_state.last_gemini_call = now
+                
+                    with st.spinner("🧠 Gemini 分析中，請稍候..."):
+                        try:
+                            genai.configure(api_key=gemini_key)
+                            model = genai.GenerativeModel("gemini-2.0-flash")
+                
+                            # 限制輸入長度，避免 token 爆掉
+                            def format_places_safe(places, limit=12):
+                                if not places:
+                                    return "無周邊資料"
+                                return "\n".join([
+                                    f"{cat}-{kw}: {name}（{dist} 公尺）"
+                                    for cat, kw, name, lat, lng, dist, pid in places[:limit]
+                                ])
+                
+                            places_a_text = format_places_safe(places_a)
+                            places_b_text = format_places_safe(places_b)
+                
+                            prompt = f"""
+                你是一位專業房地產顧問，請比較以下兩間房屋的生活機能。
+                
+                【房屋 A 周邊設施】
+                {places_a_text}
+                
+                【房屋 B 周邊設施】
+                {places_b_text}
+                
+                請依序回答：
+                1. 房屋 A 的優點與缺點
+                2. 房屋 B 的優點與缺點
+                3. 哪一間較適合「自住」
+                4. 哪一間較適合「投資」
+                5. 簡短整體結論
+                """
+                
+                            st.text_area("Gemini Prompt（實際送出內容）", prompt, height=300)
+                
+                            resp = model.generate_content(prompt)
+                
+                            st.session_state.gemini_result = resp.text
+                            st.session_state.gemini_key = analysis_key
+                
+                        except Exception:
+                            st.error("❌ Gemini API 配額已用盡或請求過於頻繁，請稍後再試")
+                            st.stop()
+                
+                # 顯示結果（不會再呼叫 API）
                 st.subheader("📊 Gemini 分析結果")
-                st.write(resp.text)
+                st.write(st.session_state.gemini_result)
 
 
     # ============================
