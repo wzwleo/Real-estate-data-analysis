@@ -143,7 +143,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
             st.write("\n")
-            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
+            analyze_clicked = st.button("1開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
@@ -305,7 +305,7 @@ def tab1_module():
                             【其他相似房屋資料】
                             {relevant_text}
                             
-                            請只回傳一個整體分數（0～10），以純 JSON 格式：
+                            請只回傳一個整體分數（0～100），以純 JSON 格式：
                             {{ "AI總分": 0 }}
                             """
                             response_r_score = model.generate_content(prompt_r_score)
