@@ -67,7 +67,7 @@ def get_favorites_data():
     return fav_df
 
 def tab1_module():
-    ai_score_clean = ""
+    st.session_state.setdefault("ai_score_clean", "")
     fav_df = get_favorites_data()
     if fav_df.empty:
             st.header("個別分析")
@@ -144,7 +144,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
             st.write("\n")
-            analyze_clicked = st.button("1開始分析", use_container_width=True, key="solo_analysis_button")
+            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
@@ -293,7 +293,7 @@ def tab1_module():
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
                     response_score = model.generate_content(prompt_score)
-                    ai_score_clean = (response_score.text or "").strip()
+                    st.session_state["ai_score_clean"] = (response_score.text or "").strip()
                 
                 st.session_state['current_analysis_result'] = {
                     "house_title": house_title,
@@ -307,9 +307,10 @@ def tab1_module():
         if 'current_analysis_result' in st.session_state:
             st.success("✅ 分析完成")
             st.markdown("### 🧠 **Gemini 市場分析結果**")
-            st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
-            
+            st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))    
+            ai_score_clean = st.session_state.get("ai_score_clean", "")
             match = re.search(r'\{.*\}', ai_score_clean, re.DOTALL)
+
             if match:
                 try:
                     scores = json.loads(match.group())
