@@ -297,7 +297,7 @@ def tab1_module():
                         try:
                             r_text = row_to_text(r)
                             prompt_r_score = f"""
-                            你是一位台灣不動產估價師，請根據市場行情與地段條件對下列房屋進行整體評分（0～10分）。
+                            你是一位台灣不動產估價師，請根據市場行情與地段條件對下列房屋進行整體評分（0～100分）。
                             
                             【房屋資料】
                             {r['標題']} - {r_text}
@@ -352,7 +352,9 @@ def tab1_module():
             scores = st.session_state['current_analysis_result'].get('scores')
             
             if scores:
-                st.plotly_chart(plot_radar(scores), use_container_width=True)
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    st.plotly_chart(plot_radar(scores), use_container_width=True)
                 
             # 安全存取相似房型資料
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
