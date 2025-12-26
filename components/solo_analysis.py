@@ -259,6 +259,7 @@ def tab1_module():
                     
                     請分析價格合理性、坪數與屋齡，提供購買建議，避免編造不存在的數字。
                     """
+
                     
                     prompt_score = f"""
                     你是一位台灣不動產估價師，專門根據市場行情與地段條件為住宅進行客觀量化評分。
@@ -291,6 +292,32 @@ def tab1_module():
                       "地段": 0
                     }}
                     """
+
+
+                # -------------------- 對目標房型單獨評分（0~100） --------------------
+
+                with st.spinner("Gemini 正在評估目標房型總分..."):
+                    target_prompt_score = f"""
+                    你是一位台灣不動產估價師，請根據市場行情與地段條件對下列房屋進行整體評分（0～100分）。
+                    
+                    【房屋資料】
+                    {selected_text_display}
+                    
+                    【其他相似房屋資料】
+                    {relevant_text}
+                    
+                    請只回傳一個整體分數（0～100），以純 JSON 格式：
+                    {{ "AI總分": 0 }}
+                    """
+                    response_target_score = model.generate_content(target_prompt_score)
+                    ai_target_score_clean = (response_target_score.text or "").strip()
+                    match = re.search(r'\{.*\}', ai_target_score_clean, re.DOTALL)
+                    target_score = None
+                    if match:
+                        try:
+                            target_score = json.loads(match.group()).get('AI總分', None)
+                        except json.JSONDecodeError as e:
+                            st.error(f"❌ 目標房型總分 JSON 解析錯誤: {e}")
         # -------------------- 對每筆相似房型做 AI 總分 --------------------
                 with st.spinner("Gemini 正在為相似房型評分..."):
                     for r in relevant_data:
@@ -355,6 +382,9 @@ def tab1_module():
                 col1, col2 = st.columns([1, 1])
                 with col1:
                     st.plotly_chart(plot_radar(scores), use_container_width=True)
+                with col2:
+                    st.markdown(f"<h1 style='color:green; text-align:center;'>{target_score}</h1>", unsafe_allow_html=True)
+                    st.markdown("<p style='text-align:center;'>目標房型總分 (滿分100)</p>", unsafe_allow_html=True)
                 
             # 安全存取相似房型資料
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
