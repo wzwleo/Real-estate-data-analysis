@@ -67,7 +67,6 @@ def get_favorites_data():
     return fav_df
 
 def tab1_module():
-    ai_score_clean = ""
     fav_df = get_favorites_data()
     if fav_df.empty:
             st.header("個別分析")
@@ -294,11 +293,20 @@ def tab1_module():
                     response = model.generate_content(prompt)
                     response_score = model.generate_content(prompt_score)
                     ai_score_clean = (response_score.text or "").strip()
-                
+                # ✅ 新增：先解析評分
+                match = re.search(r'\{.*\}', ai_score_clean, re.DOTALL)
+                scores = None
+                if match:
+                    try:
+                        scores = json.loads(match.group())
+                    except json.JSONDecodeError as e:
+                        st.error(f"❌ JSON 解析錯誤: {e}")
+
                 st.session_state['current_analysis_result'] = {
                     "house_title": house_title,
                     "result_text": response.text,
-                    "similar_data": relevant_data
+                    "similar_data": relevant_data,
+                    "scores": scores 
                 }
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
@@ -307,20 +315,10 @@ def tab1_module():
         if 'current_analysis_result' in st.session_state:
             st.success("✅ 分析完成")
             st.markdown("### 🧠 **Gemini 市場分析結果**")
-            st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))    
-            match = re.search(r'\{.*\}', ai_score_clean, re.DOTALL)
-
-            if match:
-                try:
-                    scores = json.loads(match.group())
-                except json.JSONDecodeError as e:
-                    st.error(f"❌ JSON 解析錯誤: {e}")
-                    st.text(ai_score)
-                    scores = None
-            else:
-                st.error("❌ 無法從 AI 回傳中找到 JSON")
-                st.text(ai_score)
-                scores = None
+            st.markdown(st.session_state['current_analysis_result'].get('result_text', '無分析結果'))
+            
+            # ✅ 改從 session_state 讀取
+            scores = st.session_state['current_analysis_result'].get('scores')
             
             if scores:
                 st.plotly_chart(plot_radar(scores), use_container_width=True)
