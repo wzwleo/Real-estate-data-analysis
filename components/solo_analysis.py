@@ -364,7 +364,8 @@ def tab1_module():
                     "house_title": house_title,
                     "result_text": response.text,
                     "similar_data": relevant_data,
-                    "scores": scores 
+                    "scores": scores,
+                    "target_score": target_score
                 }
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
@@ -377,6 +378,7 @@ def tab1_module():
             
             # ✅ 改從 session_state 讀取
             scores = st.session_state['current_analysis_result'].get('scores')
+            target_score = st.session_state['current_analysis_result'].get('target_score')
             
             if scores:
                 col1, col2 = st.columns([1, 1])
