@@ -291,6 +291,34 @@ def tab1_module():
                       "地段": 0
                     }}
                     """
+        # -------------------- 對每筆相似房型做 AI 總分 --------------------
+                with st.spinner("Gemini 正在為相似房型評分..."):
+                    for r in relevant_data:
+                        try:
+                            r_text = row_to_text(r)
+                            prompt_r_score = f"""
+                            你是一位台灣不動產估價師，請根據市場行情與地段條件對下列房屋進行整體評分（0～10分）。
+                            
+                            【房屋資料】
+                            {r['標題']} - {r_text}
+                            
+                            【其他相似房屋資料】
+                            {relevant_text}
+                            
+                            請只回傳一個整體分數（0～10），以純 JSON 格式：
+                            {{ "AI總分": 0 }}
+                            """
+                            response_r_score = model.generate_content(prompt_r_score)
+                            ai_score_clean = (response_r_score.text or "").strip()
+                            match = re.search(r'\{.*\}', ai_score_clean, re.DOTALL)
+                            if match:
+                                r_score = json.loads(match.group())
+                                r['AI總分'] = round(r_score.get('AI總分', 0), 2)
+                            else:
+                                r['AI總分'] = None
+                        except Exception as e:
+                            r['AI總分'] = None
+                            st.warning(f"❌ 相似房型 {r['標題']} 評分失敗: {e}")
         # -------------------- 存入 session_state --------------------
                 with st.spinner("Gemini 正在分析中..."):
                     response = model.generate_content(prompt)
@@ -330,7 +358,7 @@ def tab1_module():
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
             if similar_data:
                 similar_df = pd.DataFrame(similar_data)
-                display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位','相似度分數(%)']
+                display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位','相似度分數(%)','AI總分']
                 # 避免 KeyError
                 similar_df = similar_df[[col for col in display_cols if col in similar_df.columns]]
                 with st.expander("相似房型資料"):
