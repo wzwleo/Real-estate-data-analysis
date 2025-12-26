@@ -237,6 +237,9 @@ def tab1_module():
                     for i, (idx, dist) in enumerate(zip(labels[0], distances[0])):
                         if idx != selected_idx:
                             house_data = df.iloc[idx].to_dict()
+                            # L2距離轉相似度百分比 (越高越相似)
+                            similarity_pct = max(0, 100 * (1 / (1 + dist)))  # 0~100%
+                            house_data['相似度分數(%)'] = round(similarity_pct, 2)
                             relevant_data.append(house_data)
 
                     # 準備文字輸入
@@ -327,11 +330,11 @@ def tab1_module():
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
             if similar_data:
                 similar_df = pd.DataFrame(similar_data)
-                display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位']
+                display_cols = ['標題','地址','建坪','主+陽','總價(萬)','屋齡','類型','格局','樓層','車位','相似度分數(%)']
                 # 避免 KeyError
                 similar_df = similar_df[[col for col in display_cols if col in similar_df.columns]]
                 with st.expander("相似房型資料"):
-                    st.dataframe(similar_df)
+                    st.dataframe(similar_df.sort_values(by='相似度分數(%)', ascending=False))
             else:
                 st.write("沒有找到相似房型")
         
