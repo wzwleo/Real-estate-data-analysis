@@ -67,6 +67,7 @@ def get_favorites_data():
     return fav_df
 
 def tab1_module():
+    ai_score_clean = ""
     fav_df = get_favorites_data()
     if fav_df.empty:
             st.header("個別分析")
@@ -175,7 +176,6 @@ def tab1_module():
         gemini_key = st.session_state.get("GEMINI_KEY","")
         ai_score = None
         if analyze_clicked:
-            ai_score_clean = ""
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
