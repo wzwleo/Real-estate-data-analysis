@@ -143,7 +143,7 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
             st.write("\n")
-            analyze_clicked = st.button("1開始分析", use_container_width=True, key="solo_analysis_button")
+            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
@@ -175,6 +175,7 @@ def tab1_module():
         gemini_key = st.session_state.get("GEMINI_KEY","")
         ai_score = None
         if analyze_clicked:
+            ai_score_clean = ""
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
@@ -228,8 +229,8 @@ def tab1_module():
                     selected_text = row_to_text(selected_row)
                     query_vec = embeddings[selected_idx:selected_idx+1]
 
-                    # 查詢相似房屋（包含自己，所以查 11 筆）
-                    top_k = 11
+                    # 查詢相似房屋（包含自己，所以查 21 筆）
+                    top_k = 21
                     labels, distances = index.knn_query(query_vec, k=top_k)
 
                     # 取得相似房屋資料（過濾掉自己）
