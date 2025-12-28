@@ -9,23 +9,23 @@ def display_pagination(df, items_per_page=10):
     # 初始化 current_search_page（僅在首次運行時）
     if 'current_search_page' not in st.session_state:
         st.session_state.current_search_page = 1
-    
+
     current_page = st.session_state.current_search_page
     total_items = len(df)
     total_pages = (total_items + items_per_page - 1) // items_per_page
-    
+
     # 確保 current_page 在有效範圍內
     current_page = max(1, min(current_page, total_pages))
-    
+
     # 更新 session_state 以確保一致性
     st.session_state.current_search_page = current_page
-    
+
     # 計算當前頁面的數據範圍
     start_idx = (current_page - 1) * items_per_page
     end_idx = min(start_idx + items_per_page, total_items)
-    
+
     current_page_data = df.iloc[start_idx:end_idx]
-    
+
     return current_page_data, current_page, total_pages, total_items
 
 def render_property_list():
@@ -34,36 +34,32 @@ def render_property_list():
     """
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
-    
+
     if 'current_search_page' not in st.session_state:
         st.session_state.current_search_page = 1
-        
+
     if 'filtered_df' not in st.session_state or st.session_state.filtered_df.empty:
         return
-    
+
     df = st.session_state.filtered_df
     search_params = st.session_state.search_params
-    
+
     current_page_data, current_page, total_pages, total_items = display_pagination(df, items_per_page=10)
-    
+
     st.subheader(f"🏠 {search_params['city']}房產列表")
-    
-    # 🔥 使用 ai_search_count 作為 key 前綴
-    key_prefix = f"ai_{st.session_state.get('ai_search_count', 0)}_"
-    
+
     for idx, (index, row) in enumerate(current_page_data.iterrows()):
-        render_property_card(row, current_page, idx, key_prefix=key_prefix)
-    
+        render_property_card(row, current_page, idx)
+
     render_pagination_controls(current_page, total_pages, total_items)
 
-def render_property_card(row, current_page, idx, key_prefix=""):
+def render_property_card(row, current_page, idx):
     """
     渲染單個房產卡片
-    key_prefix: 用於區分不同頁面的按鈕 key
     """
     with st.container():
         global_idx = (current_page - 1) * 10 + idx + 1
-        
+
         col1, col2, col3, col4 = st.columns([7, 1, 1, 2])
         with col1:
             display_age = "預售" if row['屋齡'] == 0 else f"{row['屋齡']}年"
@@ -77,20 +73,21 @@ def render_property_card(row, current_page, idx, key_prefix=""):
             if pd.notna(row['建坪']) and row['建坪'] > 0:
                 unit_price = (row['總價(萬)'] * 10000) / row['建坪']
                 st.caption(f"單價: ${unit_price:,.0f}/坪")
-        
+
         col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
         with col1:
             property_id = row['編號']
             is_fav = property_id in st.session_state.favorites
-            # 🔥 使用 key_prefix 來區分不同頁面
-            unique_key = f"{key_prefix}fav_{property_id}_{global_idx}"
-            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=unique_key):
+
+            key = f"fav_{st.session_state.get('current_search_page', 1)}_{idx}_{property_id}"
+
+            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"fav_{property_id}"):
                 if is_fav:
                     st.session_state.favorites.remove(property_id)
                 else:
                     st.session_state.favorites.add(property_id)
                 st.rerun()
-        
+
         with col7:
             property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
             st.markdown(
@@ -98,7 +95,7 @@ def render_property_card(row, current_page, idx, key_prefix=""):
                 f'<button style="padding:5px 10px;">Property Link</button></a>',
                 unsafe_allow_html=True
             )
-        
+
         st.markdown("---")
 
 def render_pagination_controls(current_page, total_pages, total_items):
