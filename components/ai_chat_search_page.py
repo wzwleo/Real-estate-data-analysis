@@ -1,9 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
 import json
-import pandas as pd
 from utils import filter_properties
 from components.property_list import render_property_list
+import pandas as pd
 
 def render_ai_chat_search():
     st.header("🤖 AI 房市顧問")
@@ -23,12 +23,9 @@ def render_ai_chat_search():
         st.error(f"❌ Gemini 初始化錯誤：{e}")
         st.stop()
     
-    # ====== 初始化 session_state ======
+    # ====== 聊天記錄初始化 ======
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    
-    if "ai_search_count" not in st.session_state:
-        st.session_state.ai_search_count = 0
     
     # ====== 顯示現有的聊天記錄 ======
     for chat in st.session_state.chat_history:
@@ -107,33 +104,25 @@ def render_ai_chat_search():
                     # 過濾資料
                     filtered_df = filter_properties(df, filters)
                     
-                    # 🔥 關鍵：每次新搜尋時更新計數器
-                    st.session_state.ai_search_count += 1
-                    
                     # 儲存到 session_state
                     st.session_state.filtered_df = filtered_df
                     st.session_state.search_params = {"city": city}
                     st.session_state.current_search_page = 1  # 重置頁碼
-                    st.session_state.is_ai_search = True  # 標記為 AI 搜尋
                     
                     # 顯示結果數量
                     result_text = f"🔍 找到 **{len(filtered_df)}** 筆符合條件的物件"
                     st.markdown(result_text)
                     
                 except json.JSONDecodeError:
-                    result_text = "❌ AI 回應格式錯誤，請重新嘗試"
-                    st.error(result_text)
+                    st.error("❌ AI 回應格式錯誤，請重新嘗試")
                     st.code(ai_reply)
                 except Exception as e:
-                    result_text = f"❌ 發生錯誤: {e}"
-                    st.error(result_text)
+                    st.error(f"❌ 發生錯誤: {e}")
         
         st.session_state.chat_history.append({"role": "assistant", "content": result_text})
         st.rerun()
     
     # ====== 顯示搜尋結果（使用你的卡片格式） ======
-    if st.session_state.get('is_ai_search', False) and \
-       'filtered_df' in st.session_state and \
-       not st.session_state.filtered_df.empty:
+    if 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
         st.markdown("---")
         render_property_list()
