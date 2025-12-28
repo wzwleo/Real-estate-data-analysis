@@ -53,9 +53,10 @@ def render_property_list():
     
     render_pagination_controls(current_page, total_pages, total_items)
 
-def render_property_card(row, current_page, idx):
+def render_property_card(row, current_page, idx, key_prefix=""):
     """
     渲染單個房產卡片
+    key_prefix: 用於區分不同頁面的按鈕 key
     """
     with st.container():
         global_idx = (current_page - 1) * 10 + idx + 1
@@ -78,10 +79,9 @@ def render_property_card(row, current_page, idx):
         with col1:
             property_id = row['編號']
             is_fav = property_id in st.session_state.favorites
-
-            key = f"fav_{st.session_state.get('current_search_page', 1)}_{idx}_{property_id}"
-            
-            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"fav_{property_id}"):
+            # 🔥 使用 key_prefix 來區分不同頁面
+            unique_key = f"{key_prefix}fav_{property_id}_{global_idx}"
+            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=unique_key):
                 if is_fav:
                     st.session_state.favorites.remove(property_id)
                 else:
