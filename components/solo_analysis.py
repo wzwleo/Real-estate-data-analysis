@@ -385,9 +385,9 @@ def tab1_module():
                 with col1:
                     st.plotly_chart(plot_radar(scores), use_container_width=True)
                 with col2:
-                    st.write("\n\n\n")
+                    
                     st.markdown(
-                        f"<h1 style='font-size:120px; color:green; text-align:center;'>{target_score}</h1>",
+                        f"<div style="margin-top:80px;"><h1 style='font-size:120px; color:green; text-align:center;'>{target_score}</h1>",
                         unsafe_allow_html=True
                     )
             # 安全存取相似房型資料
