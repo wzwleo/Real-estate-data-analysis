@@ -15,3 +15,5 @@ def render_search_page():
             
             # 顯示搜尋結果和分頁
             render_property_list()
+        with tab2:
+            render_ai_chat_search()
