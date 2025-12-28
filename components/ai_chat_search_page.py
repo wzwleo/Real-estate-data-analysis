@@ -14,7 +14,6 @@ def render_ai_chat_search():
     # ====== 初始化 Gemini API ======
     try:
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel("gemini-2.0-flash")
     except Exception as e:
         st.error(f"❌ Gemini 初始化錯誤：{e}")
         st.stop()
@@ -23,26 +22,27 @@ def render_ai_chat_search():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
-    # ====== 使用者輸入 ======
-    user_input = st.text_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』", key="ai_input")
-    
-    if st.button("送出"):
-        if user_input:
-            # 保存使用者訊息
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            try:
-                # 呼叫 Gemini AI
-                resp = model.generate_content(user_input)
-                ai_reply = resp.text  # 或根據 SDK 文檔取正確屬性
-            except Exception as e:
-                ai_reply = f"❌ API 發生錯誤: {e}"
-            
-            # 保存 AI 回答
-            st.session_state.chat_history.append({"role": "ai", "content": ai_reply})
-    
     # ====== 顯示聊天記錄 ======
     for chat in st.session_state.chat_history:
-        if chat["role"] == "user":
-            st.markdown(f"**你:** {chat['content']}")
-        else:
-            st.markdown(f"**AI:** {chat['content']}")
+        with st.chat_message(chat["role"]):
+            st.markdown(chat["content"])
+    
+    # ====== 使用者輸入 ======
+    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
+        # 顯示使用者訊息
+        st.chat_message("user").markdown(prompt)
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        
+        try:
+            # 呼叫 Gemini AI
+            resp = genai.chat(
+                model="gemini-2.0-flash",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            ai_reply = resp.last or resp.response  # 依 SDK 版本
+        except Exception as e:
+            ai_reply = f"❌ API 發生錯誤: {e}"
+        
+        # 顯示 AI 訊息
+        st.chat_message("assistant").markdown(ai_reply)
+        st.session_state.chat_history.append({"role": "ai", "content": ai_reply})
