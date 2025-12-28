@@ -48,8 +48,11 @@ def render_property_list():
     
     st.subheader(f"🏠 {search_params['city']}房產列表")
     
+    # 🔥 使用 ai_search_count 作為 key 前綴
+    key_prefix = f"ai_{st.session_state.get('ai_search_count', 0)}_"
+    
     for idx, (index, row) in enumerate(current_page_data.iterrows()):
-        render_property_card(row, current_page, idx)
+        render_property_card(row, current_page, idx, key_prefix=key_prefix)
     
     render_pagination_controls(current_page, total_pages, total_items)
 
