@@ -2,8 +2,6 @@ import streamlit as st
 import google.generativeai as genai
 
 def render_ai_chat_search():
-    st.header("🤖 AI 房市顧問")
-    st.write("你可以輸入自然語言查詢條件，AI 會幫你搜尋適合的物件。")
     
     # ====== GEMINI_KEY 驗證 ======
     gemini_key = st.session_state.get("GEMINI_KEY", "")
@@ -29,7 +27,7 @@ def render_ai_chat_search():
             st.markdown(chat["content"])
     
     # ====== 使用者輸入（固定在底部） ======
-    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
+    if prompt := st.chat_input(""):
         # 立即顯示使用者訊息
         with st.chat_message("user"):
             st.markdown(prompt)
