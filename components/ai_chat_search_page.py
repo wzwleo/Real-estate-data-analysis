@@ -3,7 +3,7 @@ import google.generativeai as genai
 import json
 import pandas as pd
 from utils import filter_properties
-from property_list import render_property_list
+from components.property_list import render_property_list
 
 def render_ai_chat_search():
     st.header("🤖 AI 房市顧問")
