@@ -387,7 +387,7 @@ def tab1_module():
                 with col2:
                     st.markdown(
                         f"""
-                        <div style="margin-top:90px; text-align:center;">
+                        <div style="margin-top:100px; text-align:center;">
                             <h1 style="font-size:120px; color:green;">
                                 {target_score}
                             </h1>
