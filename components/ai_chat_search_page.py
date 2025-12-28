@@ -32,7 +32,7 @@ def render_ai_chat_search():
             st.session_state.chat_history.append({"role": "user", "content": user_input})
             try:
                 # 呼叫 Gemini AI
-                resp = model.generate(messages=[{"role": "user", "content": user_input}])
+                resp = model.generate_content(user_input)
                 ai_reply = resp.text  # 或根據 SDK 文檔取正確屬性
             except Exception as e:
                 ai_reply = f"❌ API 發生錯誤: {e}"
