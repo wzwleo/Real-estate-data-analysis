@@ -1,5 +1,5 @@
 import streamlit as st
-import genai  # 確認已安裝 Gemini SDK
+import google.generativeai as genai
 
 st.header("🤖 AI 房市顧問")
 st.write("你可以輸入自然語言查詢條件，AI 會幫你搜尋適合的物件。")
