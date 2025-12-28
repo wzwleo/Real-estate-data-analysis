@@ -2,64 +2,45 @@ import streamlit as st
 import pandas as pd
 from utils import display_pagination
 
-def display_pagination(df, items_per_page=10):
-    """
-    分頁功能，根據當前頁面返回對應的數據
-    """
-    # 初始化 current_search_page（僅在首次運行時）
-    if 'current_search_page' not in st.session_state:
-        st.session_state.current_search_page = 1
-
-    current_page = st.session_state.current_search_page
-    total_items = len(df)
-    total_pages = (total_items + items_per_page - 1) // items_per_page
-
-    # 確保 current_page 在有效範圍內
-    current_page = max(1, min(current_page, total_pages))
-
-    # 更新 session_state 以確保一致性
-    st.session_state.current_search_page = current_page
-
-    # 計算當前頁面的數據範圍
-    start_idx = (current_page - 1) * items_per_page
-    end_idx = min(start_idx + items_per_page, total_items)
-
-    current_page_data = df.iloc[start_idx:end_idx]
-
-    return current_page_data, current_page, total_pages, total_items
-
 def render_property_list():
     """
     渲染房產列表和分頁功能
     """
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
-
+    
     if 'current_search_page' not in st.session_state:
         st.session_state.current_search_page = 1
-
+        
     if 'filtered_df' not in st.session_state or st.session_state.filtered_df.empty:
         return
-
+    
     df = st.session_state.filtered_df
     search_params = st.session_state.search_params
-
+    
     current_page_data, current_page, total_pages, total_items = display_pagination(df, items_per_page=10)
-
+    
     st.subheader(f"🏠 {search_params['city']}房產列表")
-
+    
+    # 🔥 根據是否為 AI 搜尋來決定 key 前綴
+    if st.session_state.get('is_ai_search', False):
+        key_prefix = f"ai_{st.session_state.get('ai_search_count', 0)}_"
+    else:
+        key_prefix = "normal_"
+    
     for idx, (index, row) in enumerate(current_page_data.iterrows()):
-        render_property_card(row, current_page, idx)
-
+        render_property_card(row, current_page, idx, key_prefix)
+    
     render_pagination_controls(current_page, total_pages, total_items)
 
-def render_property_card(row, current_page, idx):
+def render_property_card(row, current_page, idx, key_prefix=""):
     """
     渲染單個房產卡片
+    key_prefix: 用於區分不同頁面的按鈕 key
     """
     with st.container():
         global_idx = (current_page - 1) * 10 + idx + 1
-
+        
         col1, col2, col3, col4 = st.columns([7, 1, 1, 2])
         with col1:
             display_age = "預售" if row['屋齡'] == 0 else f"{row['屋齡']}年"
@@ -73,21 +54,20 @@ def render_property_card(row, current_page, idx):
             if pd.notna(row['建坪']) and row['建坪'] > 0:
                 unit_price = (row['總價(萬)'] * 10000) / row['建坪']
                 st.caption(f"單價: ${unit_price:,.0f}/坪")
-
+        
         col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
         with col1:
             property_id = row['編號']
             is_fav = property_id in st.session_state.favorites
-
-            key = f"fav_{st.session_state.get('current_search_page', 1)}_{idx}_{property_id}"
-
-            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"fav_{property_id}"):
+            # 🔥 使用 key_prefix + 頁碼 + idx 確保唯一性
+            unique_key = f"{key_prefix}pg{current_page}_idx{idx}_{property_id}"
+            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=unique_key):
                 if is_fav:
                     st.session_state.favorites.remove(property_id)
                 else:
                     st.session_state.favorites.add(property_id)
                 st.rerun()
-
+        
         with col7:
             property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
             st.markdown(
@@ -95,7 +75,7 @@ def render_property_card(row, current_page, idx):
                 f'<button style="padding:5px 10px;">Property Link</button></a>',
                 unsafe_allow_html=True
             )
-
+        
         st.markdown("---")
 
 def render_pagination_controls(current_page, total_pages, total_items):
@@ -123,7 +103,7 @@ def render_pagination_controls(current_page, total_pages, total_items):
             "選擇頁面",
             options=range(1, total_pages + 1),
             index=current_page - 1,
-            key=f"page_selector_{current_page}"  # 動態 key 避免衝突
+            key=f"page_selector_{current_page}"
         )
         if new_page != current_page:
             st.session_state.current_search_page = new_page
@@ -131,7 +111,7 @@ def render_pagination_controls(current_page, total_pages, total_items):
 
     with col4:
         if st.button("下一頁 ⏩", disabled=(current_page == total_pages), key="next_page"):
-            st.session_state.current_search_page = current_page + 1  # 直接使用 current_page + 1
+            st.session_state.current_search_page = current_page + 1
             st.rerun()
 
     with col5:
