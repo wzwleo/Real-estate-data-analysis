@@ -14,6 +14,7 @@ def render_ai_chat_search():
     # ====== 初始化 Gemini API ======
     try:
         genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel('gemini-2.0-flash-exp')  # 修改這裡
     except Exception as e:
         st.error(f"❌ Gemini 初始化錯誤：{e}")
         st.stop()
@@ -34,15 +35,12 @@ def render_ai_chat_search():
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         
         try:
-            # 呼叫 Gemini AI
-            resp = genai.chat(
-                model="gemini-2.0-flash",
-                messages=[{"role": "user", "content": prompt}]
-            )
-            ai_reply = resp.last or resp.response  # 依 SDK 版本
+            # 呼叫 Gemini AI (修改這裡)
+            response = model.generate_content(prompt)
+            ai_reply = response.text
         except Exception as e:
             ai_reply = f"❌ API 發生錯誤: {e}"
         
         # 顯示 AI 訊息
         st.chat_message("assistant").markdown(ai_reply)
-        st.session_state.chat_history.append({"role": "ai", "content": ai_reply})
+        st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})  # 改為 "assistant"
