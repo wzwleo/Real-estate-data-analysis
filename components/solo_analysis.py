@@ -494,7 +494,7 @@ def tab1_module():
                         區域平均建坪單價：
                         {avg_text}
                         
-                        指出是否高於或低於平均水平。
+                        指出是否高於或低於平均水平。 
                         """
 
                         with st.spinner("Gemini 正在分析中..."):
