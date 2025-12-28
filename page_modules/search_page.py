@@ -4,7 +4,7 @@ from components.property_list import render_property_list
 
 def render_search_page():
     tab1, tab2, tab3 = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"]) 
-    tab1: 
+    tab1:
         """
         渲染搜尋頁面
         """
