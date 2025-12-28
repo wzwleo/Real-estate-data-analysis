@@ -385,6 +385,7 @@ def tab1_module():
                 with col1:
                     st.plotly_chart(plot_radar(scores), use_container_width=True)
                 with col2:
+                    st.write("\n")
                     st.markdown(
                         f"<h1 style='font-size:120px; color:green; text-align:center;'>{target_score}</h1>",
                         unsafe_allow_html=True
