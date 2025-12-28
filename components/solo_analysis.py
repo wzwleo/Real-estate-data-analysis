@@ -388,6 +388,7 @@ def tab1_module():
                     st.markdown(
                         f"<div style="margin-top:90px;"><h1 style='font-size:120px; color:green; text-align:center;'>{target_score}</h1>",
                         unsafe_allow_html=True
+                        </div>
                     )
             # 安全存取相似房型資料
             similar_data = st.session_state['current_analysis_result'].get('similar_data', [])
