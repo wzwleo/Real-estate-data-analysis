@@ -24,9 +24,10 @@ def render_ai_chat_search():
         st.session_state.chat_history = []
     
     # ====== 顯示聊天記錄 ======
-    for chat in st.session_state.chat_history:
+    for chat in reversed(st.session_state.chat_history):
         with st.chat_message(chat["role"]):
             st.markdown(chat["content"])
+
     
     # ====== 使用者輸入 ======
     if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
