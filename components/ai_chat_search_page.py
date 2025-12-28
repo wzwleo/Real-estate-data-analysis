@@ -27,6 +27,10 @@ def render_ai_chat_search():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
+    # 🔥 新增：追蹤是否有新搜尋
+    if "ai_search_count" not in st.session_state:
+        st.session_state.ai_search_count = 0
+    
     # ====== 顯示現有的聊天記錄 ======
     for chat in st.session_state.chat_history:
         with st.chat_message(chat["role"]):
@@ -103,6 +107,9 @@ def render_ai_chat_search():
                     
                     # 過濾資料
                     filtered_df = filter_properties(df, filters)
+                    
+                    # 🔥 關鍵：每次新搜尋時更新計數器
+                    st.session_state.ai_search_count += 1
                     
                     # 儲存到 session_state
                     st.session_state.filtered_df = filtered_df
