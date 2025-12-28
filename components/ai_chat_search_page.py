@@ -23,22 +23,28 @@ def render_ai_chat_search():
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
     
-    # ====== 使用者輸入（先處理輸入） ======
-    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
-        # 加入使用者訊息到歷史記錄
-        st.session_state.chat_history.append({"role": "user", "content": prompt})
-        
-        try:
-            # 呼叫 Gemini AI
-            response = model.generate_content(prompt)
-            ai_reply = response.text
-        except Exception as e:
-            ai_reply = f"❌ API 發生錯誤: {e}"
-        
-        # 加入 AI 回應到歷史記錄
-        st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
-    
-    # ====== 顯示聊天記錄（在輸入框上方） ======
+    # ====== 顯示現有的聊天記錄 ======
     for chat in st.session_state.chat_history:
         with st.chat_message(chat["role"]):
             st.markdown(chat["content"])
+    
+    # ====== 使用者輸入（固定在底部） ======
+    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
+        # 立即顯示使用者訊息
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+        
+        # 呼叫 AI 並顯示回應
+        with st.chat_message("assistant"):
+            with st.spinner("思考中..."):
+                try:
+                    response = model.generate_content(prompt)
+                    ai_reply = response.text
+                except Exception as e:
+                    ai_reply = f"❌ API 發生錯誤: {e}"
+            
+            st.markdown(ai_reply)
+        
+        st.session_state.chat_history.append({"role": "assistant", "content": ai_reply})
+        st.rerun()  # 重新整理畫面
