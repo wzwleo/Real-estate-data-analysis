@@ -387,7 +387,7 @@ def tab1_module():
                 with col2:
                     
                     st.markdown(
-                        f"<div style="margin-top:80px;"><h1 style='font-size:120px; color:green; text-align:center;'>{target_score}</h1>",
+                        f"<div style="margin-top:90px;"><h1 style='font-size:120px; color:green; text-align:center;'>{target_score}</h1>",
                         unsafe_allow_html=True
                     )
             # 安全存取相似房型資料
