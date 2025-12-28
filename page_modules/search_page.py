@@ -7,7 +7,7 @@ def render_search_page():
         渲染搜尋頁面
         """
         st.title("🔍 搜尋頁面")
-        tab1, tab2, tab3 = st.tabs(["條件式搜尋", "AI 對話搜尋"])
+        tab1, tab2 = st.tabs(["條件式搜尋", "AI 對話搜尋"])
         with tab1:
             # 渲染搜尋表單
             render_search_form()
