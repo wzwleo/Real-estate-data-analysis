@@ -8,7 +8,7 @@ def render_search_page():
         """
         st.title("🔍 搜尋頁面2")
         tab1, tab2, tab3 = st.tabs(["個別分析", "房屋比較", "市場趨勢分析"])
-        tab1:
+        with tab1:
             # 渲染搜尋表單
             render_search_form()
             
