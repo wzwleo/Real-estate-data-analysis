@@ -1,7 +1,7 @@
 import streamlit as st
 from components.search_form import render_search_form
 from components.property_list import render_property_list
-from components.ai_chat_search_page.py import render_ai_chat_search
+from components.ai_chat_search_page import render_ai_chat_search
 
 def render_search_page():
         """
