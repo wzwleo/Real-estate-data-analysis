@@ -13,7 +13,6 @@ import re
 # 在檔案開頭,name_map 下方加入反向對照表
 name_map = {
     "Taichung-city_buy_properties.csv": "台中市",
-    "Taipei-city_buy_properties.csv": "台北市"
 }
 # 建立反向對照表:中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
