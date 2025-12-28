@@ -2,7 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 
 def render_ai_chat_search():
-    
+    st.header("🤖 AI 房市顧問")
+    st.write("你可以輸入自然語言查詢條件，AI 會幫你搜尋適合的物件。")
     # ====== GEMINI_KEY 驗證 ======
     gemini_key = st.session_state.get("GEMINI_KEY", "")
     if not gemini_key:
