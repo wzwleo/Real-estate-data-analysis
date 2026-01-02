@@ -16,7 +16,7 @@ def render_ai_chat_search():
     # ====== 初始化 Gemini API ======
     try:
         genai.configure(api_key=gemini_key)
-        model = genai.GenerativeModel('gemini-3.0-flash')
+        model = genai.GenerativeModel('gemini-3.0-flash-preview')
     except Exception as e:
         st.error(f"❌ Gemini 初始化錯誤：{e}")
         st.stop()
