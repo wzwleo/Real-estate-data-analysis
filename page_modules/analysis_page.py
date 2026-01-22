@@ -206,7 +206,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
     for cat in selected_categories:
-        for kw in PLACE_KEYWORDS[cat]:
+        for kw in PLACE_TYPES[cat]:
             update_progress(f"查詢 {cat}-{kw}")
             for p in search_text_google_places(lat, lng, api_key, kw, radius):
                 if p[5] > radius:
