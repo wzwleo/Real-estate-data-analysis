@@ -241,7 +241,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
 
 def check_places_found(places, selected_categories, extra_keyword):
     found_dict = {
-        cat: {kw: False for kw in PLACE_KEYWORDS[cat]}
+        cat: {kw: False for kw in PLACE_TYPES[cat]}
         for cat in selected_categories
     }
     extra_found = False
