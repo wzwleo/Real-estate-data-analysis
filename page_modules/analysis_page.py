@@ -562,8 +562,8 @@ def render_analysis_page():
 
             st.subheader("選擇要比較的生活機能類別")
             selected_categories = []
-            cols = st.columns(len(PLACE_KEYWORDS))
-            for i, cat in enumerate(PLACE_KEYWORDS.keys()):
+            cols = st.columns(len(PLACE_TYPES))
+            for i, cat in enumerate(PLACE_TYPES.keys()):
                 with cols[i]:
                     if st.checkbox(cat, value=True, key=f"comp_cat_{cat}"):
                         selected_categories.append(cat)
