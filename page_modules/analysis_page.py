@@ -35,23 +35,71 @@ def get_favorites_data():
 # ===========================
 # 關鍵字設定
 # ===========================
-PLACE_KEYWORDS = {
-    "教育": ["學校", "圖書館", "大學"],
-    "健康與保健": ["藥局", "醫院", "牙醫診所", "診所"],
-    "購物": ["超市", "購物中心", "便利商店"],
-    "交通運輸": ["公車站", "捷運站", "火車站"],
-    "餐飲": ["餐廳", "咖啡廳"]
+PLACE_TYPES = {
+    "education": [
+        "library",
+        "preschool",
+        "primary_school",
+        "school",
+        "secondary_school",
+        "university",
+    ],
+    "shopping": [
+        "asian_grocery_store",
+        "auto_parts_store",
+        "bicycle_store",
+        "book_store",
+        "butcher_shop",
+        "cell_phone_store",
+        "clothing_store",
+        "convenience_store",
+        "department_store",
+        "discount_store",
+        "electronics_store",
+        "food_store",
+        "furniture_store",
+        "gift_shop",
+        "grocery_store",
+        "hardware_store",
+        "home_goods_store",
+        "home_improvement_store",
+        "jewelry_store",
+        "liquor_store",
+        "market",
+        "pet_store",
+        "shoe_store",
+        "shopping_mall",
+        "sporting_goods_store",
+        "store",
+        "supermarket",
+        "warehouse_store",
+        "wholesaler",
+    ],
+    "transportation": [
+        "airport",
+        "airstrip",
+        "bus_station",
+        "bus_stop",
+        "ferry_terminal",
+        "heliport",
+        "international_airport",
+        "light_rail_station",
+        "park_and_ride",
+        "subway_station",
+        "taxi_stand",
+        "train_station",
+        "transit_depot",
+        "transit_station",
+        "truck_stop",
+    ],
 }
+
 
 CATEGORY_COLORS = {
-    "教育": "#1E90FF",
-    "健康與保健": "#32CD32",
-    "購物": "#FF8C00",
-    "交通運輸": "#800080",
-    "餐飲": "#FF0000",
-    "關鍵字": "#000000"
+    "education": "#1E90FF",
+    "shopping": "#FF8C00",
+    "transportation": "#800080",
 }
-
 
 # ===========================
 # 工具函式
