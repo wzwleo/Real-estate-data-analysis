@@ -291,10 +291,14 @@ def load_population_csv(folder="./page_modules"):
 
 
 def query_google_places_keyword(lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+    """查詢Google Places關鍵字（安全版本）"""
     results, seen = [], set()
     
     # 計算總任務數
-    total_tasks = sum(len([st for st in selected_subtypes.get(cat, []) if st in PLACE_TYPES[cat][1::2]]) for cat in selected_categories)
+    total_tasks = 0
+    for cat in selected_categories:
+        if cat in selected_subtypes:
+            total_tasks += len(selected_subtypes[cat])
     total_tasks += (1 if extra_keyword else 0)
 
     if total_tasks == 0:
@@ -315,45 +319,64 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
         if cat not in selected_subtypes:
             continue
             
-        # 取得該類別下選中的子項目（英文關鍵字）
-        selected_english = [st for st in selected_subtypes[cat] if st in PLACE_TYPES[cat][1::2]]
+        # 安全地建立中英文映射
+        items = PLACE_TYPES.get(cat, [])
+        chinese_map = {}
         
-        for english_kw in selected_english:
-            # 取得中文名稱用於顯示
-            chinese_names = {items[i+1]: items[i] for i in range(0, len(PLACE_TYPES[cat]), 2)}
-            chinese_name = chinese_names.get(english_kw, english_kw)
-            
+        # 確保有足夠的元素
+        if len(items) >= 2:
+            for i in range(0, len(items), 2):
+                if i + 1 < len(items):
+                    english_keyword = items[i+1]
+                    chinese_name = items[i]
+                    chinese_map[english_keyword] = chinese_name
+        
+        for english_kw in selected_subtypes[cat]:
+            # 獲取中文顯示名稱（安全版本）
+            chinese_name = chinese_map.get(english_kw, english_kw)
             update_progress(f"查詢 {cat}-{chinese_name}")
             
-            # 使用英文關鍵字查詢
-            for p in search_text_google_places(lat, lng, api_key, english_kw, radius):
+            try:
+                # 使用英文關鍵字查詢
+                places = search_text_google_places(lat, lng, api_key, english_kw, radius)
+                
+                for p in places:
+                    if p[5] > radius:
+                        continue
+                    pid = p[6]
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    # 使用正確的類別和中文名稱
+                    results.append((cat, chinese_name, p[2], p[3], p[4], p[5], pid))
+
+                time.sleep(0.5)  # 避免API限制
+                
+            except Exception as e:
+                st.warning(f"查詢 {english_kw} 時發生錯誤: {str(e)[:50]}")
+                continue
+
+    if extra_keyword:
+        update_progress(f"額外關鍵字: {extra_keyword}")
+        try:
+            places = search_text_google_places(lat, lng, api_key, extra_keyword, radius)
+            for p in places:
                 if p[5] > radius:
                     continue
                 pid = p[6]
                 if pid in seen:
                     continue
                 seen.add(pid)
-                # 存儲時使用中文類別名稱
-                results.append((cat, chinese_name, p[2], p[3], p[4], p[5], pid))
-
-            time.sleep(0.5)  # 避免API限制
-
-    if extra_keyword:
-        update_progress(f"額外關鍵字: {extra_keyword}")
-        for p in search_text_google_places(lat, lng, api_key, extra_keyword, radius):
-            if p[5] > radius:
-                continue
-            pid = p[6]
-            if pid in seen:
-                continue
-            seen.add(pid)
-            results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], pid))
-
-        time.sleep(0.3)
+                results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], pid))
+                
+            time.sleep(0.3)
+        except Exception as e:
+            st.warning(f"查詢額外關鍵字時發生錯誤: {str(e)[:50]}")
 
     progress.progress(1.0)
     progress_text.text("✅ 查詢完成！")
 
+    # 按距離排序
     results.sort(key=lambda x: x[5])
     return results
 
