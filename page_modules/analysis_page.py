@@ -33,72 +33,164 @@ def get_favorites_data():
 
 
 # ===========================
-# 關鍵字設定
+# 關鍵字設定 - 更新版（增加健康保健和餐飲）
 # ===========================
 PLACE_TYPES = {
-    "education": [
-        "library",
-        "preschool",
-        "primary_school",
-        "school",
-        "secondary_school",
-        "university",
+    "教育": [
+        "圖書館", "圖書館",
+        "學前教育", "preschool",
+        "小學", "primary_school", "school",
+        "中學", "secondary_school",
+        "大學", "university",
     ],
-    "shopping": [
-        "asian_grocery_store",
-        "auto_parts_store",
-        "bicycle_store",
-        "book_store",
-        "butcher_shop",
-        "cell_phone_store",
-        "clothing_store",
-        "convenience_store",
-        "department_store",
-        "discount_store",
-        "electronics_store",
-        "food_store",
-        "furniture_store",
-        "gift_shop",
-        "grocery_store",
-        "hardware_store",
-        "home_goods_store",
-        "home_improvement_store",
-        "jewelry_store",
-        "liquor_store",
-        "market",
-        "pet_store",
-        "shoe_store",
-        "shopping_mall",
-        "sporting_goods_store",
-        "store",
-        "supermarket",
-        "warehouse_store",
-        "wholesaler",
+    "購物": [
+        "亞洲超市", "asian_grocery_store",
+        "汽車零件", "auto_parts_store",
+        "自行車店", "bicycle_store",
+        "書店", "book_store",
+        "肉舖", "butcher_shop",
+        "手機店", "cell_phone_store",
+        "服飾店", "clothing_store",
+        "便利商店", "convenience_store",
+        "百貨公司", "department_store",
+        "折扣商店", "discount_store",
+        "電子用品店", "electronics_store",
+        "食品店", "food_store",
+        "家具店", "furniture_store",
+        "禮品店", "gift_shop",
+        "雜貨店", "grocery_store",
+        "五金行", "hardware_store",
+        "家居用品", "home_goods_store",
+        "家居裝修", "home_improvement_store",
+        "珠寶店", "jewelry_store",
+        "酒類商店", "liquor_store",
+        "市場", "market",
+        "寵物店", "pet_store",
+        "鞋店", "shoe_store",
+        "購物中心", "shopping_mall",
+        "運動用品店", "sporting_goods_store",
+        "商店", "store",
+        "超市", "supermarket",
+        "倉庫商店", "warehouse_store",
+        "批發商", "wholesaler",
     ],
-    "transportation": [
-        "airport",
-        "airstrip",
-        "bus_station",
-        "bus_stop",
-        "ferry_terminal",
-        "heliport",
-        "international_airport",
-        "light_rail_station",
-        "park_and_ride",
-        "subway_station",
-        "taxi_stand",
-        "train_station",
-        "transit_depot",
-        "transit_station",
-        "truck_stop",
+    "交通運輸": [
+        "機場", "airport",
+        "小型機場", "airstrip",
+        "公車站", "bus_station",
+        "公車站牌", "bus_stop",
+        "渡輪碼頭", "ferry_terminal",
+        "直升機場", "heliport",
+        "國際機場", "international_airport",
+        "輕軌站", "light_rail_station",
+        "停車轉乘", "park_and_ride",
+        "地鐵站", "subway_station",
+        "計程車招呼站", "taxi_stand",
+        "火車站", "train_station",
+        "運輸車站", "transit_depot",
+        "轉運站", "transit_station",
+        "卡車休息站", "truck_stop",
     ],
+    "健康與保健": [
+        "脊椎治療師", "chiropractor",
+        "牙醫診所", "dental_clinic",
+        "牙醫", "dentist",
+        "醫生", "doctor",
+        "藥店", "drugstore",
+        "醫院", "hospital",
+        "按摩", "massage",
+        "藥局", "pharmacy",
+        "物理治療師", "physiotherapist",
+        "桑拿", "sauna",
+        "皮膚護理診所", "skin_care_clinic",
+        "水療中心", "spa",
+        "日光浴工作室", "tanning_studio",
+        "健康中心", "wellness_center",
+        "瑜珈工作室", "yoga_studio",
+        "醫療實驗室", "medical_lab",
+    ],
+    "餐飲美食": [
+        "巴西莓店", "acai_shop",
+        "阿富汗餐廳", "afghani_restaurant",
+        "非洲餐廳", "african_restaurant",
+        "美式餐廳", "american_restaurant",
+        "亞洲餐廳", "asian_restaurant",
+        "貝果店", "bagel_shop",
+        "麵包店", "bakery",
+        "酒吧", "bar",
+        "酒吧與燒烤", "bar_and_grill",
+        "燒烤餐廳", "barbecue_restaurant",
+        "巴西餐廳", "brazilian_restaurant",
+        "早餐店", "breakfast_restaurant",
+        "早午餐餐廳", "brunch_restaurant",
+        "自助餐", "buffet_restaurant",
+        "咖啡廳", "cafe",
+        "自助餐廳", "cafeteria",
+        "糖果店", "candy_store",
+        "貓咪咖啡廳", "cat_cafe",
+        "中餐廳", "chinese_restaurant",
+        "巧克力工廠", "chocolate_factory",
+        "巧克力店", "chocolate_shop",
+        "咖啡店", "coffee_shop",
+        "甜點店", "confectionery",
+        "熟食店", "deli",
+        "甜點餐廳", "dessert_restaurant",
+        "甜點店", "dessert_shop",
+        "小餐館", "diner",
+        "狗狗咖啡廳", "dog_cafe",
+        "甜甜圈店", "donut_shop",
+        "速食餐廳", "fast_food_restaurant",
+        "高級餐廳", "fine_dining_restaurant",
+        "美食街", "food_court",
+        "法式餐廳", "french_restaurant",
+        "希臘餐廳", "greek_restaurant",
+        "漢堡餐廳", "hamburger_restaurant",
+        "冰淇淋店", "ice_cream_shop",
+        "印度餐廳", "indian_restaurant",
+        "印尼餐廳", "indonesian_restaurant",
+        "義大利餐廳", "italian_restaurant",
+        "日式餐廳", "japanese_restaurant",
+        "果汁店", "juice_shop",
+        "韓式餐廳", "korean_restaurant",
+        "黎巴嫩餐廳", "lebanese_restaurant",
+        "外送", "meal_delivery",
+        "外帶", "meal_takeaway",
+        "地中海餐廳", "mediterranean_restaurant",
+        "墨西哥餐廳", "mexican_restaurant",
+        "中東餐廳", "middle_eastern_restaurant",
+        "披薩店", "pizza_restaurant",
+        "酒館", "pub",
+        "拉麵店", "ramen_restaurant",
+        "餐廳", "restaurant",
+        "三明治店", "sandwich_shop",
+        "海鮮餐廳", "seafood_restaurant",
+        "西班牙餐廳", "spanish_restaurant",
+        "牛排館", "steak_house",
+        "壽司店", "sushi_restaurant",
+        "茶館", "tea_house",
+        "泰式餐廳", "thai_restaurant",
+        "土耳其餐廳", "turkish_restaurant",
+        "純素餐廳", "vegan_restaurant",
+        "素食餐廳", "vegetarian_restaurant",
+        "越南餐廳", "vietnamese_restaurant",
+        "葡萄酒吧", "wine_bar",
+    ]
 }
 
+# 建立反向映射：英文關鍵字 -> 中文顯示名稱
+ENGLISH_TO_CHINESE = {}
+for category, items in PLACE_TYPES.items():
+    for i in range(0, len(items), 2):
+        if i+1 < len(items):
+            ENGLISH_TO_CHINESE[items[i+1]] = items[i]
 
+# 建立類別顏色
 CATEGORY_COLORS = {
-    "education": "#1E90FF",
-    "shopping": "#FF8C00",
-    "transportation": "#800080",
+    "教育": "#1E90FF",        # 藍色
+    "購物": "#FF8C00",        # 橘色
+    "交通運輸": "#800080",     # 紫色
+    "健康與保健": "#32CD32",   # 綠色
+    "餐飲美食": "#FF4500",     # 紅色
 }
 
 # ===========================
@@ -139,7 +231,7 @@ def geocode_address(address: str, api_key: str):
         loc = r["results"][0]["geometry"]["location"]
         return loc["lat"], loc["lng"]
 
-    st.warning(f"Geocoding error: {status}")
+    st.warning(f"地址解析錯誤: {status}")
     return None, None
 
 
@@ -166,9 +258,11 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
     for p in r.get("results", []):
         loc = p["geometry"]["location"]
         dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+        # 使用反向映射獲取中文類別名稱
+        chinese_name = ENGLISH_TO_CHINESE.get(keyword, keyword)
         results.append((
             "關鍵字",
-            keyword,
+            chinese_name,
             p.get("name", "未命名"),
             loc["lat"],
             loc["lng"],
@@ -176,6 +270,7 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
             p.get("place_id", "")
         ))
     return results
+
 
 def load_population_csv(folder="./page_modules"):
     path = os.path.join(folder, "NEWWWW.csv")
@@ -190,10 +285,16 @@ def load_population_csv(folder="./page_modules"):
     return df
 
 
-
-def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=500, extra_keyword=""):
+def query_google_places_keyword(lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
     results, seen = [], set()
-    total_tasks = sum(len(PLACE_TYPES[cat]) for cat in selected_categories) + (1 if extra_keyword else 0)
+    
+    # 計算總任務數
+    total_tasks = sum(len([st for st in selected_subtypes.get(cat, []) if st in PLACE_TYPES[cat][1::2]]) for cat in selected_categories)
+    total_tasks += (1 if extra_keyword else 0)
+
+    if total_tasks == 0:
+        st.warning("⚠️ 請至少選擇一個搜尋項目")
+        return []
 
     progress = st.progress(0)
     progress_text = st.empty()
@@ -206,18 +307,31 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
         progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
     for cat in selected_categories:
-        for kw in PLACE_TYPES[cat]:
-            update_progress(f"查詢 {cat}-{kw}")
-            for p in search_text_google_places(lat, lng, api_key, kw, radius):
+        if cat not in selected_subtypes:
+            continue
+            
+        # 取得該類別下選中的子項目（英文關鍵字）
+        selected_english = [st for st in selected_subtypes[cat] if st in PLACE_TYPES[cat][1::2]]
+        
+        for english_kw in selected_english:
+            # 取得中文名稱用於顯示
+            chinese_names = {items[i+1]: items[i] for i in range(0, len(PLACE_TYPES[cat]), 2)}
+            chinese_name = chinese_names.get(english_kw, english_kw)
+            
+            update_progress(f"查詢 {cat}-{chinese_name}")
+            
+            # 使用英文關鍵字查詢
+            for p in search_text_google_places(lat, lng, api_key, english_kw, radius):
                 if p[5] > radius:
                     continue
                 pid = p[6]
                 if pid in seen:
                     continue
                 seen.add(pid)
-                results.append((cat, kw, p[2], p[3], p[4], p[5], pid))
+                # 存儲時使用中文類別名稱
+                results.append((cat, chinese_name, p[2], p[3], p[4], p[5], pid))
 
-        time.sleep(1)
+            time.sleep(0.5)  # 避免API限制
 
     if extra_keyword:
         update_progress(f"額外關鍵字: {extra_keyword}")
@@ -239,11 +353,13 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, radius=5
     return results
 
 
-def check_places_found(places, selected_categories, extra_keyword):
-    found_dict = {
-        cat: {kw: False for kw in PLACE_TYPES[cat]}
-        for cat in selected_categories
-    }
+def check_places_found(places, selected_categories, selected_subtypes, extra_keyword):
+    # 建立檢查字典：類別 -> 子項目 -> 是否找到
+    found_dict = {}
+    for cat in selected_categories:
+        if cat in selected_subtypes:
+            found_dict[cat] = {subtype: False for subtype in selected_subtypes[cat]}
+    
     extra_found = False
 
     for cat, kw, name, lat, lng, dist, pid in places:
@@ -253,10 +369,10 @@ def check_places_found(places, selected_categories, extra_keyword):
             extra_found = True
 
     messages = []
-    for cat, kws in found_dict.items():
-        for kw, found in kws.items():
+    for cat, subtypes in found_dict.items():
+        for subtype, found in subtypes.items():
             if not found:
-                messages.append(f"⚠️ 周圍沒有 {cat} → {kw}")
+                messages.append(f"⚠️ 周圍沒有 {cat} → {subtype}")
 
     if extra_keyword and not extra_found:
         messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
@@ -379,7 +495,7 @@ def load_real_estate_csv(folder="./page_modules"):
 
 
 # ============================
-# 專業提示詞準備函數（移到 render_analysis_page 之前）
+# 專業提示詞準備函數
 # ============================
 def prepare_market_analysis_prompt(chart_type, data, real_estate_df, population_df):
     """準備專業的市場分析提示詞"""
@@ -508,6 +624,83 @@ def prepare_market_analysis_prompt(chart_type, data, real_estate_df, population_
         prompt = base_context + "\n請提供一般性的市場趨勢分析。"
     
     return prompt
+
+
+# ===========================
+# 新增：建立子項目選擇器
+# ===========================
+def create_subtype_selector():
+    """建立細分項目選擇器，返回使用者選擇的類別和子項目"""
+    
+    st.subheader("🏪 選擇生活機能類別")
+    
+    # 初始化 session state
+    if 'selected_categories' not in st.session_state:
+        st.session_state.selected_categories = []
+    if 'selected_subtypes' not in st.session_state:
+        st.session_state.selected_subtypes = {}
+    
+    selected_categories = []
+    selected_subtypes = {}
+    
+    # 建立展開器讓使用者可以逐一點開選擇
+    for category, items in PLACE_TYPES.items():
+        with st.expander(f"📁 {category} ({len(items)//2}種設施)", expanded=False):
+            # 主類別選擇框
+            select_all = st.checkbox(f"選擇所有{category}設施", key=f"select_all_{category}")
+            
+            if select_all:
+                # 選中所有子項目
+                chinese_items = items[::2]  # 中文名稱
+                english_items = items[1::2]  # 英文關鍵字
+                selected_subtypes[category] = english_items
+                selected_categories.append(category)
+                
+                # 顯示已選項目
+                st.info(f"已選擇 {category} 全部 {len(chinese_items)} 種設施")
+            else:
+                # 逐個子項目選擇
+                cols = st.columns(2)
+                for i in range(0, len(items), 2):
+                    if i+1 < len(items):
+                        chinese_name = items[i]  # 中文名稱
+                        english_keyword = items[i+1]  # 英文關鍵字
+                        col_idx = (i//2) % 2
+                        
+                        with cols[col_idx]:
+                            if st.checkbox(chinese_name, key=f"{category}_{english_keyword}"):
+                                if category not in selected_subtypes:
+                                    selected_subtypes[category] = []
+                                selected_subtypes[category].append(english_keyword)
+            
+            # 如果有選中任何子項目，就加入主類別
+            if category in selected_subtypes and selected_subtypes[category]:
+                selected_categories.append(category)
+    
+    # 顯示選擇摘要
+    if selected_categories:
+        st.markdown("---")
+        st.subheader("📋 已選擇的設施")
+        
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                chinese_names = []
+                # 將英文關鍵字轉回中文名稱
+                for english_kw in selected_subtypes[cat]:
+                    # 找到對應的中文名稱
+                    for i in range(0, len(PLACE_TYPES[cat]), 2):
+                        if i+1 < len(PLACE_TYPES[cat]) and PLACE_TYPES[cat][i+1] == english_kw:
+                            chinese_names.append(PLACE_TYPES[cat][i])
+                            break
+                
+                st.markdown(f"**{cat}** ({len(chinese_names)}項):")
+                cols = st.columns(3)
+                for idx, name in enumerate(chinese_names):
+                    with cols[idx % 3]:
+                        st.markdown(f"✓ {name}")
+    
+    return selected_categories, selected_subtypes
+
 
 
 # ===========================
