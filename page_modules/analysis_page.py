@@ -381,43 +381,64 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
     return results
 
 
-def check_places_found(places, selected_categories, selected_subtypes, extra_keyword):
-    """檢查哪些設施沒有找到（修正版）"""
-    # 建立檢查字典：類別 -> 中文名稱 -> 是否找到
-    found_dict = {}
-    
-    # 先建立所有選中的設施檢查字典（使用中文名稱）
-    for cat in selected_categories:
-        if cat in selected_subtypes:
-            found_dict[cat] = {}
-            for english_kw in selected_subtypes[cat]:
-                # 將英文關鍵字轉換為中文顯示名稱
-                chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
-                found_dict[cat][chinese_name] = False
-    
-    extra_found = False
-
-    # 檢查找到的設施
-    for cat, kw, name, lat, lng, dist, pid in places:
-        # kw 已經是中文名稱（來自 query_google_places_keyword）
-        if cat in found_dict and kw in found_dict[cat]:
-            found_dict[cat][kw] = True
-        
-        # 檢查額外關鍵字
-        if extra_keyword and cat == "關鍵字":
-            # 比較小寫版本
-            if extra_keyword.lower() in kw.lower() or extra_keyword.lower() in name.lower():
-                extra_found = True
-
+def check_places_found_improved(places, selected_categories, selected_subtypes, extra_keyword):
+    """改良版的檢查函數，處理名稱匹配問題"""
     messages = []
-    for cat, subtypes in found_dict.items():
-        for chinese_name, found in subtypes.items():
+    
+    # 收集所有找到的設施名稱（小寫化以便比較）
+    found_names_lower = []
+    found_kws_lower = []
+    
+    for cat, kw, name, lat, lng, dist, pid in places:
+        found_names_lower.append(name.lower())
+        found_kws_lower.append(kw.lower())
+    
+    # 檢查每個選中的設施
+    for cat in selected_categories:
+        if cat not in selected_subtypes:
+            continue
+            
+        for english_kw in selected_subtypes[cat]:
+            # 獲取中文名稱
+            chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+            
+            # 檢查是否找到（寬鬆匹配）
+            found = False
+            
+            # 1. 檢查設施名稱是否包含中文名稱
+            for found_name in found_names_lower:
+                if any(word in found_name for word in chinese_name.lower().split()):
+                    found = True
+                    break
+            
+            # 2. 檢查設施類別是否匹配
+            if not found:
+                for found_kw in found_kws_lower:
+                    if any(word in found_kw for word in chinese_name.lower().split()):
+                        found = True
+                        break
+            
+            # 3. 檢查英文關鍵字是否匹配（用於品牌如 Pxmart）
+            if not found:
+                for found_name in found_names_lower:
+                    if any(word in found_name for word in english_kw.lower().split()):
+                        found = True
+                        break
+            
             if not found:
                 messages.append(f"⚠️ 周圍沒有 {cat} → {chinese_name}")
-
-    if extra_keyword and not extra_found:
-        messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
-
+    
+    # 檢查額外關鍵字
+    if extra_keyword:
+        extra_found = False
+        for found_name in found_names_lower:
+            if extra_keyword.lower() in found_name:
+                extra_found = True
+                break
+        
+        if not extra_found:
+            messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
+    
     return messages
 
 
