@@ -636,7 +636,6 @@ def prepare_market_analysis_prompt(chart_type, data, real_estate_df, population_
 
 # ===========================
 # 新增：建立子項目選擇器
-# ===========================
 def create_subtype_selector():
     """建立細分項目選擇器，返回使用者選擇的類別和子項目"""
     
@@ -692,20 +691,29 @@ def create_subtype_selector():
         
         for cat in selected_categories:
             if cat in selected_subtypes:
+                # 修復這裡：將英文關鍵字轉回中文名稱
                 chinese_names = []
-                # 將英文關鍵字轉回中文名稱
                 for english_kw in selected_subtypes[cat]:
-                    # 找到對應的中文名稱
-                    for i in range(0, len(PLACE_TYPES[cat]), 2):
-                        if i+1 < len(PLACE_TYPES[cat]) and PLACE_TYPES[cat][i+1] == english_kw:
-                            chinese_names.append(PLACE_TYPES[cat][i])
-                            break
+                    # 從 ENGLISH_TO_CHINESE 字典獲取中文名稱
+                    if english_kw in ENGLISH_TO_CHINESE:
+                        chinese_names.append(ENGLISH_TO_CHINESE[english_kw])
+                    else:
+                        # 如果字典中沒有，嘗試直接查找
+                        chinese_names.append(english_kw)
                 
                 st.markdown(f"**{cat}** ({len(chinese_names)}項):")
-                cols = st.columns(3)
-                for idx, name in enumerate(chinese_names):
-                    with cols[idx % 3]:
-                        st.markdown(f"✓ {name}")
+                
+                # 使用網格顯示，每行3列
+                items_per_row = 3
+                chinese_items = sorted(chinese_names)
+                
+                for i in range(0, len(chinese_items), items_per_row):
+                    cols = st.columns(items_per_row)
+                    for j in range(items_per_row):
+                        idx = i + j
+                        if idx < len(chinese_items):
+                            with cols[j]:
+                                st.markdown(f"✓ {chinese_items[idx]}")
     
     return selected_categories, selected_subtypes
 
@@ -819,7 +827,7 @@ def render_analysis_page():
                         selected_subtypes[cat] = items[1::2]  # 英文關鍵字
                         selected_categories.append(cat)
                         
-                        st.info(f"已選擇 {cat} 全部 {len(items)//1} 種設施")
+                        st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
                     else:
                         # 逐個子項目選擇
                         items = PLACE_TYPES[cat]
@@ -848,34 +856,38 @@ def render_analysis_page():
                         selected_categories.append(cat)
         
         # 顯示選擇摘要
-        if selected_categories:
-            st.markdown("---")
-            st.subheader("📋 已選擇的設施摘要")
-            
-            summary_cols = st.columns(min(len(selected_categories), 3))
-            for idx, cat in enumerate(selected_categories):
-                with summary_cols[idx % len(summary_cols)]:
-                    if cat in selected_subtypes:
-                        count = len(selected_subtypes[cat])
-                        color = CATEGORY_COLORS.get(cat, "#000000")
-                        st.markdown(f"""
-                        <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color};">
-                        <h4 style="color:{color}; margin:0;">{cat}</h4>
-                        <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        # 顯示前幾個項目
-                        if count <= 5:
-                            items_display = ", ".join([
-                                PLACE_TYPES[cat][PLACE_TYPES[cat].index(english_kw)-1] 
-                                for english_kw in selected_subtypes[cat][:5]
-                            ])
-                            st.caption(f"✓ {items_display}")
-                        else:
-                            st.caption(f"✓ 包含{selected_subtypes[cat][:3]}等{count}種設施")
-        
+    # 在 Tab2 的顯示選擇摘要部分，修改為：
+    if selected_categories:
         st.markdown("---")
+        st.subheader("📋 已選擇的設施摘要")
+        
+        summary_cols = st.columns(min(len(selected_categories), 3))
+        for idx, cat in enumerate(selected_categories):
+            with summary_cols[idx % len(summary_cols)]:
+                if cat in selected_subtypes:
+                    count = len(selected_subtypes[cat])
+                    color = CATEGORY_COLORS.get(cat, "#000000")
+                    st.markdown(f"""
+                    <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color};">
+                    <h4 style="color:{color}; margin:0;">{cat}</h4>
+                    <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # 顯示前幾個項目（修復這裡）
+                    chinese_names = []
+                    for english_kw in selected_subtypes[cat][:5]:
+                        if english_kw in ENGLISH_TO_CHINESE:
+                            chinese_names.append(ENGLISH_TO_CHINESE[english_kw])
+                        else:
+                            chinese_names.append(english_kw)
+                    
+                    if count <= 5:
+                        items_display = "、".join(chinese_names)
+                        st.caption(f"✓ {items_display}")
+                    else:
+                        items_display = "、".join(chinese_names[:3])
+                        st.caption(f"✓ {items_display}等{count}種設施")
         
         if st.button("🚀 開始比較", type="primary", use_container_width=True):
             if not _get_browser_key():
