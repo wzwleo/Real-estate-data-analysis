@@ -819,7 +819,7 @@ def render_analysis_page():
                         selected_subtypes[cat] = items[1::2]  # 英文關鍵字
                         selected_categories.append(cat)
                         
-                        st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
+                        st.info(f"已選擇 {cat} 全部 {len(items)//1} 種設施")
                     else:
                         # 逐個子項目選擇
                         items = PLACE_TYPES[cat]
