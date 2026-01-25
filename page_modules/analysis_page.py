@@ -382,25 +382,38 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
 
 
 def check_places_found(places, selected_categories, selected_subtypes, extra_keyword):
-    # 建立檢查字典：類別 -> 子項目 -> 是否找到
+    """檢查哪些設施沒有找到（修正版）"""
+    # 建立檢查字典：類別 -> 中文名稱 -> 是否找到
     found_dict = {}
+    
+    # 先建立所有選中的設施檢查字典（使用中文名稱）
     for cat in selected_categories:
         if cat in selected_subtypes:
-            found_dict[cat] = {subtype: False for subtype in selected_subtypes[cat]}
+            found_dict[cat] = {}
+            for english_kw in selected_subtypes[cat]:
+                # 將英文關鍵字轉換為中文顯示名稱
+                chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                found_dict[cat][chinese_name] = False
     
     extra_found = False
 
+    # 檢查找到的設施
     for cat, kw, name, lat, lng, dist, pid in places:
+        # kw 已經是中文名稱（來自 query_google_places_keyword）
         if cat in found_dict and kw in found_dict[cat]:
             found_dict[cat][kw] = True
-        if extra_keyword and cat == "關鍵字" and kw == extra_keyword:
-            extra_found = True
+        
+        # 檢查額外關鍵字
+        if extra_keyword and cat == "關鍵字":
+            # 比較小寫版本
+            if extra_keyword.lower() in kw.lower() or extra_keyword.lower() in name.lower():
+                extra_found = True
 
     messages = []
     for cat, subtypes in found_dict.items():
-        for subtype, found in subtypes.items():
+        for chinese_name, found in subtypes.items():
             if not found:
-                messages.append(f"⚠️ 周圍沒有 {cat} → {subtype}")
+                messages.append(f"⚠️ 周圍沒有 {cat} → {chinese_name}")
 
     if extra_keyword and not extra_found:
         messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
