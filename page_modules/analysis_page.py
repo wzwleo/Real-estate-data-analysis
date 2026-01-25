@@ -1,3 +1,4 @@
+
 import os
 import math
 import json
@@ -34,151 +35,148 @@ def get_favorites_data():
 
 # ===========================
 # 關鍵字設定 - 更新版（增加健康保健和餐飲）
-# ===========================
-# ===========================
-# 關鍵字設定 - 優化版（針對台灣地區）
-# ===========================
+
 PLACE_TYPES = {
     "教育": [
-        "圖書館", "library",
-        "幼兒園", "kindergarten",
-        "托兒所", "nursery",
-        "小學", "elementary school",
-        "國中", "junior high school",
-        "高中", "high school",
-        "大學", "university",
-        "補習班", "cram school",
-        "學校", "school",
+        "圖書館", "圖書館",
+        "幼兒園", "幼兒園",
+        "托兒所", "托兒所",
+        "小學", "小學",
+        "國中", "國中",
+        "高中", "高中",
+        "大學", "大學",
+        "補習班", "補習班",
+        "學校", "學校",
     ],
     "購物": [
-        "超市", "supermarket",
-        "便利商店", "convenience store",
-        "全聯福利中心", "Pxmart",
-        "家樂福", "Carrefour",
-        "大潤發", "RT Mart",
-        "好市多", "Costco",
-        "屈臣氏", "Watsons",
-        "康是美", "Cosmed",
-        "寶雅", "Poya",
-        "藥妝店", "drugstore",
-        "五金行", "hardware store",
-        "家具行", "furniture store",
-        "書局", "bookstore",
-        "文具店", "stationery store",
-        "手機行", "mobile phone store",
-        "電腦賣場", "computer store",
-        "服飾店", "clothing store",
-        "鞋店", "shoe store",
-        "眼鏡行", "eyeglasses store",
-        "百貨公司", "department store",
-        "購物中心", "shopping mall",
-        "市場", "market",
-        "傳統市場", "traditional market",
-        "夜市", "night market",
-        "批發", "wholesale",
+        "超市", "超市",
+        "便利商店", "便利商店",
+        "全聯福利中心", "全聯",
+        "家樂福", "家樂福",
+        "大潤發", "大潤發",
+        "好市多", "好市多",
+        "屈臣氏", "屈臣氏",
+        "康是美", "康是美",
+        "寶雅", "寶雅",
+        "藥妝店", "藥妝店",
+        "五金行", "五金行",
+        "家具行", "家具行",
+        "書局", "書局",
+        "文具店", "文具店",
+        "手機行", "手機行",
+        "電腦賣場", "電腦賣場",
+        "服飾店", "服飾店",
+        "鞋店", "鞋店",
+        "眼鏡行", "眼鏡行",
+        "百貨公司", "百貨公司",
+        "購物中心", "購物中心",
+        "市場", "市場",
+        "傳統市場", "傳統市場",
+        "夜市", "夜市",
+        "批發", "批發",
     ],
     "交通運輸": [
-        "公車站", "bus station",
-        "捷運站", "MRT station",
-        "火車站", "train station",
-        "高鐵站", "HSR station",
-        "客運站", "bus terminal",
-        "計程車行", "taxi company",
-        "停車場", "parking lot",
-        "加油站", "gas station",
+        "公車站", "公車站",
+        "捷運站", "捷運站",
+        "火車站", "火車站",
+        "高鐵站", "高鐵站",
+        "客運站", "客運站",
+        "計程車行", "計程車行",
+        "停車場", "停車場",
+        "加油站", "加油站",
         "YouBike", "YouBike",
-        "機車行", "motorcycle shop",
-        "汽車維修", "car repair",
+        "機車行", "機車行",
+        "汽車維修", "汽車維修",
     ],
     "健康與保健": [
-        "醫院", "hospital",
-        "診所", "clinic",
-        "衛生所", "health center",
-        "藥局", "pharmacy",
-        "牙醫診所", "dental clinic",
-        "中醫診所", "Chinese medicine clinic",
-        "西醫診所", "western medicine clinic",
-        "小兒科診所", "pediatric clinic",
-        "婦產科診所", "obstetrics and gynecology clinic",
-        "眼科診所", "ophthalmology clinic",
-        "皮膚科診所", "dermatology clinic",
-        "復健科診所", "rehabilitation clinic",
-        "物理治療所", "physical therapy clinic",
-        "按摩店", "massage shop",
-        "養生館", "wellness center",
+        "醫院", "醫院",
+        "診所", "診所",
+        "衛生所", "衛生所",
+        "藥局", "藥局",
+        "牙醫診所", "牙醫",
+        "中醫診所", "中醫",
+        "西醫診所", "診所",
+        "小兒科診所", "小兒科",
+        "婦產科診所", "婦產科",
+        "眼科診所", "眼科",
+        "皮膚科診所", "皮膚科",
+        "復健科診所", "復健科",
+        "物理治療所", "物理治療",
+        "按摩店", "按摩",
+        "養生館", "養生館",
         "SPA", "SPA",
-        "健身中心", "fitness center",
-        "健身房", "gym",
-        "瑜珈教室", "yoga studio",
-        "運動中心", "sports center",
+        "健身中心", "健身房",
+        "健身房", "健身中心",
+        "瑜珈教室", "瑜珈",
+        "運動中心", "運動中心",
     ],
     "餐飲美食": [
-        "餐廳", "restaurant",
-        "小吃店", "snack shop",
-        "早餐店", "breakfast shop",
-        "咖啡廳", "cafe",
-        "星巴克", "Starbucks",
-        "路易莎咖啡", "Louisa Coffee",
-        "85度C", "85C Bakery Cafe",
-        "手搖飲料店", "bubble tea shop",
-        "飲料店", "drink shop",
-        "速食店", "fast food restaurant",
-        "麥當勞", "McDonald's",
-        "肯德基", "KFC",
-        "摩斯漢堡", "Mos Burger",
-        "漢堡王", "Burger King",
-        "披薩店", "pizza restaurant",
-        "達美樂披薩", "Domino's Pizza",
-        "拿坡里披薩", "Napoli Pizza",
-        "必勝客", "Pizza Hut",
-        "火鍋店", "hot pot restaurant",
-        "燒烤店", "barbecue restaurant",
-        "牛排館", "steakhouse",
-        "鐵板燒", "teppanyaki",
-        "日本料理", "Japanese restaurant",
-        "壽司店", "sushi restaurant",
-        "拉麵店", "ramen restaurant",
-        "韓式料理", "Korean restaurant",
-        "泰式料理", "Thai restaurant",
-        "越南料理", "Vietnamese restaurant",
-        "美式餐廳", "American restaurant",
-        "義大利麵餐廳", "Italian restaurant",
-        "自助餐", "buffet",
-        "便當店", "lunch box shop",
-        "麵店", "noodle shop",
-        "滷味店", "braised food shop",
-        "鹽酥雞", "fried chicken",
-        "雞排店", "chicken steak shop",
-        "甜點店", "dessert shop",
-        "蛋糕店", "cake shop",
-        "麵包店", "bakery",
-        "冰店", "ice shop",
-        "豆花店", "tofu pudding shop",
+        "餐廳", "餐廳",
+        "小吃店", "小吃店",
+        "早餐店", "早餐店",
+        "咖啡廳", "咖啡廳",
+        "星巴克", "星巴克",
+        "路易莎咖啡", "路易莎",
+        "85度C", "85度C",
+        "手搖飲料店", "手搖飲",
+        "飲料店", "飲料店",
+        "速食店", "速食店",
+        "麥當勞", "麥當勞",
+        "肯德基", "肯德基",
+        "摩斯漢堡", "摩斯漢堡",
+        "漢堡王", "漢堡王",
+        "披薩店", "披薩",
+        "達美樂披薩", "達美樂",
+        "拿坡里披薩", "拿坡里",
+        "必勝客", "必勝客",
+        "火鍋店", "火鍋",
+        "燒烤店", "燒烤",
+        "牛排館", "牛排館",
+        "鐵板燒", "鐵板燒",
+        "日本料理", "日本料理",
+        "壽司店", "壽司",
+        "拉麵店", "拉麵",
+        "韓式料理", "韓式料理",
+        "泰式料理", "泰式料理",
+        "越南料理", "越南料理",
+        "美式餐廳", "美式餐廳",
+        "義大利麵餐廳", "義大利麵",
+        "自助餐", "自助餐",
+        "便當店", "便當店",
+        "麵店", "麵店",
+        "滷味店", "滷味",
+        "鹽酥雞", "鹽酥雞",
+        "雞排店", "雞排",
+        "甜點店", "甜點店",
+        "蛋糕店", "蛋糕店",
+        "麵包店", "麵包店",
+        "冰店", "冰店",
+        "豆花店", "豆花",
     ],
     "生活服務": [
-        "銀行", "bank",
-        "郵局", "post office",
-        "派出所", "police station",
-        "警察局", "police department",
-        "消防局", "fire station",
-        "區公所", "district office",
-        "戶政事務所", "household registration office",
-        "運動公園", "sports park",
-        "公園", "park",
-        "兒童公園", "children's park",
-        "河濱公園", "riverside park",
-        "廟宇", "temple",
-        "教堂", "church",
-        "洗車場", "car wash",
-        "汽車美容", "car detailing",
-        "洗衣店", "laundry",
-        "影印店", "copy shop",
-        "電信行", "telecom store",
-        "中華電信", "Chunghwa Telecom",
-        "台灣大哥大", "Taiwan Mobile",
-        "遠傳電信", "FarEasTone",
-        "寵物店", "pet store",
-        "動物醫院", "animal hospital",
+        "銀行", "銀行",
+        "郵局", "郵局",
+        "派出所", "派出所",
+        "警察局", "警察局",
+        "消防局", "消防局",
+        "區公所", "區公所",
+        "戶政事務所", "戶政事務所",
+        "運動公園", "公園",
+        "公園", "公園",
+        "兒童公園", "兒童公園",
+        "河濱公園", "河濱公園",
+        "廟宇", "廟",
+        "教堂", "教堂",
+        "洗車場", "洗車場",
+        "汽車美容", "汽車美容",
+        "洗衣店", "洗衣店",
+        "影印店", "影印店",
+        "電信行", "電信行",
+        "中華電信", "中華電信",
+        "台灣大哥大", "台灣大哥大",
+        "遠傳電信", "遠傳",
+        "寵物店", "寵物店",
+        "動物醫院", "動物醫院",
     ]
 }
 
@@ -244,6 +242,7 @@ def geocode_address(address: str, api_key: str):
 # Google Text Search
 # ===========================
 def search_text_google_places(lat, lng, api_key, keyword, radius=500):
+    """搜尋Google Places（使用中文關鍵字）"""
     url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
     params = {
         "query": keyword,
@@ -263,11 +262,11 @@ def search_text_google_places(lat, lng, api_key, keyword, radius=500):
     for p in r.get("results", []):
         loc = p["geometry"]["location"]
         dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-        # 使用反向映射獲取中文類別名稱
-        chinese_name = ENGLISH_TO_CHINESE.get(keyword, keyword)
+        
+        # 關鍵字本身就是中文，直接使用
         results.append((
             "關鍵字",
-            chinese_name,
+            keyword,  # 直接使用中文關鍵字
             p.get("name", "未命名"),
             loc["lat"],
             loc["lng"],
@@ -291,10 +290,9 @@ def load_population_csv(folder="./page_modules"):
 
 
 def query_google_places_keyword(lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-    """查詢Google Places關鍵字（安全版本）"""
+    """查詢Google Places關鍵字（簡化版，使用中文關鍵字）"""
     results, seen = [], set()
     
-    # 計算總任務數
     total_tasks = 0
     for cat in selected_categories:
         if cat in selected_subtypes:
@@ -319,26 +317,11 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
         if cat not in selected_subtypes:
             continue
             
-        # 安全地建立中英文映射
-        items = PLACE_TYPES.get(cat, [])
-        chinese_map = {}
-        
-        # 確保有足夠的元素
-        if len(items) >= 2:
-            for i in range(0, len(items), 2):
-                if i + 1 < len(items):
-                    english_keyword = items[i+1]
-                    chinese_name = items[i]
-                    chinese_map[english_keyword] = chinese_name
-        
-        for english_kw in selected_subtypes[cat]:
-            # 獲取中文顯示名稱（安全版本）
-            chinese_name = chinese_map.get(english_kw, english_kw)
-            update_progress(f"查詢 {cat}-{chinese_name}")
+        for chinese_kw in selected_subtypes[cat]:  # 現在是中文關鍵字
+            update_progress(f"查詢 {cat}-{chinese_kw}")
             
             try:
-                # 使用英文關鍵字查詢
-                places = search_text_google_places(lat, lng, api_key, english_kw, radius)
+                places = search_text_google_places(lat, lng, api_key, chinese_kw, radius)
                 
                 for p in places:
                     if p[5] > radius:
@@ -347,13 +330,12 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
                     if pid in seen:
                         continue
                     seen.add(pid)
-                    # 使用正確的類別和中文名稱
-                    results.append((cat, chinese_name, p[2], p[3], p[4], p[5], pid))
+                    results.append((cat, chinese_kw, p[2], p[3], p[4], p[5], p[6]))
 
-                time.sleep(0.5)  # 避免API限制
+                time.sleep(0.5)
                 
             except Exception as e:
-                st.warning(f"查詢 {english_kw} 時發生錯誤: {str(e)[:50]}")
+                st.warning(f"查詢 {chinese_kw} 時發生錯誤: {str(e)[:50]}")
                 continue
 
     if extra_keyword:
@@ -367,7 +349,7 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
                 if pid in seen:
                     continue
                 seen.add(pid)
-                results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], pid))
+                results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
                 
             time.sleep(0.3)
         except Exception as e:
@@ -375,70 +357,34 @@ def query_google_places_keyword(lat, lng, api_key, selected_categories, selected
 
     progress.progress(1.0)
     progress_text.text("✅ 查詢完成！")
-
-    # 按距離排序
     results.sort(key=lambda x: x[5])
     return results
 
 
-def check_places_found_improved(places, selected_categories, selected_subtypes, extra_keyword):
-    """改良版的檢查函數，處理名稱匹配問題"""
-    messages = []
-    
-    # 收集所有找到的設施名稱（小寫化以便比較）
-    found_names_lower = []
-    found_kws_lower = []
-    
-    for cat, kw, name, lat, lng, dist, pid in places:
-        found_names_lower.append(name.lower())
-        found_kws_lower.append(kw.lower())
-    
-    # 檢查每個選中的設施
+def check_places_found(places, selected_categories, selected_subtypes, extra_keyword):
+    # 建立檢查字典：類別 -> 子項目 -> 是否找到
+    found_dict = {}
     for cat in selected_categories:
-        if cat not in selected_subtypes:
-            continue
-            
-        for english_kw in selected_subtypes[cat]:
-            # 獲取中文名稱
-            chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
-            
-            # 檢查是否找到（寬鬆匹配）
-            found = False
-            
-            # 1. 檢查設施名稱是否包含中文名稱
-            for found_name in found_names_lower:
-                if any(word in found_name for word in chinese_name.lower().split()):
-                    found = True
-                    break
-            
-            # 2. 檢查設施類別是否匹配
-            if not found:
-                for found_kw in found_kws_lower:
-                    if any(word in found_kw for word in chinese_name.lower().split()):
-                        found = True
-                        break
-            
-            # 3. 檢查英文關鍵字是否匹配（用於品牌如 Pxmart）
-            if not found:
-                for found_name in found_names_lower:
-                    if any(word in found_name for word in english_kw.lower().split()):
-                        found = True
-                        break
-            
-            if not found:
-                messages.append(f"⚠️ 周圍沒有 {cat} → {chinese_name}")
+        if cat in selected_subtypes:
+            found_dict[cat] = {subtype: False for subtype in selected_subtypes[cat]}
     
-    # 檢查額外關鍵字
-    if extra_keyword:
-        extra_found = False
-        for found_name in found_names_lower:
-            if extra_keyword.lower() in found_name:
-                extra_found = True
-                break
-        
-        if not extra_found:
-            messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
-    
+    extra_found = False
+
+    for cat, kw, name, lat, lng, dist, pid in places:
+        if cat in found_dict and kw in found_dict[cat]:
+            found_dict[cat][kw] = True
+        if extra_keyword and cat == "關鍵字" and kw == extra_keyword:
+            extra_found = True
+
+    messages = []
+    for cat, subtypes in found_dict.items():
+        for subtype, found in subtypes.items():
+            if not found:
+                messages.append(f"⚠️ 周圍沒有 {cat} → {subtype}")
+
+    if extra_keyword and not extra_found:
+        messages.append(f"⚠️ 周圍沒有關鍵字「{extra_keyword}」的設施")
+
     return messages
 
 
