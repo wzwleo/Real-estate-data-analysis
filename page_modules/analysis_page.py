@@ -1,5 +1,6 @@
 import os
 import math
+import sys
 import json
 import requests
 import streamlit as st
@@ -718,7 +719,30 @@ def create_subtype_selector():
                                 st.markdown(f"✓ {chinese_items[idx]}")
     
     return selected_categories, selected_subtypes
+# 添加 components 目錄到 Python 路徑
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'components'))
 
+try:
+    # 嘗試從 components 目錄導入
+    from components.house_comparison import house_comparison_module
+    from components.market_trend_analysis import market_trend_analysis_module
+except ImportError as e:
+    st.error(f"導入模組失敗: {e}")
+    # 創建臨時的模組函數
+    def house_comparison_module():
+        st.error("house_comparison_module 未找到，請檢查 components/house_comparison.py 檔案")
+    
+    def market_trend_analysis_module():
+        st.error("market_trend_analysis_module 未找到，請檢查 components/market_trend_analysis.py 檔案")
+
+# 其他導入...
+from page_modules.analysis_page_utils import (
+    get_favorites_data, PLACE_TYPES, ENGLISH_TO_CHINESE, CATEGORY_COLORS,
+    haversine, _get_server_key, _get_browser_key, geocode_address,
+    search_text_google_places, load_population_csv, query_google_places_keyword,
+    check_places_found, render_map, format_places, load_real_estate_csv,
+    prepare_market_analysis_prompt
+)
 
 # ===========================
 # 分析頁面主程式
