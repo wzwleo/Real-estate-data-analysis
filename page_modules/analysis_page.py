@@ -1,26 +1,31 @@
 # page_modules/analysis_page.py
+"""
+分析頁面主模組
+整合了三個主要功能：
+1. 個別分析 (Tab1)
+2. 房屋比較 (Tab2) - 使用 ComparisonAnalyzer
+3. 市場趨勢分析 (Tab3)
+"""
+
+# 確保必要的導入
 import os
 import sys
-import streamlit as st
 
-# 修正匯入路徑
+# 修正導入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# 現在匯入模組
-try:
-    from components.solo_analysis import tab1_module
-    from components.comparison import ComparisonAnalyzer
-    from components.market_trend import MarketTrendAnalyzer
-    from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    import_success = True
-except ImportError as e:
-    st.error(f"匯入模組失敗: {e}")
-    import traceback
-    st.code(traceback.format_exc())
-    import_success = False
+# 其他導入...
+
+# 在文件末尾確保函數可以被導入
+__all__ = ['render_analysis_page']
+
+# 主函數
+def render_analysis_page():
+    """渲染分析頁面"""
+    # ... 你的程式碼 ...
 
 
 def render_analysis_page():
