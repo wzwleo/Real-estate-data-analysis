@@ -761,7 +761,6 @@ def render_analysis_page():
             horizontal=True,
             key="comparison_mode"
         )
-        
         fav_df = get_favorites_data()
         if fav_df.empty:
             st.info("⭐ 尚未有收藏房產，無法比較")
