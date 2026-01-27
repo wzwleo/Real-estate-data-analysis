@@ -1,4 +1,13 @@
-# config.py - 放置在專案根目錄
+# config.py - 專案根目錄
+import os
+
+# 基礎設定
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 路徑設定
+DATA_FOLDER = os.path.join(BASE_DIR, "Data")
+PAGE_MODULES_FOLDER = os.path.join(BASE_DIR, "page_modules")
+COMPONENTS_FOLDER = os.path.join(BASE_DIR, "components")
 
 # 關鍵字顏色設定
 CATEGORY_COLORS = {
@@ -18,6 +27,5 @@ DEFAULT_RADIUS_RANGE = (100, 2000, 100)
 GOOGLE_MAPS_BASE_URL = "https://maps.googleapis.com/maps/api/"
 GEMINI_MODEL = "gemini-2.0-flash"
 
-# 路徑設定
-DATA_FOLDER = "./Data"
-PAGE_MODULES_FOLDER = "./page_modules"
+# 除錯模式
+DEBUG = True
