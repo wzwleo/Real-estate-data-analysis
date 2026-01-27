@@ -1,18 +1,27 @@
-# analysis_page.py - 簡化後的主檔案
-import streamlit as st
+# page_modules/analysis_page.py
 
-# 從 config 匯入設定
+# 方案 1A：使用相對路徑 import
+import sys
+import os
+
+# 添加父目錄到 Python 路徑
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 現在可以匯入 config
 from config import CATEGORY_COLORS
 
-# 匯入模組
+# 繼續其他 imports...
+import math
+import json
+import requests
+import streamlit as st
+import time
+from string import Template
+from streamlit.components.v1 import html
 from components.solo_analysis import tab1_module
-from components.favorites import FavoritesManager
-from components.geocoding import geocode_address
-from utils.data_loaders import load_real_estate_csv, load_population_csv
-
-# 匯入分析模組
-from components.comparison import ComparisonAnalyzer
-from components.market_trend import MarketTrendAnalyzer
+import google.generativeai as genai
+import pandas as pd
+from streamlit_echarts import st_echarts
 
 
 def render_analysis_page():
