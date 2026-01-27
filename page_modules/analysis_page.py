@@ -1,14 +1,19 @@
 # page_modules/analysis_page.py
 
-# 方案 1A：使用相對路徑 import
+# 添加路徑設定
 import sys
 import os
-
-# 添加父目錄到 Python 路徑
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# 現在可以匯入 config
-from config import CATEGORY_COLORS
+# 直接定義 CATEGORY_COLORS（避免 import 問題）
+CATEGORY_COLORS = {
+    "教育": "#1E90FF",        # 藍色
+    "購物": "#FF8C00",        # 橘色
+    "交通運輸": "#800080",     # 紫色
+    "健康與保健": "#32CD32",   # 綠色
+    "餐飲美食": "#FF4500",     # 紅色
+    "生活服務": "#FF1493",     # 深粉色
+}
 
 # 繼續其他 imports...
 import math
@@ -23,6 +28,31 @@ import google.generativeai as genai
 import pandas as pd
 from streamlit_echarts import st_echarts
 
+# 嘗試從 components 匯入模組
+try:
+    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE
+except ImportError:
+    # 如果找不到，創建簡單版本
+    PLACE_TYPES = {}
+    ENGLISH_TO_CHINESE = {}
+
+def get_favorites_data():
+    """取得收藏的房屋資料（暫時放在這裡）"""
+    if 'favorites' not in st.session_state or not st.session_state.favorites:
+        return pd.DataFrame()
+    
+    all_df = None
+    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+        all_df = st.session_state.all_properties_df
+    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+        all_df = st.session_state.filtered_df
+    
+    if all_df is None or all_df.empty:
+        return pd.DataFrame()
+    
+    fav_ids = st.session_state.favorites
+    fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
+    return fav_df
 
 def render_analysis_page():
     """渲染分析頁面"""
@@ -39,16 +69,21 @@ def render_analysis_page():
     with tab1:
         tab1_module()
     
-    # Tab2: 房屋比較
+    # Tab2: 房屋比較（簡化版）
     with tab2:
-        analyzer = ComparisonAnalyzer()
-        analyzer.render_comparison_tab()
+        st.subheader("🏠 房屋比較")
+        fav_df = get_favorites_data()
+        if not fav_df.empty:
+            st.write(f"目前有 {len(fav_df)} 間收藏房屋")
+            # 顯示前幾筆
+            st.dataframe(fav_df[['標題', '地址']].head())
+        else:
+            st.info("⭐ 尚未有收藏房產")
     
-    # Tab3: 市場趨勢分析
+    # Tab3: 市場趨勢分析（簡化版）
     with tab3:
-        analyzer = MarketTrendAnalyzer()
-        analyzer.render_analysis_tab()
-
+        st.subheader("📊 市場趨勢分析")
+        st.info("市場趨勢分析功能開發中...")
 
 # 如果直接執行此檔案
 if __name__ == "__main__":
