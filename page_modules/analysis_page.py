@@ -69,21 +69,15 @@ def render_analysis_page():
     with tab1:
         tab1_module()
     
-    # Tab2: 房屋比較（簡化版）
+    # Tab2: 房屋比較
     with tab2:
-        st.subheader("🏠 房屋比較")
-        fav_df = get_favorites_data()
-        if not fav_df.empty:
-            st.write(f"目前有 {len(fav_df)} 間收藏房屋")
-            # 顯示前幾筆
-            st.dataframe(fav_df[['標題', '地址']].head())
-        else:
-            st.info("⭐ 尚未有收藏房產")
+        analyzer = ComparisonAnalyzer()
+        analyzer.render_comparison_tab()
     
-    # Tab3: 市場趨勢分析（簡化版）
+    # Tab3: 市場趨勢分析
     with tab3:
-        st.subheader("📊 市場趨勢分析")
-        st.info("市場趨勢分析功能開發中...")
+        analyzer = MarketTrendAnalyzer()
+        analyzer.render_analysis_tab()
 
 # 如果直接執行此檔案
 if __name__ == "__main__":
