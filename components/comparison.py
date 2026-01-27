@@ -28,103 +28,153 @@ except ImportError as e:
 
 
 class ComparisonAnalyzer:
-    """房屋比較分析器"""
+    """房屋分析器 - 支援單一分析和多房屋比較"""
     
     def __init__(self):
         pass
     
     def render_comparison_tab(self):
-        """渲染比較頁面"""
-        st.subheader("🏠 房屋比較（單獨或多個比較）")
+        """渲染分析頁面"""
+        st.subheader("🏠 房屋分析模式")
         
         # 檢查是否有收藏
         fav_df = self._get_favorites_data()
         if fav_df.empty:
-            st.info("⭐ 尚未有收藏房產，無法比較")
+            st.info("⭐ 尚未有收藏房產，無法分析")
             return
         
-        # 模式選擇
-        comparison_mode = st.radio(
-            "選擇比較模式",
-            ["單獨比較（2個房屋）", "多個比較（2個以上房屋）"],
+        # 模式選擇 - 兩種模式
+        analysis_mode = st.radio(
+            "選擇分析模式",
+            ["單一房屋分析", "多房屋比較"],
             horizontal=True,
-            key="comparison_mode"
+            key="analysis_mode"
         )
         
         options = fav_df['標題'] + " | " + fav_df['地址']
         selected_houses = []
         
-        if comparison_mode == "單獨比較（2個房屋）":
-            # 單獨比較模式
-            c1, c2 = st.columns(2)
-            with c1:
-                choice_a = st.selectbox("選擇房屋 A", options, key="compare_a")
-            with c2:
-                choice_b = st.selectbox("選擇房屋 B", options, key="compare_b")
+        if analysis_mode == "單一房屋分析":
+            # 單一房屋分析模式
+            choice_single = st.selectbox("選擇要分析的房屋", options, key="compare_single")
             
-            if choice_a and choice_b:
-                if choice_a == choice_b:
-                    st.warning("⚠️ 請選擇兩個不同房屋")
-                    return
-                selected_houses = [choice_a, choice_b]
+            if choice_single:
+                selected_houses = [choice_single]
                 
                 # 顯示選擇的房屋資訊
-                house_a = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_a].iloc[0]
-                house_b = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_b].iloc[0]
+                house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_single].iloc[0]
                 
-                col_info1, col_info2 = st.columns(2)
-                with col_info1:
-                    st.markdown(f"**房屋 A**")
-                    st.markdown(f"📍 {house_a['地址']}")
-                    st.markdown(f"🏷️ {house_a['標題']}")
+                st.markdown("### 📋 選擇的房屋")
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    st.metric("房屋", f"🏠 單一分析")
+                with col2:
+                    st.markdown(f"**標題**: {house_info['標題']}")
+                    st.markdown(f"**地址**: {house_info['地址']}")
                 
-                with col_info2:
-                    st.markdown(f"**房屋 B**")
-                    st.markdown(f"📍 {house_b['地址']}")
-                    st.markdown(f"🏷️ {house_b['標題']}")
-        else:
-            # 多個比較模式
+                # 顯示房屋基本資訊
+                with st.expander("📊 房屋詳細資訊", expanded=True):
+                    info_cols = st.columns(3)
+                    with info_cols[0]:
+                        if '總價元' in house_info:
+                            st.metric("總價", f"{int(house_info['總價元']):,} 元")
+                    with info_cols[1]:
+                        if '建物面積平方公尺' in house_info:
+                            st.metric("面積", f"{house_info['建物面積平方公尺']:.1f} ㎡")
+                    with info_cols[2]:
+                        if '平均單價元平方公尺' in house_info:
+                            st.metric("單價", f"{int(house_info['平均單價元平方公尺']):,} 元/㎡")
+                
+        else:  # 多房屋比較
+            # 多房屋比較模式
             selected_houses = st.multiselect(
-                "選擇要比較的房屋（至少選擇2個）",
+                "選擇要比較的房屋（可選1個或多個）",
                 options,
-                default=options[:min(3, len(options))] if len(options) >= 2 else [],
+                default=options[:min(3, len(options))] if len(options) >= 1 else [],
                 key="multi_compare"
             )
             
-            if len(selected_houses) < 2:
-                st.warning("⚠️ 請至少選擇2個房屋進行比較")
+            if not selected_houses:
+                st.warning("⚠️ 請至少選擇1個房屋")
                 return
             
             # 顯示已選房屋的預覽
             if selected_houses:
                 st.markdown("### 📋 已選房屋清單")
                 
-                # 分列顯示
-                num_columns = min(3, len(selected_houses))
-                cols = st.columns(num_columns)
+                # 根據房屋數量決定顯示方式
+                if len(selected_houses) == 1:
+                    # 只有一個房屋時，顯示更詳細
+                    house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == selected_houses[0]].iloc[0]
+                    st.markdown(f"""
+                    <div style="border:2px solid #4CAF50; padding:15px; border-radius:10px; background-color:#f9f9f9;">
+                    <h4 style="color:#4CAF50;">🏠 單一房屋（比較模式）</h4>
+                    <p><strong>標題：</strong>{house_info['標題']}</p>
+                    <p><strong>地址：</strong>{house_info['地址']}</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                else:
+                    # 多個房屋時，分列顯示
+                    num_columns = min(3, len(selected_houses))
+                    cols = st.columns(num_columns)
+                    
+                    for idx, house_option in enumerate(selected_houses):
+                        with cols[idx % num_columns]:
+                            house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
+                            price_info = ""
+                            if '平均單價元平方公尺' in house_info:
+                                price = int(house_info['平均單價元平方公尺'])
+                                price_info = f"<br>💰 {price:,} 元/㎡"
+                            
+                            st.markdown(f"""
+                            <div style="border:1px solid #ddd; padding:10px; border-radius:5px; margin-bottom:10px;">
+                            <strong>房屋 {chr(65+idx)}</strong><br>
+                            📍 {house_info['地址'][:30]}...<br>
+                            🏷️ {house_info['標題'][:25]}...{price_info}
+                            </div>
+                            """, unsafe_allow_html=True)
                 
-                for idx, house_option in enumerate(selected_houses):
-                    with cols[idx % num_columns]:
+                st.caption(f"已選擇 {len(selected_houses)} 間房屋{'進行比較' if len(selected_houses) > 1 else ''}")
+                
+                # 如果選擇了多個房屋，顯示快速價格比較
+                if len(selected_houses) > 1:
+                    price_comparison = []
+                    for house_option in selected_houses:
                         house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
-                        st.markdown(f"""
-                        <div style="border:1px solid #ddd; padding:10px; border-radius:5px; margin-bottom:10px;">
-                        <strong>房屋 {chr(65+idx)}</strong><br>
-                        📍 {house_info['地址'][:30]}...<br>
-                        🏷️ {house_info['標題'][:25]}...
-                        </div>
-                        """, unsafe_allow_html=True)
-                
-                st.caption(f"已選擇 {len(selected_houses)} 間房屋進行比較")
+                        if '平均單價元平方公尺' in house_info:
+                            price_comparison.append({
+                                'option': house_option,
+                                'price': house_info['平均單價元平方公尺']
+                            })
+                    
+                    if len(price_comparison) > 1:
+                        price_comparison.sort(key=lambda x: x['price'])
+                        cheapest = price_comparison[0]
+                        most_expensive = price_comparison[-1]
+                        price_diff = ((most_expensive['price'] - cheapest['price']) / cheapest['price'] * 100) if cheapest['price'] > 0 else 0
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("最便宜", f"{int(cheapest['price']):,} 元/㎡", "房屋 A")
+                        with col2:
+                            st.metric("最昂貴", f"{int(most_expensive['price']):,} 元/㎡", f"房屋 {chr(65 + selected_houses.index(most_expensive['option']))}")
+                        with col3:
+                            st.metric("價格差距", f"{price_diff:.1f}%")
         
-        # 基本設定
+        # 如果沒有選擇房屋，停止執行
+        if not selected_houses:
+            return
+        
+        # 分析設定
         st.markdown("---")
-        st.subheader("⚙️ 比較設定")
+        st.subheader("⚙️ 分析設定")
         
         # 取得 API Keys
         server_key = self._get_server_key()
         gemini_key = self._get_gemini_key()
         browser_key = self._get_browser_key()
         
+        # 搜尋設定
         radius = st.slider("搜尋半徑 (公尺)", 100, 2000, DEFAULT_RADIUS, 100, key="radius_slider")
         keyword = st.text_input("額外關鍵字搜尋 (可選)", key="extra_keyword", 
                               placeholder="例如：公園、健身房、銀行等")
@@ -136,77 +186,113 @@ class ComparisonAnalyzer:
         selected_categories = []
         selected_subtypes = {}
         
-        # 大類別選擇
-        st.markdown("### 選擇大類別")
-        all_categories = list(PLACE_TYPES.keys())
-        cols = st.columns(len(all_categories))
+        # 快速選擇模式
+        st.markdown("### 🚀 快速選擇")
+        quick_mode = st.radio(
+            "選擇方式",
+            ["快速選擇（常用組合）", "自訂選擇"],
+            horizontal=True,
+            key="quick_mode"
+        )
         
-        category_selection = {}
-        for i, cat in enumerate(all_categories):
-            with cols[i]:
-                color = CATEGORY_COLORS.get(cat, "#000000")
-                st.markdown(f'<span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">{cat}</span>', unsafe_allow_html=True)
-                category_selection[cat] = st.checkbox(f"選擇{cat}", key=f"main_cat_{cat}_{i}")
-        
-        # 細分設施選擇
-        selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
-        
-        if selected_main_cats:
-            st.markdown("### 選擇細分設施")
+        if quick_mode == "快速選擇（常用組合）":
+            # 預設組合
+            preset_options = {
+                "基礎生活圈": ["教育", "購物", "交通運輸", "健康與保健"],
+                "完整生活機能": ["教育", "購物", "交通運輸", "健康與保健", "餐飲美食", "生活服務"],
+                "家庭需求": ["教育", "購物", "健康與保健", "生活服務"],
+                "投資潛力": ["交通運輸", "購物", "餐飲美食"],
+                "退休養老": ["健康與保健", "生活服務", "餐飲美食"],
+                "上班族通勤": ["交通運輸", "餐飲美食", "購物"]
+            }
             
-            for cat_idx, cat in enumerate(selected_main_cats):
-                with st.expander(f"📁 {cat} 類別細選", expanded=True):
-                    select_all = st.checkbox(f"選擇所有{cat}設施", key=f"select_all_{cat}_{cat_idx}")
-                    
-                    if select_all:
-                        # 選中所有子項目
-                        items = PLACE_TYPES[cat]
-                        selected_subtypes[cat] = items[1::2]  # 英文關鍵字
-                        selected_categories.append(cat)
+            selected_preset = st.selectbox(
+                "選擇預設組合",
+                list(preset_options.keys()),
+                key="preset_selection"
+            )
+            
+            if selected_preset:
+                selected_categories = preset_options[selected_preset]
+                # 選中對應的大類別
+                for cat in selected_categories:
+                    selected_subtypes[cat] = PLACE_TYPES[cat][1::2]  # 所有子項目
+                
+                st.success(f"✅ 已選擇「{selected_preset}」組合")
+                st.info(f"包含: {', '.join(selected_categories)}")
+        
+        else:  # 自訂選擇
+            # 大類別選擇
+            st.markdown("### 選擇大類別")
+            all_categories = list(PLACE_TYPES.keys())
+            cols = st.columns(len(all_categories))
+            
+            category_selection = {}
+            for i, cat in enumerate(all_categories):
+                with cols[i]:
+                    color = CATEGORY_COLORS.get(cat, "#000000")
+                    st.markdown(f'<span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">{cat}</span>', unsafe_allow_html=True)
+                    category_selection[cat] = st.checkbox(f"選擇{cat}", key=f"main_cat_{cat}_{i}")
+            
+            # 細分設施選擇
+            selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
+            
+            if selected_main_cats:
+                st.markdown("### 選擇細分設施")
+                
+                for cat_idx, cat in enumerate(selected_main_cats):
+                    with st.expander(f"📁 {cat} 類別細選", expanded=True):
+                        select_all = st.checkbox(f"選擇所有{cat}設施", key=f"select_all_{cat}_{cat_idx}")
                         
-                        st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
-                    else:
-                        # 逐個子項目選擇
-                        items = PLACE_TYPES[cat]
-                        num_columns = 3
-                        num_items = len(items) // 2
+                        if select_all:
+                            # 選中所有子項目
+                            items = PLACE_TYPES[cat]
+                            selected_subtypes[cat] = items[1::2]  # 英文關鍵字
+                            selected_categories.append(cat)
+                            
+                            st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
+                        else:
+                            # 逐個子項目選擇
+                            items = PLACE_TYPES[cat]
+                            num_columns = 3
+                            num_items = len(items) // 2
+                            
+                            # 計算每列要顯示的項目數
+                            items_per_row = (num_items + num_columns - 1) // num_columns
+                            
+                            for row in range(items_per_row):
+                                cols = st.columns(num_columns)
+                                for col_idx in range(num_columns):
+                                    item_idx = row + col_idx * items_per_row
+                                    if item_idx * 2 + 1 < len(items):
+                                        chinese_name = items[item_idx * 2]  # 中文名稱
+                                        english_keyword = items[item_idx * 2 + 1]  # 英文關鍵字
+                                        
+                                        with cols[col_idx]:
+                                            # 確保每個checkbox有唯一的key
+                                            checkbox_key = f"tab2_{cat}_{english_keyword}_{row}_{col_idx}"
+                                            if st.checkbox(chinese_name, key=checkbox_key):
+                                                if cat not in selected_subtypes:
+                                                    selected_subtypes[cat] = []
+                                                selected_subtypes[cat].append(english_keyword)
                         
-                        # 計算每列要顯示的項目數
-                        items_per_row = (num_items + num_columns - 1) // num_columns
-                        
-                        for row in range(items_per_row):
-                            cols = st.columns(num_columns)
-                            for col_idx in range(num_columns):
-                                item_idx = row + col_idx * items_per_row
-                                if item_idx * 2 + 1 < len(items):
-                                    chinese_name = items[item_idx * 2]  # 中文名稱
-                                    english_keyword = items[item_idx * 2 + 1]  # 英文關鍵字
-                                    
-                                    with cols[col_idx]:
-                                        # 確保每個checkbox有唯一的key
-                                        checkbox_key = f"tab2_{cat}_{english_keyword}_{row}_{col_idx}"
-                                        if st.checkbox(chinese_name, key=checkbox_key):
-                                            if cat not in selected_subtypes:
-                                                selected_subtypes[cat] = []
-                                            selected_subtypes[cat].append(english_keyword)
-                    
-                    # 如果有選中任何子項目，就加入主類別
-                    if cat in selected_subtypes and selected_subtypes[cat]:
-                        selected_categories.append(cat)
+                        # 如果有選中任何子項目，就加入主類別
+                        if cat in selected_subtypes and selected_subtypes[cat]:
+                            selected_categories.append(cat)
         
         # 顯示選擇摘要
         if selected_categories:
             st.markdown("---")
             st.subheader("📋 已選擇的設施摘要")
             
-            summary_cols = st.columns(min(len(selected_categories), 3))
+            summary_cols = st.columns(min(len(selected_categories), 4))
             for idx, cat in enumerate(selected_categories):
                 with summary_cols[idx % len(summary_cols)]:
                     if cat in selected_subtypes:
                         count = len(selected_subtypes[cat])
                         color = CATEGORY_COLORS.get(cat, "#000000")
                         st.markdown(f"""
-                        <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color};">
+                        <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color}; margin-bottom:10px;">
                         <h4 style="color:{color}; margin:0;">{cat}</h4>
                         <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
                         </div>
@@ -227,12 +313,13 @@ class ComparisonAnalyzer:
                             items_display = "、".join(chinese_names[:3])
                             st.caption(f"✓ {items_display}等{count}種設施")
         
-        # 開始比較按鈕
+        # 開始分析按鈕
         st.markdown("---")
         col_start, col_clear = st.columns([3, 1])
         
         with col_start:
-            if st.button("🚀 開始比較", type="primary", use_container_width=True, key="start_comparison"):
+            analyze_text = "🚀 開始分析" if analysis_mode == "單一房屋分析" else "🚀 開始比較"
+            if st.button(analyze_text, type="primary", use_container_width=True, key="start_analysis"):
                 # 驗證檢查
                 if not browser_key:
                     st.error("❌ 請在側邊欄填入 Google Maps **Browser Key**")
@@ -241,24 +328,17 @@ class ComparisonAnalyzer:
                     st.error("❌ 請在側邊欄填入 Server Key 與 Gemini Key")
                     return
                 
-                # 根據模式進行不同檢查
-                if comparison_mode == "單獨比較（2個房屋）":
-                    if 'choice_a' in locals() and 'choice_b' in locals():
-                        if choice_a == choice_b:
-                            st.warning("⚠️ 請選擇兩個不同房屋")
-                            return
-                
                 if not selected_categories:
                     st.warning("⚠️ 請至少選擇一個生活機能類別")
                     return
                 
                 if not selected_houses:
-                    st.warning("⚠️ 請選擇要比較的房屋")
+                    st.warning("⚠️ 請選擇要分析的房屋")
                     return
 
-                # 執行比較
-                self._run_comparison_analysis(
-                    comparison_mode, 
+                # 執行分析
+                self._run_analysis(
+                    analysis_mode, 
                     selected_houses, 
                     fav_df, 
                     server_key, 
@@ -271,7 +351,7 @@ class ComparisonAnalyzer:
         
         with col_clear:
             if st.button("🗑️ 清除結果", type="secondary", use_container_width=True, key="clear_results"):
-                # 清除比較相關的 session state
+                # 清除相關的 session state
                 keys_to_clear = ['gemini_result', 'gemini_key', 'places_data', 'houses_data']
                 for key in keys_to_clear:
                     if key in st.session_state:
@@ -518,103 +598,190 @@ class ComparisonAnalyzer:
         )
         html(map_html, height=400)
     
-    def _prepare_multi_comparison_prompt(self, houses_data, places_data, facility_counts, 
-                                       category_counts, selected_categories, radius, 
-                                       keyword, comparison_mode):
-        """準備多房屋比較的 AI 提示詞"""
+    def _prepare_analysis_prompt(self, houses_data, places_data, facility_counts, 
+                                category_counts, selected_categories, radius, 
+                                keyword, analysis_mode):
+        """準備分析提示詞（根據模式不同）"""
         
-        # 統計摘要
-        stats_summary = "統計摘要：\n"
-        for house_name, count in facility_counts.items():
-            if places_data[house_name]:
-                nearest = min([p[5] for p in places_data[house_name]])
-                stats_summary += f"- {house_name}：共 {count} 個設施，最近設施 {nearest} 公尺\n"
-            else:
-                stats_summary += f"- {house_name}：共 0 個設施\n"
-        
-        # 排名
-        ranked_houses = sorted(facility_counts.items(), key=lambda x: x[1], reverse=True)
-        ranking_text = "設施數量排名：\n"
-        for rank, (house_name, count) in enumerate(ranked_houses, 1):
-            ranking_text += f"第{rank}名：{house_name} ({count}個設施)\n"
-        
-        # 各類別比較
-        category_comparison = "各類別設施比較：\n"
-        all_categories = set()
-        for counts in category_counts.values():
-            all_categories.update(counts.keys())
-        
-        for cat in sorted(all_categories):
-            category_comparison += f"\n【{cat}】\n"
-            for house_name in houses_data.keys():
-                count = category_counts[house_name].get(cat, 0)
-                category_comparison += f"- {house_name}: {count} 個設施\n"
-        
-        # 房屋詳細資訊
-        houses_details = "房屋詳細資訊：\n"
-        for house_name, house_info in houses_data.items():
-            houses_details += f"""
-            {house_name}:
+        if analysis_mode == "單一房屋分析":
+            # 單一房屋分析提示詞
+            house_name = list(houses_data.keys())[0]
+            house_info = houses_data[house_name]
+            places = places_data[house_name]
+            count = facility_counts.get(house_name, 0)
+            
+            # 統計設施距離
+            distances = [p[5] for p in places]
+            avg_distance = sum(distances) / len(distances) if distances else 0
+            min_distance = min(distances) if distances else 0
+            
+            # 各類別統計
+            category_stats = {}
+            for cat, kw, name, lat, lng, dist, pid in places:
+                category_stats[cat] = category_stats.get(cat, 0) + 1
+            
+            prompt = f"""
+            你是一位專業的房地產分析師，請對以下房屋的生活機能進行詳細分析。
+            
+            【房屋資訊】
             - 標題：{house_info['title']}
             - 地址：{house_info['address']}
+            
+            【搜尋條件】
+            - 搜尋半徑：{radius} 公尺
+            - 選擇的生活機能類別：{', '.join(selected_categories)}
+            - 額外關鍵字：{keyword if keyword else '無'}
+            
+            【設施統計】
+            - 總設施數量：{count} 個
+            - 平均距離：{avg_distance:.0f} 公尺
+            - 最近設施：{min_distance} 公尺
+            
+            【各類別設施數量】
+            {chr(10).join([f'- {cat}: {num} 個' for cat, num in category_stats.items()])}
+            
+            【請分析以下面向】
+            1. 生活便利性評估（以1-5星評分）
+            2. 設施完整性分析（哪些類別充足，哪些缺乏）
+            3. 適合的居住族群分析（單身、小家庭、大家庭、退休族等）
+            4. 投資潛力評估（以1-5星評分）
+            5. 優點總結（至少3點）
+            6. 缺點提醒（至少2點）
+            7. 建議改善或補充的生活機能
+            8. 綜合評價與建議
+            
+            【特別注意】
+            - 考慮設施距離與日常生活的實際便利性
+            - 分析對不同族群的吸引力
+            - 評估房價與生活機能的性價比
+            
+            請使用專業但易懂的語言，提供具體、實用的建議。
             """
         
-        # 建構提示詞
-        prompt = f"""
-        你是一位專業的房地產分析師，請根據以下{len(houses_data)}間房屋的生活機能進行比較分析。
-        
-        【分析要求】
-        1. 請以中文繁體回應
-        2. 從「自住」和「投資」兩個角度分析
-        3. 考慮各類生活設施的完整性與距離
-        4. 提供具體建議與風險提示
-        5. 請進行排名比較並說明原因
-        
-        【搜尋條件】
-        - 搜尋半徑：{radius} 公尺
-        - 選擇的生活機能類別：{', '.join(selected_categories)}
-        - 額外關鍵字：{keyword if keyword else '無'}
-        - 比較模式：{comparison_mode}
-        
-        {houses_details}
-        
-        【設施統計】
-        {stats_summary}
-        
-        {ranking_text}
-        
-        {category_comparison}
-        
-        【請依序分析】
-        1. 總體設施豐富度比較與排名
-        2. 各類別設施完整性分析（教育、購物、交通、健康、餐飲等）
-        3. 生活便利性綜合評估
-        4. 對「自住者」的建議（哪間最適合，排名與原因）
-        5. 對「投資者」的建議（哪間最有潛力，排名與原因）
-        6. 各房屋的優缺點分析
-        7. 潛在缺點與風險提醒
-        8. 綜合結論與推薦排名
-        
-        請使用專業但易懂的語言，並提供具體的判斷依據。
-        對於每個房屋，請給予1-5星的評分（⭐為單位）。
-        """
+        else:  # 多房屋比較
+            # 多房屋比較提示詞
+            num_houses = len(houses_data)
+            
+            if num_houses == 1:
+                # 只有一個房屋的比較模式
+                house_name = list(houses_data.keys())[0]
+                house_info = houses_data[house_name]
+                places = places_data[house_name]
+                count = facility_counts.get(house_name, 0)
+                
+                # 統計設施距離
+                distances = [p[5] for p in places]
+                avg_distance = sum(distances) / len(distances) if distances else 0
+                
+                # 各類別統計
+                category_stats = {}
+                for cat, kw, name, lat, lng, dist, pid in places:
+                    category_stats[cat] = category_stats.get(cat, 0) + 1
+                
+                prompt = f"""
+                你是一位專業的房地產分析師，請對以下房屋的生活機能進行綜合評估。
+                
+                【房屋資訊】
+                - 標題：{house_info['title']}
+                - 地址：{house_info['address']}
+                
+                【搜尋條件】
+                - 搜尋半徑：{radius} 公尺
+                - 選擇的生活機能類別：{', '.join(selected_categories)}
+                - 額外關鍵字：{keyword if keyword else '無'}
+                
+                【設施統計】
+                - 總設施數量：{count} 個
+                - 平均距離：{avg_distance:.0f} 公尺
+                
+                【各類別設施數量】
+                {chr(10).join([f'- {cat}: {num} 個' for cat, num in category_stats.items()])}
+                
+                【請提供深度分析】
+                1. 區域生活機能整體評價
+                2. 與類似區域的比較優勢
+                3. 未來發展潛力評估
+                4. 投資回報率預估
+                5. 風險因素分析
+                6. 最佳使用建議
+                
+                請提供專業、客觀的分析報告。
+                """
+            else:
+                # 多個房屋比較
+                stats_summary = "統計摘要：\n"
+                for house_name, count in facility_counts.items():
+                    if places_data[house_name]:
+                        nearest = min([p[5] for p in places_data[house_name]])
+                        stats_summary += f"- {house_name}：共 {count} 個設施，最近設施 {nearest} 公尺\n"
+                    else:
+                        stats_summary += f"- {house_name}：共 0 個設施\n"
+                
+                # 排名
+                ranked_houses = sorted(facility_counts.items(), key=lambda x: x[1], reverse=True)
+                ranking_text = "設施數量排名：\n"
+                for rank, (house_name, count) in enumerate(ranked_houses, 1):
+                    ranking_text += f"第{rank}名：{house_name} ({count}個設施)\n"
+                
+                # 房屋詳細資訊
+                houses_details = "房屋詳細資訊：\n"
+                for house_name, house_info in houses_data.items():
+                    houses_details += f"""
+                    {house_name}:
+                    - 標題：{house_info['title']}
+                    - 地址：{house_info['address']}
+                    """
+                
+                prompt = f"""
+                你是一位專業的房地產分析師，請對以下{num_houses}間房屋進行綜合比較分析。
+                
+                【搜尋條件】
+                - 搜尋半徑：{radius} 公尺
+                - 選擇的生活機能類別：{', '.join(selected_categories)}
+                - 額外關鍵字：{keyword if keyword else '無'}
+                
+                {houses_details}
+                
+                【設施統計】
+                {stats_summary}
+                
+                {ranking_text}
+                
+                【請依序分析】
+                1. 總體設施豐富度排名與分析
+                2. 各類別設施完整性比較
+                3. 生活便利性綜合評估（為每間房屋評1-5星）
+                4. 對「自住者」的推薦排名與原因
+                5. 對「投資者」的推薦排名與原因
+                6. 各房屋的優勢特色分析
+                7. 各房屋的潛在風險提醒
+                8. 綜合性價比評估
+                9. 最終推薦與總結
+                
+                【分析要求】
+                - 提供清晰的排名和評分
+                - 每項評估都要有具體依據
+                - 考慮不同生活階段的需求
+                - 給出實用的購買建議
+                
+                請使用專業但易懂的語言，提供全面、客觀的分析。
+                """
         
         return prompt
     
-    def _run_comparison_analysis(self, comparison_mode, selected_houses, fav_df, 
-                                server_key, gemini_key, radius, keyword, 
-                                selected_categories, selected_subtypes):
-        """執行房屋比較分析的核心函數"""
+    def _run_analysis(self, analysis_mode, selected_houses, fav_df, 
+                     server_key, gemini_key, radius, keyword, 
+                     selected_categories, selected_subtypes):
+        """執行分析的核心函數"""
         
         # 取得房屋資料
         houses_data = {}
-        geocode_results = {}
         
         # 地址解析
         with st.spinner("📍 解析房屋地址中..."):
             for idx, house_option in enumerate(selected_houses):
                 house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
-                house_name = f"房屋 {chr(65+idx)}"
+                house_name = f"房屋 {chr(65+idx)}" if len(selected_houses) > 1 else "分析房屋"
                 
                 lat, lng = geocode_address(house_info["地址"], server_key)
                 if lat is None or lng is None:
@@ -629,7 +796,6 @@ class ComparisonAnalyzer:
                     "lng": lng,
                     "original_name": house_info['標題']
                 }
-                geocode_results[house_name] = (lat, lng)
         
         # 查詢每個房屋的周邊設施
         places_data = {}
@@ -651,12 +817,16 @@ class ComparisonAnalyzer:
                 
                 places_data[house_name] = places
         
-        # 顯示比較標題
-        st.markdown("## 📊 比較結果")
+        # 顯示分析標題
+        num_houses = len(houses_data)
+        if analysis_mode == "單一房屋分析":
+            st.markdown(f"## 📊 單一房屋分析結果")
+        else:
+            st.markdown(f"## 📊 比較結果 ({num_houses}間房屋)")
         
         # 統計分析
         st.markdown("---")
-        st.subheader("📈 設施統計比較")
+        st.subheader("📈 設施統計")
         
         # 計算各房屋的設施數量
         facility_counts = {}
@@ -672,126 +842,223 @@ class ComparisonAnalyzer:
                 cat_counts[cat] = cat_counts.get(cat, 0) + 1
             category_counts[house_name] = cat_counts
         
-        # 顯示總體統計
-        num_houses = len(houses_data)
-        stat_cols = st.columns(min(num_houses, 5))
-        
-        max_facilities = max(facility_counts.values()) if facility_counts else 0
-        
-        for idx, house_name in enumerate(houses_data.keys()):
-            with stat_cols[idx % len(stat_cols)]:
-                count = facility_counts.get(house_name, 0)
-                house_title = houses_data[house_name]["title"][:20]
+        # 顯示統計
+        if num_houses == 1 or analysis_mode == "單一房屋分析":
+            # 單一房屋統計
+            house_name = list(houses_data.keys())[0]
+            count = facility_counts.get(house_name, 0)
+            places = places_data[house_name]
+            
+            # 計算距離統計
+            distances = [p[5] for p in places]
+            avg_distance = sum(distances) / len(distances) if distances else 0
+            min_distance = min(distances) if distances else 0
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🏠 總設施數量", f"{count} 個")
+            with col2:
+                st.metric("📏 平均距離", f"{avg_distance:.0f} 公尺")
+            with col3:
+                st.metric("📍 最近設施", f"{min_distance} 公尺")
+            
+            # 各類別設施數量
+            if places:
+                st.markdown("### 🏪 各類別設施分布")
                 
-                # 計算排名
-                if max_facilities > 0:
-                    percentage = (count / max_facilities) * 100 if max_facilities > 0 else 0
-                else:
-                    percentage = 0
+                # 建立類別數據
+                cat_data = {}
+                for cat, kw, name, lat, lng, dist, pid in places:
+                    cat_data[cat] = cat_data.get(cat, 0) + 1
                 
-                st.metric(
-                    f"🏠 {house_name}",
-                    f"{count} 個設施",
-                    f"排名: {sorted(facility_counts.values(), reverse=True).index(count) + 1}/{num_houses}"
+                # 顯示餅圖
+                if cat_data:
+                    pie_data = {
+                        "tooltip": {"trigger": "item"},
+                        "legend": {"type": "scroll", "orient": "vertical", "right": 10, "top": 20, "bottom": 20},
+                        "series": [{
+                            "type": "pie",
+                            "radius": "50%",
+                            "data": [
+                                {"value": count, "name": cat, "itemStyle": {"color": CATEGORY_COLORS.get(cat, "#000000")}}
+                                for cat, count in cat_data.items()
+                            ],
+                            "emphasis": {
+                                "itemStyle": {
+                                    "shadowBlur": 10,
+                                    "shadowOffsetX": 0,
+                                    "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                }
+                            }
+                        }]
+                    }
+                    
+                    st_echarts(pie_data, height="400px")
+                    
+                    # 顯示詳細表格
+                    with st.expander("📋 詳細設施列表", expanded=False):
+                        for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places[:20]):  # 只顯示前20個
+                            col_a, col_b, col_c = st.columns([3, 2, 1])
+                            with col_a:
+                                st.markdown(f"**{name}**")
+                                st.caption(f"{cat}-{kw}")
+                            with col_b:
+                                st.caption(f"距離: {dist} 公尺")
+                            with col_c:
+                                color = CATEGORY_COLORS.get(cat, "#000000")
+                                st.markdown(f'<span style="background-color:{color}; color:white; padding:2px 8px; border-radius:10px;">{cat}</span>', unsafe_allow_html=True)
+                        
+                        if len(places) > 20:
+                            st.caption(f"...還有 {len(places)-20} 個設施未顯示")
+        
+        else:
+            # 多房屋統計比較
+            stat_cols = st.columns(min(num_houses, 5))
+            
+            max_facilities = max(facility_counts.values()) if facility_counts else 0
+            
+            for idx, house_name in enumerate(houses_data.keys()):
+                with stat_cols[idx % len(stat_cols)]:
+                    count = facility_counts.get(house_name, 0)
+                    house_title = houses_data[house_name]["title"][:20]
+                    
+                    # 計算排名
+                    if max_facilities > 0:
+                        percentage = (count / max_facilities) * 100 if max_facilities > 0 else 0
+                    else:
+                        percentage = 0
+                    
+                    st.metric(
+                        f"🏠 {house_name}",
+                        f"{count} 個設施",
+                        f"排名: {sorted(facility_counts.values(), reverse=True).index(count) + 1}/{num_houses}"
+                    )
+                    
+                    if places_data[house_name]:
+                        nearest = min([p[5] for p in places_data[house_name]])
+                        st.caption(f"最近設施: {nearest}公尺")
+                    
+                    st.caption(f"{house_title}...")
+            
+            # 如果有超過1個房屋，顯示排名圖表
+            if num_houses > 1:
+                st.markdown("### 📊 設施數量排名")
+                
+                # 準備排名資料
+                rank_data = sorted(
+                    [(name, count) for name, count in facility_counts.items()],
+                    key=lambda x: x[1],
+                    reverse=True
                 )
                 
-                if places_data[house_name]:
-                    nearest = min([p[5] for p in places_data[house_name]])
-                    st.caption(f"最近設施: {nearest}公尺")
-                
-                st.caption(f"{house_title}...")
-        
-        # 如果有超過2個房屋，顯示排名圖表
-        if num_houses > 2:
-            st.markdown("### 📊 設施數量排名")
-            
-            # 準備排名資料
-            rank_data = sorted(
-                [(name, count) for name, count in facility_counts.items()],
-                key=lambda x: x[1],
-                reverse=True
-            )
-            
-            chart_data = {
-                "xAxis": {
-                    "type": "category",
-                    "data": [item[0] for item in rank_data]
-                },
-                "yAxis": {"type": "value"},
-                "series": [{
-                    "type": "bar",
-                    "data": [item[1] for item in rank_data],
-                    "itemStyle": {
-                        "color": {
-                            "type": "linear",
-                            "x": 0, "y": 0, "x2": 0, "y2": 1,
-                            "colorStops": [
-                                {"offset": 0, "color": "#1E90FF"},
-                                {"offset": 1, "color": "#87CEFA"}
-                            ]
-                        }
-                    }
-                }],
-                "tooltip": {"trigger": "axis"}
-            }
-            
-            st_echarts(chart_data, height="300px")
-        
-        # 各類別詳細比較
-        st.markdown("### 🏪 各類別設施數量比較")
-        
-        # 收集所有類別
-        all_categories = set()
-        for counts in category_counts.values():
-            all_categories.update(counts.keys())
-        
-        if all_categories:
-            # 建立比較表格
-            comparison_rows = []
-            for cat in sorted(all_categories):
-                row = {"類別": cat}
-                for house_name in houses_data.keys():
-                    row[house_name] = category_counts[house_name].get(cat, 0)
-                comparison_rows.append(row)
-            
-            comp_df = pd.DataFrame(comparison_rows)
-            
-            # 顯示表格
-            st.dataframe(
-                comp_df,
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            # 顯示類別比較圖表
-            if num_houses <= 5:  # 避免圖表太複雜
                 chart_data = {
                     "xAxis": {
                         "type": "category",
-                        "data": comp_df['類別'].tolist()
+                        "data": [item[0] for item in rank_data]
                     },
                     "yAxis": {"type": "value"},
-                    "series": [
-                        {
-                            "name": house_name,
-                            "type": "bar",
-                            "data": comp_df[house_name].tolist(),
-                            "itemStyle": {"color": f"hsl({idx * 60}, 70%, 50%)"}
+                    "series": [{
+                        "type": "bar",
+                        "data": [item[1] for item in rank_data],
+                        "itemStyle": {
+                            "color": {
+                                "type": "linear",
+                                "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "#1E90FF"},
+                                    {"offset": 1, "color": "#87CEFA"}
+                                ]
+                            }
                         }
-                        for idx, house_name in enumerate(houses_data.keys())
-                    ],
-                    "tooltip": {"trigger": "axis"},
-                    "legend": {"data": list(houses_data.keys())}
+                    }],
+                    "tooltip": {"trigger": "axis"}
                 }
                 
-                st_echarts(chart_data, height="400px")
+                st_echarts(chart_data, height="300px")
+            
+            # 各類別詳細比較
+            if num_houses > 1:
+                st.markdown("### 🏪 各類別設施數量比較")
+                
+                # 收集所有類別
+                all_categories = set()
+                for counts in category_counts.values():
+                    all_categories.update(counts.keys())
+                
+                if all_categories:
+                    # 建立比較表格
+                    comparison_rows = []
+                    for cat in sorted(all_categories):
+                        row = {"類別": cat}
+                        for house_name in houses_data.keys():
+                            row[house_name] = category_counts[house_name].get(cat, 0)
+                        comparison_rows.append(row)
+                    
+                    comp_df = pd.DataFrame(comparison_rows)
+                    
+                    # 顯示表格
+                    st.dataframe(
+                        comp_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # 顯示類別比較圖表
+                    if num_houses <= 5:  # 避免圖表太複雜
+                        chart_data = {
+                            "xAxis": {
+                                "type": "category",
+                                "data": comp_df['類別'].tolist()
+                            },
+                            "yAxis": {"type": "value"},
+                            "series": [
+                                {
+                                    "name": house_name,
+                                    "type": "bar",
+                                    "data": comp_df[house_name].tolist(),
+                                    "itemStyle": {"color": f"hsl({idx * 60}, 70%, 50%)"}
+                                }
+                                for idx, house_name in enumerate(houses_data.keys())
+                            ],
+                            "tooltip": {"trigger": "axis"},
+                            "legend": {"data": list(houses_data.keys())}
+                        }
+                        
+                        st_echarts(chart_data, height="400px")
         
-        # 顯示地圖比較
+        # 顯示地圖
         st.markdown("---")
-        st.subheader("🗺️ 地圖比較")
+        st.subheader("🗺️ 地圖檢視")
         
-        # 根據房屋數量決定地圖顯示方式
-        if num_houses <= 3:
+        if num_houses == 1 or analysis_mode == "單一房屋分析":
+            # 單一房屋地圖
+            house_name = list(houses_data.keys())[0]
+            house_info = houses_data[house_name]
+            
+            self._render_map(
+                house_info["lat"], 
+                house_info["lng"], 
+                places_data[house_name], 
+                radius, 
+                title=house_name
+            )
+            
+            # 顯示最近的設施
+            if places_data[house_name]:
+                st.markdown("### 📍 最近的生活設施")
+                cols = st.columns(3)
+                for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places_data[house_name][:6]):
+                    with cols[i % 3]:
+                        color = CATEGORY_COLORS.get(cat, "#000000")
+                        st.markdown(f"""
+                        <div style="border:1px solid {color}; border-radius:8px; padding:10px; margin-bottom:10px;">
+                        <strong>{name[:15]}</strong><br>
+                        <small>🏷️ {cat}</small><br>
+                        <small>📏 {dist} 公尺</small>
+                        </div>
+                        """, unsafe_allow_html=True)
+        
+        elif num_houses <= 3:
             # 並排顯示地圖
             map_cols = st.columns(num_houses)
             for idx, (house_name, house_info) in enumerate(houses_data.items()):
@@ -831,13 +1098,13 @@ class ComparisonAnalyzer:
                             st.caption(f"{i+1}. {cat}-{kw}: {name} ({dist}公尺)")
         
         # ============================
-        # Gemini AI 分析
+        # AI 分析
         # ============================
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
         # 建立唯一 key
-        analysis_key = f"{','.join(selected_houses)}__{keyword}__{','.join(selected_categories)}__{radius}"
+        analysis_key = f"{analysis_mode}__{','.join(selected_houses)}__{keyword}__{','.join(selected_categories)}__{radius}"
         
         # 檢查是否需要重新分析
         should_analyze = (
@@ -851,19 +1118,19 @@ class ComparisonAnalyzer:
             last = st.session_state.get("last_gemini_call", 0)
             
             if now - last < 30:
-                st.warning("⚠️ Gemini 分析請等待 30 秒後再試")
+                st.warning("⚠️ AI 分析請等待 30 秒後再試")
                 return
             
             st.session_state.last_gemini_call = now
             
-            with st.spinner("🧠 AI 分析比較結果中..."):
+            with st.spinner("🧠 AI 分析中..."):
                 try:
                     import google.generativeai as genai
                     genai.configure(api_key=gemini_key)
                     model = genai.GenerativeModel("gemini-2.0-flash")
                     
                     # 準備分析資料
-                    analysis_text = self._prepare_multi_comparison_prompt(
+                    analysis_text = self._prepare_analysis_prompt(
                         houses_data, 
                         places_data, 
                         facility_counts, 
@@ -871,11 +1138,11 @@ class ComparisonAnalyzer:
                         selected_categories,
                         radius,
                         keyword,
-                        comparison_mode
+                        analysis_mode
                     )
                     
                     # 顯示提示詞預覽
-                    with st.expander("📝 查看 AI 分析提示詞"):
+                    with st.expander("📝 查看 AI 分析提示詞", expanded=False):
                         st.text_area("送給 Gemini 的提示詞", analysis_text, height=300)
                     
                     # 呼叫 Gemini
@@ -905,12 +1172,17 @@ class ComparisonAnalyzer:
                 st.markdown("---")
             
             # 提供下載選項
-            report_text = f"""
-            房屋比較分析報告
-            生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}
-            比較模式：{comparison_mode}
+            if analysis_mode == "單一房屋分析":
+                report_title = "房屋分析報告"
+            else:
+                report_title = f"{num_houses}間房屋比較報告"
             
-            比較房屋 ({len(houses_data)}間):
+            report_text = f"""
+            {report_title}
+            生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}
+            分析模式：{analysis_mode}
+            
+            分析房屋 ({len(houses_data)}間):
             """
             
             for house_name, house_info in houses_data.items():
@@ -933,7 +1205,7 @@ class ComparisonAnalyzer:
             st.download_button(
                 label="📥 下載分析報告",
                 data=report_text,
-                file_name=f"房屋比較報告_{time.strftime('%Y%m%d_%H%M%S')}.txt",
+                file_name=f"{report_title}_{time.strftime('%Y%m%d_%H%M%S')}.txt",
                 mime="text/plain",
                 use_container_width=True
             )
