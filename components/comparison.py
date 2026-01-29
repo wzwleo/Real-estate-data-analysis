@@ -820,4 +820,564 @@ class ComparisonAnalyzer:
             - 額外關鍵字：{keyword if keyword else '無'}
             
             【設施統計】
-            - 總
+            - 總設施數量：{count} 個
+            - 平均距離：{avg_distance:.0f} 公尺
+            - 最近設施：{min_distance} 公尺
+            
+            【各類別設施數量】
+            {chr(10).join([f'- {cat}: {num} 個' for cat, num in category_stats.items()])}
+            
+            【請分析以下面向】
+            1. 生活便利性評估（以1-5星評分）
+            2. 設施完整性分析（哪些類別充足，哪些缺乏）
+            3. 適合的居住族群分析（單身、小家庭、大家庭、退休族等）
+            4. 投資潛力評估（以1-5星評分）
+            5. 優點總結（至少3點）
+            6. 缺點提醒（至少2點）
+            7. 建議改善或補充的生活機能
+            8. 綜合評價與建議
+            
+            【特別注意】
+            - 考慮設施距離與日常生活的實際便利性
+            - 分析對不同族群的吸引力
+            - 評估房價與生活機能的性價比
+            
+            請使用專業但易懂的語言，提供具體、實用的建議。
+            """
+        
+        else:  # 多房屋比較
+            # 多房屋比較提示詞
+            num_houses = len(houses_data)
+            
+            if num_houses == 1:
+                # 只有一個房屋的比較模式
+                house_name = list(houses_data.keys())[0]
+                house_info = houses_data[house_name]
+                places = places_data[house_name]
+                count = facility_counts.get(house_name, 0)
+                
+                # 統計設施距離
+                distances = [p[5] for p in places]
+                avg_distance = sum(distances) / len(distances) if distances else 0
+                
+                # 各類別統計
+                category_stats = {}
+                for cat, kw, name, lat, lng, dist, pid in places:
+                    category_stats[cat] = category_stats.get(cat, 0) + 1
+                
+                prompt = f"""
+                你是一位專業的房地產分析師，請對以下房屋的生活機能進行綜合評估。
+                
+                【房屋資訊】
+                - 標題：{house_info['title']}
+                - 地址：{house_info['address']}
+                
+                【搜尋條件】
+                - 搜尋半徑：{radius} 公尺
+                - 選擇的生活機能類別：{', '.join(selected_categories)}
+                - 額外關鍵字：{keyword if keyword else '無'}
+                
+                【設施統計】
+                - 總設施數量：{count} 個
+                - 平均距離：{avg_distance:.0f} 公尺
+                
+                【各類別設施數量】
+                {chr(10).join([f'- {cat}: {num} 個' for cat, num in category_stats.items()])}
+                
+                【請提供深度分析】
+                1. 區域生活機能整體評價
+                2. 與類似區域的比較優勢
+                3. 未來發展潛力評估
+                4. 投資回報率預估
+                5. 風險因素分析
+                6. 最佳使用建議
+                
+                請提供專業、客觀的分析報告。
+                """
+            else:
+                # 多個房屋比較
+                stats_summary = "統計摘要：\n"
+                for house_name, count in facility_counts.items():
+                    if places_data[house_name]:
+                        nearest = min([p[5] for p in places_data[house_name]])
+                        stats_summary += f"- {house_name}：共 {count} 個設施，最近設施 {nearest} 公尺\n"
+                    else:
+                        stats_summary += f"- {house_name}：共 0 個設施\n"
+                
+                # 排名
+                ranked_houses = sorted(facility_counts.items(), key=lambda x: x[1], reverse=True)
+                ranking_text = "設施數量排名：\n"
+                for rank, (house_name, count) in enumerate(ranked_houses, 1):
+                    ranking_text += f"第{rank}名：{house_name} ({count}個設施)\n"
+                
+                # 房屋詳細資訊
+                houses_details = "房屋詳細資訊：\n"
+                for house_name, house_info in houses_data.items():
+                    houses_details += f"""
+                    {house_name}:
+                    - 標題：{house_info['title']}
+                    - 地址：{house_info['address']}
+                    """
+                
+                prompt = f"""
+                你是一位專業的房地產分析師，請對以下{num_houses}間房屋進行綜合比較分析。
+                
+                【搜尋條件】
+                - 搜尋半徑：{radius} 公尺
+                - 選擇的生活機能類別：{', '.join(selected_categories)}
+                - 額外關鍵字：{keyword if keyword else '無'}
+                
+                {houses_details}
+                
+                【設施統計】
+                {stats_summary}
+                
+                {ranking_text}
+                
+                【請依序分析】
+                1. 總體設施豐富度排名與分析
+                2. 各類別設施完整性比較
+                3. 生活便利性綜合評估（為每間房屋評1-5星）
+                4. 對「自住者」的推薦排名與原因
+                5. 對「投資者」的推薦排名與原因
+                6. 各房屋的優勢特色分析
+                7. 各房屋的潛在風險提醒
+                8. 綜合性價比評估
+                9. 最終推薦與總結
+                
+                【分析要求】
+                - 提供清晰的排名和評分
+                - 每項評估都要有具體依據
+                - 考慮不同生活階段的需求
+                - 給出實用的購買建議
+                
+                請使用專業但易懂的語言，提供全面、客觀的分析。
+                """
+        
+        return prompt
+    
+    def _run_analysis(self, analysis_mode, selected_houses, fav_df, 
+                     server_key, gemini_key, radius, keyword, 
+                     selected_categories, selected_subtypes):
+        """執行分析的核心函數"""
+        
+        # 取得房屋資料
+        houses_data = {}
+        
+        # 地址解析
+        with st.spinner("📍 解析房屋地址中..."):
+            for idx, house_option in enumerate(selected_houses):
+                house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
+                house_name = f"房屋 {chr(65+idx)}" if len(selected_houses) > 1 else "分析房屋"
+                
+                lat, lng = geocode_address(house_info["地址"], server_key)
+                if lat is None or lng is None:
+                    st.error(f"❌ {house_name} 地址解析失敗")
+                    return
+                
+                houses_data[house_name] = {
+                    "name": house_name,
+                    "title": house_info['標題'],
+                    "address": house_info['地址'],
+                    "lat": lat,
+                    "lng": lng,
+                    "original_name": house_info['標題']
+                }
+        
+        # 查詢每個房屋的周邊設施
+        places_data = {}
+        
+        for house_name, house_info in houses_data.items():
+            with st.spinner(f"🔍 查詢 {house_name} 周邊設施 (半徑: {radius}公尺)..."):
+                lat, lng = house_info["lat"], house_info["lng"]
+                
+                places = self._query_google_places_keyword(
+                    lat, lng, server_key, selected_categories, selected_subtypes,
+                    radius, extra_keyword=keyword
+                )
+                
+                # 檢查缺失設施
+                messages = self._check_places_found(places, selected_categories, selected_subtypes, keyword)
+                if messages:
+                    for msg in messages:
+                        st.warning(f"{house_name}: {msg}")
+                
+                places_data[house_name] = places
+        
+        # 顯示分析標題
+        num_houses = len(houses_data)
+        if analysis_mode == "單一房屋分析":
+            st.markdown(f"## 📊 單一房屋分析結果")
+        else:
+            st.markdown(f"## 📊 比較結果 ({num_houses}間房屋)")
+        
+        # 統計分析
+        st.markdown("---")
+        st.subheader("📈 設施統計")
+        
+        # 計算各房屋的設施數量
+        facility_counts = {}
+        category_counts = {}
+        
+        for house_name, places in places_data.items():
+            total_count = len(places)
+            facility_counts[house_name] = total_count
+            
+            # 計算各類別數量
+            cat_counts = {}
+            for cat, kw, name, lat, lng, dist, pid in places:
+                cat_counts[cat] = cat_counts.get(cat, 0) + 1
+            category_counts[house_name] = cat_counts
+        
+        # 顯示統計
+        if num_houses == 1 or analysis_mode == "單一房屋分析":
+            # 單一房屋統計
+            house_name = list(houses_data.keys())[0]
+            count = facility_counts.get(house_name, 0)
+            places = places_data[house_name]
+            
+            # 計算距離統計
+            distances = [p[5] for p in places]
+            avg_distance = sum(distances) / len(distances) if distances else 0
+            min_distance = min(distances) if distances else 0
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("🏠 總設施數量", f"{count} 個")
+            with col2:
+                st.metric("📏 平均距離", f"{avg_distance:.0f} 公尺")
+            with col3:
+                st.metric("📍 最近設施", f"{min_distance} 公尺")
+            
+            # 各類別設施數量
+            if places:
+                st.markdown("### 🏪 各類別設施分布")
+                
+                # 建立類別數據
+                cat_data = {}
+                for cat, kw, name, lat, lng, dist, pid in places:
+                    cat_data[cat] = cat_data.get(cat, 0) + 1
+                
+                # 顯示餅圖
+                if cat_data:
+                    pie_data = {
+                        "tooltip": {"trigger": "item"},
+                        "legend": {"type": "scroll", "orient": "vertical", "right": 10, "top": 20, "bottom": 20},
+                        "series": [{
+                            "type": "pie",
+                            "radius": "50%",
+                            "data": [
+                                {"value": count, "name": cat, "itemStyle": {"color": CATEGORY_COLORS.get(cat, "#000000")}}
+                                for cat, count in cat_data.items()
+                            ],
+                            "emphasis": {
+                                "itemStyle": {
+                                    "shadowBlur": 10,
+                                    "shadowOffsetX": 0,
+                                    "shadowColor": "rgba(0, 0, 0, 0.5)"
+                                }
+                            }
+                        }]
+                    }
+                    
+                    st_echarts(pie_data, height="400px")
+                    
+                    # 顯示詳細表格
+                    with st.expander("📋 詳細設施列表", expanded=False):
+                        for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places[:20]):  # 只顯示前20個
+                            col_a, col_b, col_c = st.columns([3, 2, 1])
+                            with col_a:
+                                st.markdown(f"**{name}**")
+                                st.caption(f"{cat}-{kw}")
+                            with col_b:
+                                st.caption(f"距離: {dist} 公尺")
+                            with col_c:
+                                color = CATEGORY_COLORS.get(cat, "#000000")
+                                st.markdown(f'<span style="background-color:{color}; color:white; padding:2px 8px; border-radius:10px;">{cat}</span>', unsafe_allow_html=True)
+                        
+                        if len(places) > 20:
+                            st.caption(f"...還有 {len(places)-20} 個設施未顯示")
+        
+        else:
+            # 多房屋統計比較
+            stat_cols = st.columns(min(num_houses, 5))
+            
+            max_facilities = max(facility_counts.values()) if facility_counts else 0
+            
+            for idx, house_name in enumerate(houses_data.keys()):
+                with stat_cols[idx % len(stat_cols)]:
+                    count = facility_counts.get(house_name, 0)
+                    house_title = houses_data[house_name]["title"][:20]
+                    
+                    # 計算排名
+                    if max_facilities > 0:
+                        percentage = (count / max_facilities) * 100 if max_facilities > 0 else 0
+                    else:
+                        percentage = 0
+                    
+                    st.metric(
+                        f"🏠 {house_name}",
+                        f"{count} 個設施",
+                        f"排名: {sorted(facility_counts.values(), reverse=True).index(count) + 1}/{num_houses}"
+                    )
+                    
+                    if places_data[house_name]:
+                        nearest = min([p[5] for p in places_data[house_name]])
+                        st.caption(f"最近設施: {nearest}公尺")
+                    
+                    st.caption(f"{house_title}...")
+            
+            # 如果有超過1個房屋，顯示排名圖表
+            if num_houses > 1:
+                st.markdown("### 📊 設施數量排名")
+                
+                # 準備排名資料
+                rank_data = sorted(
+                    [(name, count) for name, count in facility_counts.items()],
+                    key=lambda x: x[1],
+                    reverse=True
+                )
+                
+                chart_data = {
+                    "xAxis": {
+                        "type": "category",
+                        "data": [item[0] for item in rank_data]
+                    },
+                    "yAxis": {"type": "value"},
+                    "series": [{
+                        "type": "bar",
+                        "data": [item[1] for item in rank_data],
+                        "itemStyle": {
+                            "color": {
+                                "type": "linear",
+                                "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "#1E90FF"},
+                                    {"offset": 1, "color": "#87CEFA"}
+                                ]
+                            }
+                        }
+                    }],
+                    "tooltip": {"trigger": "axis"}
+                }
+                
+                st_echarts(chart_data, height="300px")
+            
+            # 各類別詳細比較
+            if num_houses > 1:
+                st.markdown("### 🏪 各類別設施數量比較")
+                
+                # 收集所有類別
+                all_categories = set()
+                for counts in category_counts.values():
+                    all_categories.update(counts.keys())
+                
+                if all_categories:
+                    # 建立比較表格
+                    comparison_rows = []
+                    for cat in sorted(all_categories):
+                        row = {"類別": cat}
+                        for house_name in houses_data.keys():
+                            row[house_name] = category_counts[house_name].get(cat, 0)
+                        comparison_rows.append(row)
+                    
+                    comp_df = pd.DataFrame(comparison_rows)
+                    
+                    # 顯示表格
+                    st.dataframe(
+                        comp_df,
+                        use_container_width=True,
+                        hide_index=True
+                    )
+                    
+                    # 顯示類別比較圖表
+                    if num_houses <= 5:  # 避免圖表太複雜
+                        chart_data = {
+                            "xAxis": {
+                                "type": "category",
+                                "data": comp_df['類別'].tolist()
+                            },
+                            "yAxis": {"type": "value"},
+                            "series": [
+                                {
+                                    "name": house_name,
+                                    "type": "bar",
+                                    "data": comp_df[house_name].tolist(),
+                                    "itemStyle": {"color": f"hsl({idx * 60}, 70%, 50%)"}
+                                }
+                                for idx, house_name in enumerate(houses_data.keys())
+                            ],
+                            "tooltip": {"trigger": "axis"},
+                            "legend": {"data": list(houses_data.keys())}
+                        }
+                        
+                        st_echarts(chart_data, height="400px")
+        
+        # 顯示地圖
+        st.markdown("---")
+        st.subheader("🗺️ 地圖檢視")
+        
+        if num_houses == 1 or analysis_mode == "單一房屋分析":
+            # 單一房屋地圖
+            house_name = list(houses_data.keys())[0]
+            house_info = houses_data[house_name]
+            
+            # 移除原本顯示最近設施的程式碼，直接調用 _render_map 方法
+            self._render_map(
+                house_info["lat"], 
+                house_info["lng"], 
+                places_data[house_name], 
+                radius, 
+                title=house_name,
+                show_all_places=True  # 新增參數
+            )
+            
+        elif num_houses <= 3:
+            # 並排顯示地圖
+            map_cols = st.columns(num_houses)
+            for idx, (house_name, house_info) in enumerate(houses_data.items()):
+                with map_cols[idx]:
+                    st.markdown(f"### {house_name}")
+                    # 直接調用 _render_map 方法，移除顯示最近設施的程式碼
+                    self._render_map(
+                        house_info["lat"], 
+                        house_info["lng"], 
+                        places_data[house_name], 
+                        radius, 
+                        title=house_name,
+                        show_all_places=True  # 新增參數
+                    )
+        else:
+            # 使用選項卡顯示地圖
+            map_tabs = st.tabs([f"{house_name}" for house_name in houses_data.keys()])
+            
+            for idx, (house_name, house_info) in enumerate(houses_data.items()):
+                with map_tabs[idx]:
+                    # 直接調用 _render_map 方法
+                    self._render_map(
+                        house_info["lat"], 
+                        house_info["lng"], 
+                        places_data[house_name], 
+                        radius, 
+                        title=house_name,
+                        show_all_places=True  # 新增參數
+                    )
+        
+        # ============================
+        # AI 分析
+        # ============================
+        st.markdown("---")
+        st.subheader("🤖 AI 智能分析")
+        
+        # 建立唯一 key
+        analysis_key = f"{analysis_mode}__{','.join(selected_houses)}__{keyword}__{','.join(selected_categories)}__{radius}"
+        
+        # 檢查是否需要重新分析
+        should_analyze = (
+            "gemini_result" not in st.session_state or
+            st.session_state.get("gemini_key") != analysis_key
+        )
+        
+        if should_analyze:
+            # 防爆檢查
+            now = time.time()
+            last = st.session_state.get("last_gemini_call", 0)
+            
+            if now - last < 30:
+                st.warning("⚠️ AI 分析請等待 30 秒後再試")
+                return
+            
+            st.session_state.last_gemini_call = now
+            
+            with st.spinner("🧠 AI 分析中..."):
+                try:
+                    import google.generativeai as genai
+                    genai.configure(api_key=gemini_key)
+                    model = genai.GenerativeModel("gemini-2.0-flash")
+                    
+                    # 準備分析資料
+                    analysis_text = self._prepare_analysis_prompt(
+                        houses_data, 
+                        places_data, 
+                        facility_counts, 
+                        category_counts,
+                        selected_categories,
+                        radius,
+                        keyword,
+                        analysis_mode
+                    )
+                    
+                    # 顯示提示詞預覽
+                    with st.expander("📝 查看 AI 分析提示詞", expanded=False):
+                        st.text_area("送給 Gemini 的提示詞", analysis_text, height=300)
+                    
+                    # 呼叫 Gemini
+                    resp = model.generate_content(analysis_text)
+                    
+                    # 儲存結果
+                    st.session_state.gemini_result = resp.text
+                    st.session_state.gemini_key = analysis_key
+                    st.session_state.places_data = places_data
+                    st.session_state.houses_data = houses_data
+                    
+                    st.success("✅ AI 分析完成！")
+                    
+                except Exception as e:
+                    st.error(f"❌ Gemini API 錯誤: {str(e)}")
+                    st.info("請檢查：1. API 金鑰是否正確 2. 配額是否用盡 3. 網路連線是否正常")
+                    return
+        
+        # 顯示分析結果
+        if "gemini_result" in st.session_state:
+            st.markdown("### 📋 AI 分析報告")
+            
+            # 美化顯示
+            with st.container():
+                st.markdown("---")
+                st.markdown(st.session_state.gemini_result)
+                st.markdown("---")
+            
+            # 提供下載選項
+            if analysis_mode == "單一房屋分析":
+                report_title = "房屋分析報告"
+            else:
+                report_title = f"{num_houses}間房屋比較報告"
+            
+            report_text = f"""
+            {report_title}
+            生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}
+            分析模式：{analysis_mode}
+            
+            分析房屋 ({len(houses_data)}間):
+            """
+            
+            for house_name, house_info in houses_data.items():
+                report_text += f"""
+            - {house_name}: {house_info['title']}
+              地址：{house_info['address']}
+              """
+            
+            report_text += f"""
+            
+            搜尋條件：
+            - 半徑：{radius} 公尺
+            - 選擇類別：{', '.join(selected_categories)}
+            - 額外關鍵字：{keyword if keyword else '無'}
+            
+            AI 分析結果：
+            {st.session_state.gemini_result}
+            """
+            
+            st.download_button(
+                label="📥 下載分析報告",
+                data=report_text,
+                file_name=f"{report_title}_{time.strftime('%Y%m%d_%H%M%S')}.txt",
+                mime="text/plain",
+                use_container_width=True
+            )
+
+
+# 如果需要，可以保留單獨的函數供外部調用
+def get_comparison_analyzer():
+    """取得比較分析器實例"""
+    return ComparisonAnalyzer()
