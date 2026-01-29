@@ -671,12 +671,12 @@ class ComparisonAnalyzer:
         st.markdown(f"📊 **共找到 {total_places} 個設施** (搜尋半徑: {radius}公尺)")
         html(html_content, height=520)
         
-        # 顯示全部設施列表 - 使用 Streamlit 原生組件
+        # 顯示全部設施列表 - 使用純 Python 方法
         st.markdown("### 📍 全部設施列表")
         
         if total_places > 0:
             # 建立一個可折疊的下拉選單來顯示所有設施
-            with st.expander(f"顯示所有 {total_places} 個設施 (按距離排序)", expanded=True):
+            with st.expander(f"顯示所有 {total_places} 個設施", expanded=True):
                 # 設施已經按距離排序，直接顯示
                 for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places, 1):
                     color = CATEGORY_COLORS.get(cat, "#000000")
@@ -696,30 +696,35 @@ class ComparisonAnalyzer:
                     # 創建一個卡片容器
                     with st.container():
                         # 使用 columns 來佈局
-                        col1, col2 = st.columns([4, 1])
+                        col1, col2, col3, col4 = st.columns([6, 2, 2, 2])
                         
                         with col1:
-                            # 顯示設施名稱（超連結）
-                            st.markdown(f"[**{i}. {name}**]({maps_url})", unsafe_allow_html=True)
-                            
-                            # 使用 columns 顯示標籤
-                            tag_cols = st.columns(3)
-                            with tag_cols[0]:
-                                # 類別標籤
-                                st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:bold;">🏷️ {cat}</span>', unsafe_allow_html=True)
-                            with tag_cols[1]:
-                                # 子類別標籤
-                                st.markdown(f'<span style="background-color:#e9ecef; color:#333; padding:4px 10px; border-radius:12px; font-size:13px;">📍 {kw}</span>', unsafe_allow_html=True)
-                            with tag_cols[2]:
-                                # 距離標籤
-                                st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:bold;">📏 {dist}公尺 ({dist_class})</span>', unsafe_allow_html=True)
-                            
-                            # 顯示座標和地圖連結
-                            st.caption(f"座標: {lat:.6f}, {lng:.6f} | [🗺️ 開啟地圖]({maps_url})")
+                            # 顯示設施編號和名稱
+                            st.write(f"**{i}.**")
+                            st.write(f"**{name}**")
                         
                         with col2:
-                            # 地圖連結按鈕
-                            st.markdown(f'<a href="{maps_url}" target="_blank"><button style="background-color:#1a73e8; color:white; border:none; padding:8px 12px; border-radius:5px; cursor:pointer;">地圖</button></a>', unsafe_allow_html=True)
+                            # 類別標籤
+                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{cat}</span>', unsafe_allow_html=True)
+                        
+                        with col3:
+                            # 距離標籤
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺</span>', unsafe_allow_html=True)
+                        
+                        with col4:
+                            # 地圖連結按鈕 - 使用 st.link_button
+                            st.link_button("🗺️ 地圖", maps_url)
+                        
+                        # 顯示詳細資訊
+                        with st.expander("詳細資訊", expanded=False):
+                            col_info1, col_info2 = st.columns(2)
+                            with col_info1:
+                                st.write(f"**類別:** {cat}")
+                                st.write(f"**子類別:** {kw}")
+                                st.write(f"**距離:** {dist} 公尺 ({dist_class})")
+                            with col_info2:
+                                st.write(f"**座標:** {lat:.6f}, {lng:.6f}")
+                                st.write(f"**Google 地圖:** [開啟地圖]({maps_url})")
                         
                         # 添加分隔線
                         st.divider()
