@@ -671,92 +671,58 @@ class ComparisonAnalyzer:
         st.markdown(f"📊 **共找到 {total_places} 個設施** (搜尋半徑: {radius}公尺)")
         html(html_content, height=520)
         
-        # 顯示全部設施列表
+        # 顯示全部設施列表 - 使用 Streamlit 原生組件
         st.markdown("### 📍 全部設施列表")
         
         if total_places > 0:
             # 建立一個可折疊的下拉選單來顯示所有設施
-            with st.expander(f"顯示所有 {total_places} 個設施", expanded=True):
-                # 建立排序選項
-                sort_option = st.selectbox(
-                    "排序方式",
-                    ["按距離（由近到遠）", "按類別", "按名稱"],
-                    key=f"sort_{title}"
-                )
-                
-                # 根據選擇的排序方式排序設施
-                if sort_option == "按類別":
-                    sorted_places = sorted(places, key=lambda x: (x[0], x[5]))
-                elif sort_option == "按名稱":
-                    sorted_places = sorted(places, key=lambda x: x[2])
-                else:  # 按距離（由近到遠）
-                    sorted_places = places  # 原本就已經按距離排序
-                
-                # 使用一個容器來收集所有設施的 HTML
-                all_facilities_html = ""
-                
-                # 建立每個設施的 HTML 卡片
-                for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(sorted_places, 1):
+            with st.expander(f"顯示所有 {total_places} 個設施 (按距離排序)", expanded=True):
+                # 設施已經按距離排序，直接顯示
+                for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places, 1):
                     color = CATEGORY_COLORS.get(cat, "#000000")
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
                     
                     # 距離分類標籤
                     if dist <= 300:
-                        dist_label = "🟢 很近"
                         dist_color = "#28a745"
                         dist_class = "很近"
                     elif dist <= 600:
-                        dist_label = "🟡 中等"
                         dist_color = "#ffc107"
                         dist_class = "中等"
                     else:
-                        dist_label = "🔴 較遠"
                         dist_color = "#dc3545"
                         dist_class = "較遠"
                     
-                    # 建立完整的 HTML 卡片
-                    card_html = f"""
-                    <div style="border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; background-color:#f8f9fa;">
-                        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                            <div style="flex:1;">
-                                <div style="display:flex; align-items:center; margin-bottom:5px;">
-                                    <span style="display:inline-block; width:12px; height:12px; background-color:{color}; border-radius:50%; margin-right:8px;"></span>
-                                    <a href="{maps_url}" target="_blank" style="font-size:16px; color:#1a73e8; text-decoration:none; font-weight:bold;">
-                                        {i}. {name}
-                                    </a>
-                                </div>
-                                
-                                <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
-                                    <div style="display:inline-flex; align-items:center; background-color:{color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
-                                        <span style="color:{color}; font-weight:bold;">🏷️ {cat}</span>
-                                    </div>
-                                    
-                                    <div style="display:inline-flex; align-items:center; background-color:#e9ecef; padding:4px 10px; border-radius:12px; font-size:13px;">
-                                        📍 {kw}
-                                    </div>
-                                    
-                                    <div style="display:inline-flex; align-items:center; background-color:{dist_color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
-                                        <span style="color:{dist_color}; font-weight:bold;">📏 {dist} 公尺 ({dist_class})</span>
-                                    </div>
-                                </div>
-                                
-                                <div style="margin-top:10px; font-size:12px; color:#666;">
-                                    座標: {lat:.6f}, {lng:.6f}
-                                    <span style="margin-left:10px;">
-                                        <a href="{maps_url}" target="_blank" style="color:#1a73e8; text-decoration:none;">
-                                            <span style="color:#1a73e8;">🗺️ 開啟地圖</span>
-                                        </a>
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    """
-                    
-                    all_facilities_html += card_html
-                
-                # 一次顯示所有設施的 HTML
-                st.markdown(all_facilities_html, unsafe_allow_html=True)
+                    # 創建一個卡片容器
+                    with st.container():
+                        # 使用 columns 來佈局
+                        col1, col2 = st.columns([4, 1])
+                        
+                        with col1:
+                            # 顯示設施名稱（超連結）
+                            st.markdown(f"[**{i}. {name}**]({maps_url})", unsafe_allow_html=True)
+                            
+                            # 使用 columns 顯示標籤
+                            tag_cols = st.columns(3)
+                            with tag_cols[0]:
+                                # 類別標籤
+                                st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:bold;">🏷️ {cat}</span>', unsafe_allow_html=True)
+                            with tag_cols[1]:
+                                # 子類別標籤
+                                st.markdown(f'<span style="background-color:#e9ecef; color:#333; padding:4px 10px; border-radius:12px; font-size:13px;">📍 {kw}</span>', unsafe_allow_html=True)
+                            with tag_cols[2]:
+                                # 距離標籤
+                                st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 10px; border-radius:12px; font-size:13px; font-weight:bold;">📏 {dist}公尺 ({dist_class})</span>', unsafe_allow_html=True)
+                            
+                            # 顯示座標和地圖連結
+                            st.caption(f"座標: {lat:.6f}, {lng:.6f} | [🗺️ 開啟地圖]({maps_url})")
+                        
+                        with col2:
+                            # 地圖連結按鈕
+                            st.markdown(f'<a href="{maps_url}" target="_blank"><button style="background-color:#1a73e8; color:white; border:none; padding:8px 12px; border-radius:5px; cursor:pointer;">地圖</button></a>', unsafe_allow_html=True)
+                        
+                        # 添加分隔線
+                        st.divider()
             
             # 顯示統計摘要
             with st.expander("📊 設施統計摘要", expanded=False):
