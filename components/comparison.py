@@ -520,270 +520,266 @@ class ComparisonAnalyzer:
 
         return messages
     
-    def _render_map(self, lat, lng, places, radius, title="房屋", show_all_places=True):
-        """渲染地圖 - 修改為顯示全部設施"""
-        browser_key = self._get_browser_key()
-        
-        # 如果沒有設施資料，顯示訊息
-        if not places:
-            st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
-            return
-        
-        data = []
-        for cat, kw, name, p_lat, p_lng, dist, pid in places:
-            data.append({
-                "cat": cat,
-                "kw": kw,
-                "name": name,
-                "lat": p_lat,
-                "lng": p_lng,
-                "dist": dist,
-                "pid": pid,
-                "color": CATEGORY_COLORS.get(cat, "#000000")
-            })
+def _render_map(self, lat, lng, places, radius, title="房屋", show_all_places=True):
+    """渲染地圖 - 修改為顯示全部設施"""
+    browser_key = self._get_browser_key()
+    
+    # 如果沒有設施資料，顯示訊息
+    if not places:
+        st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
+        return
+    
+    data = []
+    for cat, kw, name, p_lat, p_lng, dist, pid in places:
+        # 確保所有字串都轉換為安全格式
+        safe_name = name.replace("'", "\\'").replace('"', '\\"')
+        data.append({
+            "cat": cat,
+            "kw": kw,
+            "name": safe_name,
+            "lat": p_lat,
+            "lng": p_lng,
+            "dist": dist,
+            "pid": pid,
+            "color": CATEGORY_COLORS.get(cat, "#000000")
+        })
 
-        data_json = json.dumps(data, ensure_ascii=False)
+    # 將 data_json 轉為 JavaScript 安全格式
+    import json
+    data_json = json.dumps(data, ensure_ascii=False)
+    
+    # 計算總設施數量
+    total_places = len(places)
+    
+    # 修正 Template，將 JavaScript 字符串直接嵌入
+    # 而不是使用 Template 替換
+    html_content = f"""
+    <div id="map" style="height:500px;"></div>
+    <script>
+    function initMap() {{
+        var center = {{lat: {lat}, lng: {lng}}};
+        var map = new google.maps.Map(document.getElementById('map'), {{
+            zoom: 16,
+            center: center,
+            mapTypeControl: true,
+            streetViewControl: true
+        }});
         
-        # 計算總設施數量
-        total_places = len(places)
+        // 主房屋標記（紅色）
+        var mainMarker = new google.maps.Marker({{
+            position: center,
+            map: map,
+            title: "{title}",
+            icon: {{
+                url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+            }},
+            zIndex: 1000
+        }});
         
-        # 如果 show_all_places 為 True，在地圖上顯示所有設施
-        tpl = Template("""
-               <div id="map" style="height:500px;"></div>
-               <script>
-               function initMap() {
-                   var center = {lat: $LAT, lng: $LNG};
-                   var map = new google.maps.Map(document.getElementById('map'), {
-                       zoom: 16,
-                       center: center,
-                       mapTypeControl: true,
-                       streetViewControl: true
-                   });
-                   
-                   // 主房屋標記（紅色）
-                   var mainMarker = new google.maps.Marker({
-                       position: center,
-                       map: map,
-                       title: "$TITLE",
-                       icon: {
-                           url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png"
-                       },
-                       zIndex: 1000
-                   });
-                   
-                   // 顯示主房屋資訊視窗
-                   var mainInfoWindow = new google.maps.InfoWindow({
-                       content: "<div style='padding:10px;'><strong>$TITLE</strong><br>搜尋中心點<br>半徑：$RADIUS 公尺</div>"
-                   });
-                   mainMarker.addListener("click", function(){
-                       mainInfoWindow.open(map, mainMarker);
-                   });
-                   
-                   var data = $DATA_JSON;
-                   
-                   // 建立類別圖例
-                   var legendDiv = document.createElement('div');
-                   legendDiv.id = 'legend';
-                   legendDiv.style.cssText = 'background: white; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; margin: 10px;';
-                   legendDiv.innerHTML = '<h4 style="margin-top:0;">設施類別圖例</h4>';
-                   
-                   var categories = {};
-                   data.forEach(function(p){
-                       if(!categories[p.cat]) {
-                           categories[p.cat] = p.color;
-                       }
-                   });
-                   
-                   for(var cat in categories) {
-                       legendDiv.innerHTML += '<div style="margin-bottom: 5px;"><span style="display:inline-block; width:12px; height:12px; background-color:' + categories[cat] + '; margin-right:5px;"></span>' + cat + '</div>';
-                   }
-                   
-                   map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
-                   
-                   // 為每個設施建立標記
-                   data.forEach(function(p){
-                       var infoContent = `
-                           <div style="padding:10px; max-width:250px;">
-                               <strong>${p.name}</strong><br>
-                               <span style="color:${p.color}; font-weight:bold;">${p.cat} - ${p.kw}</span><br>
-                               距離中心：<strong>${p.dist} 公尺</strong><br>
-                               <small>緯度：${p.lat.toFixed(6)}<br>經度：${p.lng.toFixed(6)}</small>
-                           </div>
-                       `;
-                       
-                       var marker = new google.maps.Marker({
-                           position: {lat: p.lat, lng: p.lng},
-                           map: map,
-                           icon: {
-                               path: google.maps.SymbolPath.CIRCLE,
-                               scale: 8,
-                               fillColor: p.color,
-                               fillOpacity: 0.9,
-                               strokeColor: "#FFFFFF",
-                               strokeWeight: 2
-                           },
-                           title: p.cat + " - " + p.name,
-                           animation: google.maps.Animation.DROP
-                       });
-                       
-                       var infoWindow = new google.maps.InfoWindow({
-                           content: infoContent
-                       });
-                       
-                       marker.addListener("click", function(){
-                           // 關閉所有其他資訊視窗
-                           infoWindow.open(map, marker);
-                       });
-                   });
+        // 顯示主房屋資訊視窗
+        var mainInfoWindow = new google.maps.InfoWindow({{
+            content: "<div style='padding:10px;'><strong>{title}</strong><br>搜尋中心點<br>半徑：{radius} 公尺</div>"
+        }});
+        mainMarker.addListener("click", function(){{
+            mainInfoWindow.open(map, mainMarker);
+        }});
+        
+        var data = {data_json};
+        
+        // 建立類別圖例
+        var legendDiv = document.createElement('div');
+        legendDiv.id = 'legend';
+        legendDiv.style.cssText = 'background: white; padding: 10px; border: 1px solid #ccc; border-radius: 5px; font-size: 12px; margin: 10px;';
+        legendDiv.innerHTML = '<h4 style="margin-top:0;">設施類別圖例</h4>';
+        
+        var categories = {{}};
+        data.forEach(function(p){{
+            if(!categories[p.cat]) {{
+                categories[p.cat] = p.color;
+            }}
+        }});
+        
+        for(var cat in categories) {{
+            legendDiv.innerHTML += '<div style="margin-bottom: 5px;"><span style="display:inline-block; width:12px; height:12px; background-color:' + categories[cat] + '; margin-right:5px;"></span>' + cat + '</div>';
+        }}
+        
+        map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
+        
+        // 為每個設施建立標記
+        data.forEach(function(p){{
+            var infoContent = `
+                <div style="padding:10px; max-width:250px;">
+                    <strong>${{p.name}}</strong><br>
+                    <span style="color:${{p.color}}; font-weight:bold;">${{p.cat}} - ${{p.kw}}</span><br>
+                    距離中心：<strong>${{p.dist}} 公尺</strong><br>
+                    <small>緯度：${{p.lat.toFixed(6)}}<br>經度：${{p.lng.toFixed(6)}}</small>
+                </div>
+            `;
+            
+            var marker = new google.maps.Marker({{
+                position: {{lat: p.lat, lng: p.lng}},
+                map: map,
+                icon: {{
+                    path: google.maps.SymbolPath.CIRCLE,
+                    scale: 8,
+                    fillColor: p.color,
+                    fillOpacity: 0.9,
+                    strokeColor: "#FFFFFF",
+                    strokeWeight: 2
+                }},
+                title: p.cat + " - " + p.name,
+                animation: google.maps.Animation.DROP
+            }});
+            
+            var infoWindow = new google.maps.InfoWindow({{
+                content: infoContent
+            }});
+            
+            marker.addListener("click", function(){{
+                // 關閉所有其他資訊視窗
+                infoWindow.open(map, marker);
+            }});
+        }});
 
-                   // 繪製搜尋半徑圓
-                   new google.maps.Circle({
-                       strokeColor: "#FF0000",
-                       strokeOpacity: 0.8,
-                       strokeWeight: 2,
-                       fillColor: "#FF0000",
-                       fillOpacity: 0.1,
-                       map: map,
-                       center: center,
-                       radius: $RADIUS
-                   });
-                   
-                   // 自動打開主房屋資訊視窗
-                   setTimeout(function() {
-                       mainInfoWindow.open(map, mainMarker);
-                   }, 1000);
-               }
-               </script>
-               <script src="https://maps.googleapis.com/maps/api/js?key=$BROWSER_KEY&callback=initMap" async defer></script>
-           """)
-
-        map_html = tpl.substitute(
-            LAT=lat,
-            LNG=lng,
-            TITLE=title,
-            DATA_JSON=data_json,
-            RADIUS=radius,
-            BROWSER_KEY=browser_key
-        )
+        // 繪製搜尋半徑圓
+        new google.maps.Circle({{
+            strokeColor: "#FF0000",
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
+            fillColor: "#FF0000",
+            fillOpacity: 0.1,
+            map: map,
+            center: center,
+            radius: {radius}
+        }});
         
-        # 顯示地圖資訊
-        st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
-        st.markdown(f"📊 **共找到 {total_places} 個設施** (搜尋半徑: {radius}公尺)")
-        html(map_html, height=520)
+        // 自動打開主房屋資訊視窗
+        setTimeout(function() {{
+            mainInfoWindow.open(map, mainMarker);
+        }}, 1000);
+    }}
+    </script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={browser_key}&callback=initMap" async defer></script>
+    """
+    
+    # 顯示地圖資訊
+    st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
+    st.markdown(f"📊 **共找到 {total_places} 個設施** (搜尋半徑: {radius}公尺)")
+    html(html_content, height=520)
+    
+    # 顯示全部設施列表
+    st.markdown("### 📍 全部設施列表")
+    
+    if total_places > 0:
+        # 分頁顯示所有設施
+        places_per_page = 10
+        total_pages = (total_places + places_per_page - 1) // places_per_page
         
-        # 顯示全部設施列表
-        st.markdown("### 📍 全部設施列表")
-        
-        if total_places > 0:
-            # 分頁顯示所有設施
-            places_per_page = 10
-            total_pages = (total_places + places_per_page - 1) // places_per_page
-            
-            # 如果有需要分頁
-            if total_pages > 1:
-                page_number = st.number_input(
-                    "選擇頁碼",
-                    min_value=1,
-                    max_value=total_pages,
-                    value=1,
-                    step=1,
-                    key=f"page_{title}"
-                )
-                start_idx = (page_number - 1) * places_per_page
-                end_idx = min(page_number * places_per_page, total_places)
-            else:
-                start_idx, end_idx = 0, total_places
-            
-            # 顯示當前頁的設施
-            st.markdown(f"**顯示 {start_idx+1}-{end_idx} 個設施 (共 {total_places} 個)**")
-            
-            for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places[start_idx:end_idx], start=start_idx+1):
-                color = CATEGORY_COLORS.get(cat, "#000000")
-                
-                # 建立資訊卡片
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1:
-                    st.markdown(f"""
-                    <div style="padding:10px; border-left:4px solid {color}; background-color:#f8f9fa; border-radius:5px; margin-bottom:10px;">
-                        <strong style="font-size:14px;">{i}. {name}</strong><br>
-                        <small>🏷️ <span style="color:{color};"><strong>{cat}</strong> - {kw}</span></small><br>
-                        <small>📍 距離: <strong>{dist} 公尺</strong></small>
-                    </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    # 距離分類標籤
-                    if dist <= 300:
-                        dist_label = "🟢 很近"
-                        dist_color = "#28a745"
-                    elif dist <= 600:
-                        dist_label = "🟡 中等"
-                        dist_color = "#ffc107"
-                    else:
-                        dist_label = "🔴 較遠"
-                        dist_color = "#dc3545"
-                    
-                    st.markdown(f'<div style="color:{dist_color}; font-weight:bold; text-align:center; padding-top:10px;">{dist_label}</div>', unsafe_allow_html=True)
-                
-                with col3:
-                    # 顯示地圖連結按鈕
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
-                    st.markdown(f'<a href="{maps_url}" target="_blank" style="text-decoration:none;"><button style="background-color:{color}; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">🗺️ 地圖</button></a>', unsafe_allow_html=True)
-            
-            # 如果分頁，顯示分頁資訊
-            if total_pages > 1:
-                st.caption(f"第 {page_number} 頁，共 {total_pages} 頁")
-                
-                # 分頁導航按鈕
-                nav_cols = st.columns([2, 1, 2])
-                with nav_cols[0]:
-                    if page_number > 1:
-                        if st.button("⬅️ 上一頁", key=f"prev_{title}"):
-                            page_number = max(1, page_number - 1)
-                            st.rerun()
-                with nav_cols[2]:
-                    if page_number < total_pages:
-                        if st.button("下一頁 ➡️", key=f"next_{title}"):
-                            page_number = min(total_pages, page_number + 1)
-                            st.rerun()
-            
-            # 顯示統計摘要
-            with st.expander("📊 設施統計摘要", expanded=False):
-                # 按類別統計
-                category_stats = {}
-                for cat, kw, name, lat, lng, dist, pid in places:
-                    category_stats[cat] = category_stats.get(cat, 0) + 1
-                
-                # 按距離分組統計
-                close_places = sum(1 for p in places if p[5] <= 300)
-                medium_places = sum(1 for p in places if 300 < p[5] <= 600)
-                far_places = sum(1 for p in places if p[5] > 600)
-                
-                stat_cols = st.columns(3)
-                with stat_cols[0]:
-                    st.metric("很近 (≤300m)", close_places)
-                with stat_cols[1]:
-                    st.metric("中等 (300-600m)", medium_places)
-                with stat_cols[2]:
-                    st.metric("較遠 (>600m)", far_places)
-                
-                # 顯示類別分布
-                st.markdown("**🏪 類別分布:**")
-                for cat, count in sorted(category_stats.items(), key=lambda x: x[1], reverse=True):
-                    color = CATEGORY_COLORS.get(cat, "#000000")
-                    percentage = (count / total_places) * 100
-                    
-                    st.markdown(f"""
-                    <div style="margin-bottom:5px;">
-                        <span style="display:inline-block; width:100px; text-align:right;">{cat}:</span>
-                        <div style="display:inline-block; width:200px; height:20px; background-color:#eee; margin-left:10px; border-radius:3px;">
-                            <div style="width:{percentage}%; height:100%; background-color:{color}; border-radius:3px;"></div>
-                        </div>
-                        <span style="margin-left:10px;">{count} ({percentage:.1f}%)</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+        # 如果有需要分頁
+        if total_pages > 1:
+            page_number = st.number_input(
+                "選擇頁碼",
+                min_value=1,
+                max_value=total_pages,
+                value=1,
+                step=1,
+                key=f"page_{title}"
+            )
+            start_idx = (page_number - 1) * places_per_page
+            end_idx = min(page_number * places_per_page, total_places)
         else:
-            st.info("📭 未找到任何設施")
+            start_idx, end_idx = 0, total_places
+        
+        # 顯示當前頁的設施
+        st.markdown(f"**顯示 {start_idx+1}-{end_idx} 個設施 (共 {total_places} 個)**")
+        
+        for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places[start_idx:end_idx], start=start_idx+1):
+            color = CATEGORY_COLORS.get(cat, "#000000")
+            
+            # 建立資訊卡片
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.markdown(f"""
+                <div style="padding:10px; border-left:4px solid {color}; background-color:#f8f9fa; border-radius:5px; margin-bottom:10px;">
+                    <strong style="font-size:14px;">{i}. {name}</strong><br>
+                    <small>🏷️ <span style="color:{color};"><strong>{cat}</strong> - {kw}</span></small><br>
+                    <small>📍 距離: <strong>{dist} 公尺</strong></small>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            with col2:
+                # 距離分類標籤
+                if dist <= 300:
+                    dist_label = "🟢 很近"
+                    dist_color = "#28a745"
+                elif dist <= 600:
+                    dist_label = "🟡 中等"
+                    dist_color = "#ffc107"
+                else:
+                    dist_label = "🔴 較遠"
+                    dist_color = "#dc3545"
+                
+                st.markdown(f'<div style="color:{dist_color}; font-weight:bold; text-align:center; padding-top:10px;">{dist_label}</div>', unsafe_allow_html=True)
+            
+            with col3:
+                # 顯示地圖連結按鈕
+                maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
+                st.markdown(f'<a href="{maps_url}" target="_blank" style="text-decoration:none;"><button style="background-color:{color}; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">🗺️ 地圖</button></a>', unsafe_allow_html=True)
+        
+        # 如果分頁，顯示分頁資訊
+        if total_pages > 1:
+            st.caption(f"第 {page_number} 頁，共 {total_pages} 頁")
+            
+            # 分頁導航按鈕
+            nav_cols = st.columns([2, 1, 2])
+            with nav_cols[0]:
+                if page_number > 1:
+                    if st.button("⬅️ 上一頁", key=f"prev_{title}"):
+                        page_number = max(1, page_number - 1)
+                        st.rerun()
+            with nav_cols[2]:
+                if page_number < total_pages:
+                    if st.button("下一頁 ➡️", key=f"next_{title}"):
+                        page_number = min(total_pages, page_number + 1)
+                        st.rerun()
+        
+        # 顯示統計摘要
+        with st.expander("📊 設施統計摘要", expanded=False):
+            # 按類別統計
+            category_stats = {}
+            for cat, kw, name, lat, lng, dist, pid in places:
+                category_stats[cat] = category_stats.get(cat, 0) + 1
+            
+            # 按距離分組統計
+            close_places = sum(1 for p in places if p[5] <= 300)
+            medium_places = sum(1 for p in places if 300 < p[5] <= 600)
+            far_places = sum(1 for p in places if p[5] > 600)
+            
+            stat_cols = st.columns(3)
+            with stat_cols[0]:
+                st.metric("很近 (≤300m)", close_places)
+            with stat_cols[1]:
+                st.metric("中等 (300-600m)", medium_places)
+            with stat_cols[2]:
+                st.metric("較遠 (>600m)", far_places)
+            
+            # 顯示類別分布
+            st.markdown("**🏪 類別分布:**")
+            for cat, count in sorted(category_stats.items(), key=lambda x: x[1], reverse=True):
+                color = CATEGORY_COLORS.get(cat, "#000000")
+                percentage = (count / total_places) * 100
+                
+                st.markdown(f"""
+                <div style="margin-bottom:5px;">
+                    <span style="display:inline-block; width:100px; text-align:right;">{cat}:</span>
+                    <div style="display:inline-block; width:200px; height:20px; background-color:#eee; margin-left:10px; border-radius:3px;">
+                        <div style="width:{percentage}%; height:100%; background-color:{color}; border-radius:3px;"></div>
+                    </div>
+                    <span style="margin-left:10px;">{count} ({percentage:.1f}%)</span>
+                </div>
+                """, unsafe_allow_html=True)
+    else:
+        st.info("📭 未找到任何設施")
     
     def _prepare_analysis_prompt(self, houses_data, places_data, facility_counts, 
                                 category_counts, selected_categories, radius, 
