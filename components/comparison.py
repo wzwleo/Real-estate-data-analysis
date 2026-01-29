@@ -671,159 +671,91 @@ class ComparisonAnalyzer:
         st.markdown(f"📊 **共找到 {total_places} 個設施** (搜尋半徑: {radius}公尺)")
         html(html_content, height=520)
         
-        # 顯示全部設施列表
+        # 顯示全部設施列表 - 改為下拉選單
         st.markdown("### 📍 全部設施列表")
         
         if total_places > 0:
-            # 分頁顯示所有設施 - 使用 session state 保存分頁狀態
-            places_per_page = 10
-            total_pages = (total_places + places_per_page - 1) // places_per_page
-            
-            # 建立唯一的 session state key
-            page_key = f"page_{title.replace(' ', '_').replace(':', '')}"
-            
-            # 初始化分頁狀態
-            if page_key not in st.session_state:
-                st.session_state[page_key] = 1
-            
-            # 如果有需要分頁
-            if total_pages > 1:
-                # 使用 session state 來保存當前頁碼
-                page_number = st.number_input(
-                    "選擇頁碼",
-                    min_value=1,
-                    max_value=total_pages,
-                    value=st.session_state[page_key],
-                    step=1,
-                    key=f"page_input_{title}"
+            # 建立一個可折疊的下拉選單來顯示所有設施
+            with st.expander(f"顯示所有 {total_places} 個設施", expanded=True):
+                # 建立排序選項
+                sort_option = st.selectbox(
+                    "排序方式",
+                    ["按距離（由近到遠）", "按類別", "按名稱"],
+                    key=f"sort_{title}"
                 )
                 
-                # 更新 session state
-                st.session_state[page_key] = page_number
+                # 根據選擇的排序方式排序設施
+                if sort_option == "按類別":
+                    sorted_places = sorted(places, key=lambda x: (x[0], x[5]))
+                elif sort_option == "按名稱":
+                    sorted_places = sorted(places, key=lambda x: x[2])
+                else:  # 按距離（由近到遠）
+                    sorted_places = places  # 原本就已經按距離排序
                 
-                start_idx = (page_number - 1) * places_per_page
-                end_idx = min(page_number * places_per_page, total_places)
-            else:
-                start_idx, end_idx = 0, total_places
-                page_number = 1
-            
-            # 顯示當前頁的設施
-            st.markdown(f"**顯示第 {start_idx+1}-{end_idx} 個設施 (共 {total_places} 個)**")
-            
-            for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places[start_idx:end_idx], start=start_idx+1):
-                color = CATEGORY_COLORS.get(cat, "#000000")
-                maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
+                # 使用 st.empty() 創建一個容器來顯示設施列表
+                facilities_container = st.container()
                 
-                # 距離分類標籤
-                if dist <= 300:
-                    dist_label = "🟢 很近"
-                    dist_color = "#28a745"
-                    dist_class = "很近"
-                elif dist <= 600:
-                    dist_label = "🟡 中等"
-                    dist_color = "#ffc107"
-                    dist_class = "中等"
-                else:
-                    dist_label = "🔴 較遠"
-                    dist_color = "#dc3545"
-                    dist_class = "較遠"
-                
-                # 建立資訊卡片 - 改為顯示完整資訊
-                st.markdown(f"""
-                <div style="border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; background-color:#f8f9fa;">
-                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                        <div style="flex:1;">
-                            <div style="display:flex; align-items:center; margin-bottom:5px;">
-                                <span style="display:inline-block; width:12px; height:12px; background-color:{color}; border-radius:50%; margin-right:8px;"></span>
-                                <strong style="font-size:16px; color:#333;">{i}. {name}</strong>
-                            </div>
-                            
-                            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
-                                <div style="display:inline-flex; align-items:center; background-color:{color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
-                                    <span style="color:{color}; font-weight:bold;">🏷️ {cat}</span>
+                with facilities_container:
+                    # 顯示每個設施的資訊卡片
+                    for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(sorted_places, 1):
+                        color = CATEGORY_COLORS.get(cat, "#000000")
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
+                        
+                        # 距離分類標籤
+                        if dist <= 300:
+                            dist_label = "🟢 很近"
+                            dist_color = "#28a745"
+                            dist_class = "很近"
+                        elif dist <= 600:
+                            dist_label = "🟡 中等"
+                            dist_color = "#ffc107"
+                            dist_class = "中等"
+                        else:
+                            dist_label = "🔴 較遠"
+                            dist_color = "#dc3545"
+                            dist_class = "較遠"
+                        
+                        # 建立 HTML 卡片，使用 markdown 而不是 st.markdown 逐行顯示
+                        card_html = f"""
+                        <div style="border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; background-color:#f8f9fa;">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                                <div style="flex:1;">
+                                    <div style="display:flex; align-items:center; margin-bottom:5px;">
+                                        <span style="display:inline-block; width:12px; height:12px; background-color:{color}; border-radius:50%; margin-right:8px;"></span>
+                                        <a href="{maps_url}" target="_blank" style="font-size:16px; color:#1a73e8; text-decoration:none; font-weight:bold;">
+                                            {i}. {name}
+                                        </a>
+                                    </div>
+                                    
+                                    <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
+                                        <div style="display:inline-flex; align-items:center; background-color:{color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
+                                            <span style="color:{color}; font-weight:bold;">🏷️ {cat}</span>
+                                        </div>
+                                        
+                                        <div style="display:inline-flex; align-items:center; background-color:#e9ecef; padding:4px 10px; border-radius:12px; font-size:13px;">
+                                            📍 {kw}
+                                        </div>
+                                        
+                                        <div style="display:inline-flex; align-items:center; background-color:{dist_color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
+                                            <span style="color:{dist_color}; font-weight:bold;">📏 {dist} 公尺 ({dist_class})</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div style="margin-top:10px; font-size:12px; color:#666;">
+                                        座標: {lat:.6f}, {lng:.6f}
+                                        <span style="margin-left:10px;">
+                                            <a href="{maps_url}" target="_blank" style="color:#1a73e8; text-decoration:none;">
+                                                <span style="color:#1a73e8;">🗺️ 開啟地圖</span>
+                                            </a>
+                                        </span>
+                                    </div>
                                 </div>
-                                
-                                <div style="display:inline-flex; align-items:center; background-color:#e9ecef; padding:4px 10px; border-radius:12px; font-size:13px;">
-                                    📍 {kw}
-                                </div>
-                                
-                                <div style="display:inline-flex; align-items:center; background-color:{dist_color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
-                                    <span style="color:{dist_color}; font-weight:bold;">📏 {dist} 公尺 ({dist_class})</span>
-                                </div>
-                            </div>
-                            
-                            <div style="margin-top:10px;">
-                                <a href="{maps_url}" target="_blank" style="text-decoration:none;">
-                                    <button style="background-color:#1a73e8; color:white; border:none; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center;">
-                                        <span style="margin-right:5px;">🗺️</span>在 Google 地圖中查看
-                                    </button>
-                                </a>
-                                
-                                <span style="margin-left:10px; font-size:12px; color:#666;">
-                                    座標: {lat:.6f}, {lng:.6f}
-                                </span>
                             </div>
                         </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # 如果分頁，顯示分頁資訊和導航按鈕
-            if total_pages > 1:
-                st.caption(f"📄 第 {page_number} 頁，共 {total_pages} 頁")
-                
-                # 使用 form 和 submit 按鈕避免頁面刷新
-                with st.form(key=f"pagination_form_{title}"):
-                    col1, col2, col3 = st.columns([1, 2, 1])
-                    
-                    # 頁碼選擇器
-                    with col2:
-                        selected_page = st.selectbox(
-                            "快速跳至頁碼",
-                            range(1, total_pages + 1),
-                            index=page_number - 1,
-                            key=f"quick_jump_{title}"
-                        )
-                    
-                    # 導航按鈕
-                    nav_cols = st.columns(5)
-                    with nav_cols[0]:
-                        if page_number > 1:
-                            if st.form_submit_button("⬅️ 上一頁", use_container_width=True):
-                                st.session_state[page_key] = max(1, page_number - 1)
-                                st.rerun()
-                    
-                    with nav_cols[1]:
-                        if st.form_submit_button("首頁", use_container_width=True):
-                            st.session_state[page_key] = 1
-                            st.rerun()
-                    
-                    with nav_cols[2]:
-                        if selected_page != page_number:
-                            if st.form_submit_button(f"跳至第 {selected_page} 頁", use_container_width=True):
-                                st.session_state[page_key] = selected_page
-                                st.rerun()
-                    
-                    with nav_cols[3]:
-                        if st.form_submit_button("末頁", use_container_width=True):
-                            st.session_state[page_key] = total_pages
-                            st.rerun()
-                    
-                    with nav_cols[4]:
-                        if page_number < total_pages:
-                            if st.form_submit_button("下一頁 ➡️", use_container_width=True):
-                                st.session_state[page_key] = min(total_pages, page_number + 1)
-                                st.rerun()
-                
-                # 顯示快速頁碼按鈕
-                st.markdown("**快速導航:**")
-                quick_nav_cols = st.columns(min(total_pages, 10))
-                for idx in range(min(total_pages, 10)):
-                    with quick_nav_cols[idx]:
-                        page_num = idx + 1
-                        if st.button(f"{page_num}", key=f"quick_{title}_{page_num}", use_container_width=True):
-                            st.session_state[page_key] = page_num
-                            st.rerun()
+                        """
+                        
+                        # 使用 st.markdown 一次顯示整個卡片，避免程式碼問題
+                        st.markdown(card_html, unsafe_allow_html=True)
             
             # 顯示統計摘要
             with st.expander("📊 設施統計摘要", expanded=False):
@@ -884,6 +816,36 @@ class ComparisonAnalyzer:
                         st.metric("最近設施", f"{min_distance} 公尺")
                     with dist_cols[2]:
                         st.metric("最遠設施", f"{max_distance} 公尺")
+                
+                # 添加搜尋功能
+                st.markdown("**🔍 搜尋設施:**")
+                search_term = st.text_input("輸入關鍵字搜尋設施", key=f"search_{title}")
+                
+                if search_term:
+                    matching_places = []
+                    for cat, kw, name, lat, lng, dist, pid in places:
+                        if search_term.lower() in name.lower() or search_term.lower() in kw.lower() or search_term.lower() in cat.lower():
+                            matching_places.append((cat, kw, name, lat, lng, dist, pid))
+                    
+                    if matching_places:
+                        st.success(f"找到 {len(matching_places)} 個符合「{search_term}」的設施")
+                        for cat, kw, name, lat, lng, dist, pid in matching_places[:5]:  # 只顯示前5個
+                            color = CATEGORY_COLORS.get(cat, "#000000")
+                            maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
+                            
+                            st.markdown(f"""
+                            <div style="border:1px solid #4CAF50; border-radius:8px; padding:10px; margin-bottom:8px; background-color:#e8f5e9;">
+                                <a href="{maps_url}" target="_blank" style="color:#1a73e8; text-decoration:none; font-weight:bold;">
+                                    {name}
+                                </a><br>
+                                <small>🏷️ {cat} - {kw} | 📏 {dist} 公尺</small>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        
+                        if len(matching_places) > 5:
+                            st.caption(f"還有 {len(matching_places)-5} 個符合條件的設施未顯示")
+                    else:
+                        st.warning(f"沒有找到符合「{search_term}」的設施")
         else:
             st.info("📭 未找到任何設施")
     
