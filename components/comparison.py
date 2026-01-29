@@ -543,7 +543,7 @@ class ComparisonAnalyzer:
                 "pid": pid,
                 "color": CATEGORY_COLORS.get(cat, "#000000")
             })
-
+    
         # 將 data_json 轉為 JavaScript 安全格式
         import json
         data_json = json.dumps(data, ensure_ascii=False)
@@ -607,12 +607,16 @@ class ComparisonAnalyzer:
             
             // 為每個設施建立標記
             data.forEach(function(p){{
+                var mapsUrl = "https://www.google.com/maps/search/?api=1&query=" + p.lat + "," + p.lng + "&query_place_id=" + p.pid;
                 var infoContent = `
                     <div style="padding:10px; max-width:250px;">
                         <strong>${{p.name}}</strong><br>
                         <span style="color:${{p.color}}; font-weight:bold;">${{p.cat}} - ${{p.kw}}</span><br>
                         距離中心：<strong>${{p.dist}} 公尺</strong><br>
-                        <small>緯度：${{p.lat.toFixed(6)}}<br>經度：${{p.lng.toFixed(6)}}</small>
+                        <small>緯度：${{p.lat.toFixed(6)}}<br>經度：${{p.lng.toFixed(6)}}</small><br>
+                        <a href="${{mapsUrl}}" target="_blank" style="color:#1a73e8; text-decoration:none; font-size:12px;">
+                            <span style="color:#1a73e8;">🗺️ 在 Google 地圖中查看</span>
+                        </a>
                     </div>
                 `;
                 
@@ -640,7 +644,7 @@ class ComparisonAnalyzer:
                     infoWindow.open(map, marker);
                 }});
             }});
-
+    
             // 繪製搜尋半徑圓
             new google.maps.Circle({{
                 strokeColor: "#FF0000",
@@ -671,76 +675,154 @@ class ComparisonAnalyzer:
         st.markdown("### 📍 全部設施列表")
         
         if total_places > 0:
-            # 分頁顯示所有設施
+            # 分頁顯示所有設施 - 使用 session state 保存分頁狀態
             places_per_page = 10
             total_pages = (total_places + places_per_page - 1) // places_per_page
             
+            # 建立唯一的 session state key
+            page_key = f"page_{title.replace(' ', '_').replace(':', '')}"
+            
+            # 初始化分頁狀態
+            if page_key not in st.session_state:
+                st.session_state[page_key] = 1
+            
             # 如果有需要分頁
             if total_pages > 1:
+                # 使用 session state 來保存當前頁碼
                 page_number = st.number_input(
                     "選擇頁碼",
                     min_value=1,
                     max_value=total_pages,
-                    value=1,
+                    value=st.session_state[page_key],
                     step=1,
-                    key=f"page_{title}"
+                    key=f"page_input_{title}"
                 )
+                
+                # 更新 session state
+                st.session_state[page_key] = page_number
+                
                 start_idx = (page_number - 1) * places_per_page
                 end_idx = min(page_number * places_per_page, total_places)
             else:
                 start_idx, end_idx = 0, total_places
+                page_number = 1
             
             # 顯示當前頁的設施
-            st.markdown(f"**顯示 {start_idx+1}-{end_idx} 個設施 (共 {total_places} 個)**")
+            st.markdown(f"**顯示第 {start_idx+1}-{end_idx} 個設施 (共 {total_places} 個)**")
             
             for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places[start_idx:end_idx], start=start_idx+1):
                 color = CATEGORY_COLORS.get(cat, "#000000")
+                maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
                 
-                # 建立資訊卡片
-                col1, col2, col3 = st.columns([3, 1, 1])
-                with col1:
-                    st.markdown(f"""
-                    <div style="padding:10px; border-left:4px solid {color}; background-color:#f8f9fa; border-radius:5px; margin-bottom:10px;">
-                        <strong style="font-size:14px;">{i}. {name}</strong><br>
-                        <small>🏷️ <span style="color:{color};"><strong>{cat}</strong> - {kw}</span></small><br>
-                        <small>📍 距離: <strong>{dist} 公尺</strong></small>
+                # 距離分類標籤
+                if dist <= 300:
+                    dist_label = "🟢 很近"
+                    dist_color = "#28a745"
+                    dist_class = "很近"
+                elif dist <= 600:
+                    dist_label = "🟡 中等"
+                    dist_color = "#ffc107"
+                    dist_class = "中等"
+                else:
+                    dist_label = "🔴 較遠"
+                    dist_color = "#dc3545"
+                    dist_class = "較遠"
+                
+                # 建立資訊卡片 - 改為顯示完整資訊
+                st.markdown(f"""
+                <div style="border:1px solid #ddd; border-radius:8px; padding:12px; margin-bottom:12px; background-color:#f8f9fa;">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div style="flex:1;">
+                            <div style="display:flex; align-items:center; margin-bottom:5px;">
+                                <span style="display:inline-block; width:12px; height:12px; background-color:{color}; border-radius:50%; margin-right:8px;"></span>
+                                <strong style="font-size:16px; color:#333;">{i}. {name}</strong>
+                            </div>
+                            
+                            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:8px;">
+                                <div style="display:inline-flex; align-items:center; background-color:{color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
+                                    <span style="color:{color}; font-weight:bold;">🏷️ {cat}</span>
+                                </div>
+                                
+                                <div style="display:inline-flex; align-items:center; background-color:#e9ecef; padding:4px 10px; border-radius:12px; font-size:13px;">
+                                    📍 {kw}
+                                </div>
+                                
+                                <div style="display:inline-flex; align-items:center; background-color:{dist_color}20; padding:4px 10px; border-radius:12px; font-size:13px;">
+                                    <span style="color:{dist_color}; font-weight:bold;">📏 {dist} 公尺 ({dist_class})</span>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top:10px;">
+                                <a href="{maps_url}" target="_blank" style="text-decoration:none;">
+                                    <button style="background-color:#1a73e8; color:white; border:none; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:13px; display:inline-flex; align-items:center;">
+                                        <span style="margin-right:5px;">🗺️</span>在 Google 地圖中查看
+                                    </button>
+                                </a>
+                                
+                                <span style="margin-left:10px; font-size:12px; color:#666;">
+                                    座標: {lat:.6f}, {lng:.6f}
+                                </span>
+                            </div>
+                        </div>
                     </div>
-                    """, unsafe_allow_html=True)
-                
-                with col2:
-                    # 距離分類標籤
-                    if dist <= 300:
-                        dist_label = "🟢 很近"
-                        dist_color = "#28a745"
-                    elif dist <= 600:
-                        dist_label = "🟡 中等"
-                        dist_color = "#ffc107"
-                    else:
-                        dist_label = "🔴 較遠"
-                        dist_color = "#dc3545"
-                    
-                    st.markdown(f'<div style="color:{dist_color}; font-weight:bold; text-align:center; padding-top:10px;">{dist_label}</div>', unsafe_allow_html=True)
-                
-                with col3:
-                    # 顯示地圖連結按鈕
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
-                    st.markdown(f'<a href="{maps_url}" target="_blank" style="text-decoration:none;"><button style="background-color:{color}; color:white; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">🗺️ 地圖</button></a>', unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
             
-            # 如果分頁，顯示分頁資訊
+            # 如果分頁，顯示分頁資訊和導航按鈕
             if total_pages > 1:
-                st.caption(f"第 {page_number} 頁，共 {total_pages} 頁")
+                st.caption(f"📄 第 {page_number} 頁，共 {total_pages} 頁")
                 
-                # 分頁導航按鈕
-                nav_cols = st.columns([2, 1, 2])
-                with nav_cols[0]:
-                    if page_number > 1:
-                        if st.button("⬅️ 上一頁", key=f"prev_{title}"):
-                            page_number = max(1, page_number - 1)
+                # 使用 form 和 submit 按鈕避免頁面刷新
+                with st.form(key=f"pagination_form_{title}"):
+                    col1, col2, col3 = st.columns([1, 2, 1])
+                    
+                    # 頁碼選擇器
+                    with col2:
+                        selected_page = st.selectbox(
+                            "快速跳至頁碼",
+                            range(1, total_pages + 1),
+                            index=page_number - 1,
+                            key=f"quick_jump_{title}"
+                        )
+                    
+                    # 導航按鈕
+                    nav_cols = st.columns(5)
+                    with nav_cols[0]:
+                        if page_number > 1:
+                            if st.form_submit_button("⬅️ 上一頁", use_container_width=True):
+                                st.session_state[page_key] = max(1, page_number - 1)
+                                st.rerun()
+                    
+                    with nav_cols[1]:
+                        if st.form_submit_button("首頁", use_container_width=True):
+                            st.session_state[page_key] = 1
                             st.rerun()
-                with nav_cols[2]:
-                    if page_number < total_pages:
-                        if st.button("下一頁 ➡️", key=f"next_{title}"):
-                            page_number = min(total_pages, page_number + 1)
+                    
+                    with nav_cols[2]:
+                        if selected_page != page_number:
+                            if st.form_submit_button(f"跳至第 {selected_page} 頁", use_container_width=True):
+                                st.session_state[page_key] = selected_page
+                                st.rerun()
+                    
+                    with nav_cols[3]:
+                        if st.form_submit_button("末頁", use_container_width=True):
+                            st.session_state[page_key] = total_pages
+                            st.rerun()
+                    
+                    with nav_cols[4]:
+                        if page_number < total_pages:
+                            if st.form_submit_button("下一頁 ➡️", use_container_width=True):
+                                st.session_state[page_key] = min(total_pages, page_number + 1)
+                                st.rerun()
+                
+                # 顯示快速頁碼按鈕
+                st.markdown("**快速導航:**")
+                quick_nav_cols = st.columns(min(total_pages, 10))
+                for idx in range(min(total_pages, 10)):
+                    with quick_nav_cols[idx]:
+                        page_num = idx + 1
+                        if st.button(f"{page_num}", key=f"quick_{title}_{page_num}", use_container_width=True):
+                            st.session_state[page_key] = page_num
                             st.rerun()
             
             # 顯示統計摘要
@@ -755,29 +837,53 @@ class ComparisonAnalyzer:
                 medium_places = sum(1 for p in places if 300 < p[5] <= 600)
                 far_places = sum(1 for p in places if p[5] > 600)
                 
+                # 顯示統計卡片
                 stat_cols = st.columns(3)
                 with stat_cols[0]:
-                    st.metric("很近 (≤300m)", close_places)
+                    st.metric("🟢 很近 (≤300m)", close_places, f"{close_places/total_places*100:.1f}%")
                 with stat_cols[1]:
-                    st.metric("中等 (300-600m)", medium_places)
+                    st.metric("🟡 中等 (300-600m)", medium_places, f"{medium_places/total_places*100:.1f}%")
                 with stat_cols[2]:
-                    st.metric("較遠 (>600m)", far_places)
+                    st.metric("🔴 較遠 (>600m)", far_places, f"{far_places/total_places*100:.1f}%")
                 
                 # 顯示類別分布
-                st.markdown("**🏪 類別分布:**")
+                st.markdown("**🏪 設施類別分布:**")
                 for cat, count in sorted(category_stats.items(), key=lambda x: x[1], reverse=True):
                     color = CATEGORY_COLORS.get(cat, "#000000")
                     percentage = (count / total_places) * 100
                     
                     st.markdown(f"""
-                    <div style="margin-bottom:5px;">
-                        <span style="display:inline-block; width:100px; text-align:right;">{cat}:</span>
-                        <div style="display:inline-block; width:200px; height:20px; background-color:#eee; margin-left:10px; border-radius:3px;">
-                            <div style="width:{percentage}%; height:100%; background-color:{color}; border-radius:3px;"></div>
+                    <div style="margin-bottom:8px; display:flex; align-items:center;">
+                        <div style="display:flex; align-items:center; width:150px;">
+                            <span style="display:inline-block; width:12px; height:12px; background-color:{color}; border-radius:50%; margin-right:8px;"></span>
+                            <span style="font-weight:500;">{cat}:</span>
                         </div>
-                        <span style="margin-left:10px;">{count} ({percentage:.1f}%)</span>
+                        <div style="flex:1; margin-left:10px;">
+                            <div style="width:100%; height:20px; background-color:#e9ecef; border-radius:10px; overflow:hidden;">
+                                <div style="width:{percentage}%; height:100%; background-color:{color};"></div>
+                            </div>
+                        </div>
+                        <div style="width:80px; text-align:right; margin-left:10px;">
+                            <span style="font-weight:bold;">{count} 個</span>
+                            <span style="color:#666; font-size:12px;"> ({percentage:.1f}%)</span>
+                        </div>
                     </div>
                     """, unsafe_allow_html=True)
+                
+                # 顯示距離統計
+                if places:
+                    avg_distance = sum(p[5] for p in places) / total_places
+                    min_distance = min(p[5] for p in places)
+                    max_distance = max(p[5] for p in places)
+                    
+                    st.markdown("**📏 距離統計:**")
+                    dist_cols = st.columns(3)
+                    with dist_cols[0]:
+                        st.metric("平均距離", f"{avg_distance:.0f} 公尺")
+                    with dist_cols[1]:
+                        st.metric("最近設施", f"{min_distance} 公尺")
+                    with dist_cols[2]:
+                        st.metric("最遠設施", f"{max_distance} 公尺")
         else:
             st.info("📭 未找到任何設施")
     
