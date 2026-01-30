@@ -79,7 +79,7 @@ def render_property_card(row, current_page, idx):
             property_id = row['編號']
             is_fav = property_id in st.session_state.favorites
 
-            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"fav_{property_id}"):
+            if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"filter_fav_{property_id}"):
                 if is_fav:
                     st.session_state.favorites.remove(property_id)
                 else:
