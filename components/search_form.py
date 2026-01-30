@@ -22,7 +22,7 @@ def parse_district(address):
 def render_search_form():
     """ 渲染搜尋表單並處理提交邏輯 """
     with st.form("property_requirements"):
-        st.subheader("📍 房產篩選條件1")
+        st.subheader("📍 房產篩選條件")
 
         housetype = [
             "不限", "大樓", "華廈", "公寓", "套房", "透天", "店面",
