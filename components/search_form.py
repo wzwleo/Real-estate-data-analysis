@@ -9,9 +9,10 @@ from utils import get_city_options, filter_properties
 # 地址 → 行政區解析
 # ========================
 def parse_district(address):
+    """只抓區名，例如：北區、西區"""
     if not isinstance(address, str):
         return None
-    m = re.search(r'([\u4e00-\u9fa5]+區)', address)
+    m = re.search(r'([北中南東西]+區)', address)
     return m.group(1) if m else None
 
 
