@@ -157,7 +157,13 @@ def render_ai_chat_search():
                 df = pd.read_csv(f"./Data/{csv_file}")
                 
                 # 行政區預處理
-                from utils import parse_district # 確保你有導入這個 function
+                def quick_parse_district(addr):
+                    if pd.isna(addr) or not isinstance(addr, str): return ""
+                    # 簡單邏輯：找「市」或「縣」之後的三個字（例如：台中市西屯區 -> 西屯區）
+                    import re
+                    match = re.search(r'[市縣](.+?[區鄉鎮市])', addr)
+                    return match.group(1) if match else ""
+                    
                 if '地址' in df.columns:
                     df['行政區'] = df['地址'].apply(parse_district)
 
