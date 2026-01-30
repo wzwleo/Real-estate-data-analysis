@@ -9,11 +9,13 @@ from utils import get_city_options, filter_properties
 # 地址 → 行政區解析
 # ========================
 def parse_district(address):
-    """只抓區名，例如：北區、西區"""
     if not isinstance(address, str):
         return None
-    m = re.search(r'([北中南東西]+區)', address)
+    # 移除台中市/台北市/新北市 等市名稱
+    address = re.sub(r'^[\u4e00-\u9fa5]{2,3}市', '', address)
+    m = re.search(r'([\u4e00-\u9fa5]+區)', address)
     return m.group(1) if m else None
+
 
 
 # ========================
