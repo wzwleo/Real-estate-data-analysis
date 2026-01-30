@@ -80,7 +80,24 @@ def render_search_form():
 
     return None
 
-
+def parse_district(address):
+    """
+    從地址字串中提取行政區 (例如: 從 '台中市西屯區...' 提取 '西屯區')
+    """
+    if not isinstance(address, str):
+        return None
+    
+    # 使用正規表達式匹配 XXX區、XXX鄉、XXX鎮 或 XXX市 (例如: 彰化市)
+    match = re.search(r'(?<=[省市])(.+?[區鄉鎮市])', address)
+    if match:
+        return match.group(1)
+    
+    # 如果地址開頭就是區 (例如: '西屯區...')
+    match = re.search(r'(.+?[區鄉鎮市])', address)
+    if match:
+        return match.group(1)
+        
+    return None
 # ========================
 # 搜尋處理
 # ========================
