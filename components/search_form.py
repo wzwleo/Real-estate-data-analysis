@@ -29,11 +29,12 @@ def render_search_form():
         ]
 
         options = get_city_options()
-
-        # ===== 城市選擇 =====
-        selected_label = st.selectbox("🏙️ 請選擇城市", list(options.keys()))
-
-        # ===== 行政區選單（由 CSV 自動產生）=====
+        col1, col2 = st.columns([1, 1])
+        
+        with col1:
+            selected_label = st.selectbox("🏙️ 請選擇城市", list(options.keys()))
+            housetype_change = st.selectbox("🏠 房產類別", housetype)
+            
         district_options = ["不限"]
         try:
             temp_df = pd.read_csv(os.path.join("./Data", options[selected_label]))
@@ -46,10 +47,9 @@ def render_search_form():
                 )
         except Exception:
             pass
-
-        selected_district = st.selectbox("📍 行政區", district_options)
-
-        housetype_change = st.selectbox("🏠 房產類別", housetype)
+            
+        with col2:
+            selected_district = st.selectbox("📍 行政區", district_options)
 
         # ===== 預算 =====
         col1, col2 = st.columns(2)
@@ -62,6 +62,7 @@ def render_search_form():
             st.error("⚠️ 預算下限不能大於上限")
 
         # ===== 其他條件 =====
+        st.subheader("🎯 房產條件細項")
         col1, col2, col3 = st.columns(3)
 
         with col1:
@@ -159,6 +160,7 @@ def handle_search_submit(
 
         # ===== 篩選條件 =====
         filters = {
+            'district': selected_district,
             'housetype': housetype_change,
             'budget_min': budget_min,
             'budget_max': budget_max,
@@ -166,8 +168,8 @@ def handle_search_submit(
             'age_max': age_max,
             'area_min': area_min,
             'area_max': area_max,
-            'car_grip': car_grip,
-            'district': selected_district
+            'car_grip': car_grip
+            
         }
 
         filtered_df = filter_properties(df, filters)
