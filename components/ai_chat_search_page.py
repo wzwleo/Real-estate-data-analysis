@@ -109,6 +109,7 @@ def render_ai_chat_search():
 請以 JSON 格式回傳，格式如下：
 {
     "city": "台北市 或 台中市",
+    "district": "行政區名稱(例如: 西屯區、大安區)",
     "budget_min": 最低預算(萬),
     "budget_max": 最高預算(萬),
     "age_min": 最小屋齡,
@@ -121,6 +122,7 @@ def render_ai_chat_search():
 
 注意：
 - 只回傳 JSON，不要有其他文字
+- "district" 欄位：請精確提取使用者提到的行政區。如果使用者說「西屯」請回傳「西屯區」。
 - 如果使用者沒提到某個條件，該欄位則可以省略
 - 預算單位是「萬」
 - 城市只能是「台北市」或「台中市」
@@ -144,8 +146,7 @@ def render_ai_chat_search():
             # 執行搜尋
             city = filters.get("city", "台中市")
             city_file_map = {
-                "台中市": "Taichung-city_buy_properties.csv",
-                "台北市": "Taipei-city_buy_properties.csv"
+                "台中市": "Taichung-city_buy_properties.csv"
             }
             
             csv_file = city_file_map.get(city)
@@ -154,6 +155,14 @@ def render_ai_chat_search():
             else:
                 # 載入資料
                 df = pd.read_csv(f"./Data/{csv_file}")
+                
+                # 行政區預處理
+                from utils import parse_district # 確保你有導入這個 function
+                if '地址' in df.columns:
+                    df['行政區'] = df['地址'].apply(parse_district)
+
+
+                
                 original_count = len(df)
                 
                 # 過濾資料（內嵌函式）
@@ -161,6 +170,16 @@ def render_ai_chat_search():
                 filter_steps = []  # 記錄每個篩選步驟
                 
                 try:
+                    # 行政區篩選邏輯
+                    if filters.get('district') and filters['district'] != "不限":
+                        if '行政區' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            # 使用 contains 或 ==。建議用 contains 增加容錯率
+                            filtered_df = filtered_df[
+                                filtered_df['行政區'].astype(str).str.contains(filters['district'], na=False)
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"行政區={filters['district']}: {before_count} → {after_count}")
                     # 房屋類型篩選
                     if filters.get('housetype') and filters['housetype'] != "不限":
                         if '類型' in filtered_df.columns:
