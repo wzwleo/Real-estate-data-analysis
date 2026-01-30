@@ -165,7 +165,7 @@ def render_ai_chat_search():
                     return match.group(1) if match else ""
                     
                 if '地址' in df.columns:
-                    df['行政區'] = df['地址'].apply(parse_district)
+                    df['行政區'] = df['地址'].apply(quick_parse_district)
 
 
                 
