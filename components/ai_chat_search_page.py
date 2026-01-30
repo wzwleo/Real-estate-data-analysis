@@ -77,6 +77,8 @@ def render_ai_chat_search():
                     full_prompt = f"{system_prompt}\n\n使用者查詢：{prompt}"
                     response = model.generate_content(full_prompt)
                     ai_reply = response.text.strip()
+                    st.markdown("### 🤖 AI 解析結果（原始輸出）")
+                    st.code(ai_reply, language="json")
                     
                     # 清理回應
                     if ai_reply.startswith("```json"):
