@@ -176,16 +176,21 @@ def render_ai_chat_search():
                 filter_steps = []  # 記錄每個篩選步驟
                 
                 try:
-                    # 行政區篩選邏輯
+                    # 行政區篩選邏輯 (支援多個行政區)
                     if filters.get('district') and filters['district'] != "不限":
                         if '行政區' in filtered_df.columns:
                             before_count = len(filtered_df)
-                            # 使用 contains 或 ==。建議用 contains 增加容錯率
+                            # 將 "西屯區, 北屯區" 拆解成 ['西屯區', '北屯區']
+                            districts = [d.strip() for d in filters['district'].replace('，', ',').split(',')]
+                            
+                            # 使用 | (OR) 邏輯來篩選：只要地址包含其中一個區就可以
+                            pattern = '|'.join(districts) 
                             filtered_df = filtered_df[
-                                filtered_df['行政區'].astype(str).str.contains(filters['district'], na=False)
+                                filtered_df['行政區'].astype(str).str.contains(pattern, na=False)
                             ]
+                            
                             after_count = len(filtered_df)
-                            filter_steps.append(f"行政區={filters['district']}: {before_count} → {after_count}")
+                            filter_steps.append(f"行政區({filters['district']}): {before_count} → {after_count}")
                     # 房屋類型篩選
                     if filters.get('housetype') and filters['housetype'] != "不限":
                         if '類型' in filtered_df.columns:
