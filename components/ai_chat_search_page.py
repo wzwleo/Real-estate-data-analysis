@@ -363,7 +363,7 @@ def render_ai_chat_search():
                 with col1:
                     property_id = row['編號']
                     is_fav = property_id in st.session_state.favorites
-                    unique_key = f"ai_s{search_count}_p{current_page}_i{idx}_{property_id}"
+                    unique_key = f"ai_fav_{property_id}"
                     if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=unique_key):
                         if is_fav:
                             st.session_state.favorites.remove(property_id)
