@@ -176,21 +176,27 @@ def render_ai_chat_search():
                 filter_steps = []  # 記錄每個篩選步驟
                 
                 try:
-                    # 行政區篩選邏輯 (支援多個行政區)
+                    # 行政區篩選邏輯 (修正版：支援複選)
                     if filters.get('district') and filters['district'] != "不限":
                         if '行政區' in filtered_df.columns:
                             before_count = len(filtered_df)
-                            # 將 "西屯區, 北屯區" 拆解成 ['西屯區', '北屯區']
-                            districts = [d.strip() for d in filters['district'].replace('，', ',').split(',')]
                             
-                            # 使用 | (OR) 邏輯來篩選：只要地址包含其中一個區就可以
-                            pattern = '|'.join(districts) 
+                            # 1. 統一分隔符號，把 頓號、全型逗號 都換成 半型逗號
+                            raw_districts = filters['district'].replace('、', ',').replace('，', ',')
+                            
+                            # 2. 拆分成清單，例如 ["西屯區", "北屯區"]
+                            dist_list = [d.strip() for d in raw_districts.split(',') if d.strip()]
+                            
+                            # 3. 建立正規表達式的「或」型式，例如 "西屯區|北屯區"
+                            search_pattern = '|'.join(dist_list)
+                            
+                            # 4. 執行篩選
                             filtered_df = filtered_df[
-                                filtered_df['行政區'].astype(str).str.contains(pattern, na=False)
+                                filtered_df['行政區'].astype(str).str.contains(search_pattern, na=False)
                             ]
                             
                             after_count = len(filtered_df)
-                            filter_steps.append(f"行政區({filters['district']}): {before_count} → {after_count}")
+                            filter_steps.append(f"行政區({raw_districts}): {before_count} → {after_count}")
                     # 房屋類型篩選
                     if filters.get('housetype') and filters['housetype'] != "不限":
                         if '類型' in filtered_df.columns:
