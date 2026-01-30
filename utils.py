@@ -19,6 +19,12 @@ def filter_properties(df, filters):
     """ 根據篩選條件過濾房產資料 """
     filtered_df = df.copy()
     try:
+        # 行政區
+        if filters.get('district') and filters['district'] != "不限":
+            if '行政區' in filtered_df.columns:
+                # 精確比對行政區名稱
+                filtered_df = filtered_df[filtered_df['行政區'] == filters['district']]
+                
         # 類型
         if filters.get('housetype') and filters['housetype'] != "不限":
             if '類型' in filtered_df.columns:
