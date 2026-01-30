@@ -9,7 +9,6 @@ def get_city_options(data_dir="./Data"):
         return {}
     name_map = {
         "Taichung-city_buy_properties.csv": "台中市",
-        "Taipei-city_buy_properties.csv": "台北市"
     }
     files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
     options = {name_map[f]: f for f in files if f in name_map}
