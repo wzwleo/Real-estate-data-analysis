@@ -66,12 +66,12 @@ def render_search_form():
         col1, col2, col3 = st.columns(3)
 
         with col1:
-            age_min = st.number_input("屋齡下限", 0, 100, 0)
             age_max = st.number_input("屋齡上限", 0, 100, 100)
-
+            age_min = st.number_input("屋齡下限", 0, 100, 0)
+            
         with col2:
-            area_min = st.number_input("建坪下限", 0, 1000, 0, 10)
             area_max = st.number_input("建坪上限", 0, 1000, 1000, 10)
+            area_min = st.number_input("建坪下限", 0, 1000, 0, 10)
 
         with col3:
             car_grip = st.selectbox("🅿️ 車位需求", ["不限", "需要", "不要"])
