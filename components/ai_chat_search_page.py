@@ -37,7 +37,7 @@ def render_ai_chat_search():
             st.markdown(chat["content"])
     
     # ====== 使用者輸入 ======
-    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
+    if prompt := st.chat_input("請輸入查詢條件,例如:『台北 2000 萬內 3 房』"):
         # 立即顯示使用者訊息
         with st.chat_message("user"):
             st.markdown(prompt)
@@ -98,70 +98,70 @@ def render_ai_chat_search():
                     
                     csv_file = city_file_map.get(city)
                     if not csv_file:
-                        st.error("❌ 不支援的城市")
-                        st.stop()
-                    
-                    # 載入資料
-                    df = pd.read_csv(f"./Data/{csv_file}")
-                    
-                    # 過濾資料（內嵌函式）
-                    filtered_df = df.copy()
-                    try:
-                        if filters.get('housetype') and filters['housetype'] != "不限":
-                            if '類型' in filtered_df.columns:
-                                filtered_df = filtered_df[
-                                    filtered_df['類型'].astype(str).str.contains(filters['housetype'], case=False, na=False)
-                                ]
-                        if filters.get('budget_min', 0) > 0 and '總價(萬)' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['總價(萬)'] >= filters['budget_min']]
-                        if filters.get('budget_max', 1000000) < 1000000 and '總價(萬)' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['總價(萬)'] <= filters['budget_max']]
-                        if filters.get('age_min', 0) > 0 and '屋齡' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['屋齡'] >= filters['age_min']]
-                        if filters.get('age_max', 100) < 100 and '屋齡' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['屋齡'] <= filters['age_max']]
-                        if filters.get('area_min', 0) > 0 and '建坪' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['建坪'] >= filters['area_min']]
-                        if filters.get('area_max', 1000) < 1000 and '建坪' in filtered_df.columns:
-                            filtered_df = filtered_df[filtered_df['建坪'] <= filters['area_max']]
-                        if 'car_grip' in filters and '車位' in filtered_df.columns:
-                            if filters['car_grip'] == "需要":
-                                filtered_df = filtered_df[
-                                    (filtered_df['車位'].notna()) & 
-                                    (filtered_df['車位'] != "無車位") & 
-                                    (filtered_df['車位'] != 0)
-                                ]
-                            elif filters['car_grip'] == "不要":
-                                filtered_df = filtered_df[
-                                    (filtered_df['車位'].isna()) | 
-                                    (filtered_df['車位'] == "無車位") | 
-                                    (filtered_df['車位'] == 0)
-                                ]
-                        if "rooms" in filters:
-                            rooms = filters["rooms"]
-                            if isinstance(rooms, dict):
-                                filtered_df = filtered_df[(filtered_df['房間數'] >= rooms.get("min", 0)) &
-                                                          (filtered_df['房間數'] <= rooms.get("max", 100))]
-                            else:
-                                filtered_df = filtered_df[filtered_df['房間數'] >= rooms]
-                        if "living_rooms" in filters:
-                            filtered_df = filtered_df[filtered_df['廳數'] >= filters["living_rooms"]]
-                        if "bathrooms" in filters:
-                            filtered_df = filtered_df[filtered_df['衛數'] >= filters["bathrooms"]]
-                    except Exception as e:
-                        st.error(f"篩選過程中發生錯誤: {e}")
-                    
-                    # 每次新搜尋時更新計數器
-                    st.session_state.ai_search_count += 1
-                    
-                    # 儲存到 session_state
-                    st.session_state.ai_filtered_df = filtered_df
-                    st.session_state.ai_search_city = city
-                    st.session_state.ai_current_page = 1
-                    
-                    # 顯示結果數量
-                    result_text = f"🔍 找到 **{len(filtered_df)}** 筆符合條件的物件"
-                    st.markdown(result_text)
+                        result_text = "❌ 不支援的城市"
+                        st.error(result_text)
+                    else:
+                        # 載入資料
+                        df = pd.read_csv(f"./Data/{csv_file}")
+                        
+                        # 過濾資料（內嵌函式）
+                        filtered_df = df.copy()
+                        try:
+                            if filters.get('housetype') and filters['housetype'] != "不限":
+                                if '類型' in filtered_df.columns:
+                                    filtered_df = filtered_df[
+                                        filtered_df['類型'].astype(str).str.contains(filters['housetype'], case=False, na=False)
+                                    ]
+                            if filters.get('budget_min', 0) > 0 and '總價(萬)' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['總價(萬)'] >= filters['budget_min']]
+                            if filters.get('budget_max', 1000000) < 1000000 and '總價(萬)' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['總價(萬)'] <= filters['budget_max']]
+                            if filters.get('age_min', 0) > 0 and '屋齡' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['屋齡'] >= filters['age_min']]
+                            if filters.get('age_max', 100) < 100 and '屋齡' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['屋齡'] <= filters['age_max']]
+                            if filters.get('area_min', 0) > 0 and '建坪' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['建坪'] >= filters['area_min']]
+                            if filters.get('area_max', 1000) < 1000 and '建坪' in filtered_df.columns:
+                                filtered_df = filtered_df[filtered_df['建坪'] <= filters['area_max']]
+                            if 'car_grip' in filters and '車位' in filtered_df.columns:
+                                if filters['car_grip'] == "需要":
+                                    filtered_df = filtered_df[
+                                        (filtered_df['車位'].notna()) & 
+                                        (filtered_df['車位'] != "無車位") & 
+                                        (filtered_df['車位'] != 0)
+                                    ]
+                                elif filters['car_grip'] == "不要":
+                                    filtered_df = filtered_df[
+                                        (filtered_df['車位'].isna()) | 
+                                        (filtered_df['車位'] == "無車位") | 
+                                        (filtered_df['車位'] == 0)
+                                    ]
+                            if "rooms" in filters:
+                                rooms = filters["rooms"]
+                                if isinstance(rooms, dict):
+                                    filtered_df = filtered_df[(filtered_df['房間數'] >= rooms.get("min", 0)) &
+                                                              (filtered_df['房間數'] <= rooms.get("max", 100))]
+                                else:
+                                    filtered_df = filtered_df[filtered_df['房間數'] >= rooms]
+                            if "living_rooms" in filters:
+                                filtered_df = filtered_df[filtered_df['廳數'] >= filters["living_rooms"]]
+                            if "bathrooms" in filters:
+                                filtered_df = filtered_df[filtered_df['衛數'] >= filters["bathrooms"]]
+                        except Exception as e:
+                            st.error(f"篩選過程中發生錯誤: {e}")
+                        
+                        # 每次新搜尋時更新計數器
+                        st.session_state.ai_search_count += 1
+                        
+                        # 儲存到 session_state
+                        st.session_state.ai_filtered_df = filtered_df
+                        st.session_state.ai_search_city = city
+                        st.session_state.ai_current_page = 1
+                        
+                        # 顯示結果數量
+                        result_text = f"🔍 找到 **{len(filtered_df)}** 筆符合條件的物件"
+                        st.markdown(result_text)
                     
                 except json.JSONDecodeError:
                     result_text = "❌ AI 回應格式錯誤，請重新嘗試"
@@ -171,10 +171,11 @@ def render_ai_chat_search():
                     result_text = f"❌ 發生錯誤: {e}"
                     st.error(result_text)
         
+        # 儲存 assistant 回應到聊天記錄
         st.session_state.chat_history.append({"role": "assistant", "content": result_text})
-        st.rerun()
+        st.rerun()  # 重新載入以顯示結果
     
-    # ====== 顯示搜尋結果 ======
+    # ====== 顯示搜尋結果 (移到這裡，確保每次都顯示) ======
     if 'ai_filtered_df' in st.session_state and not st.session_state.ai_filtered_df.empty:
         st.markdown("---")
         df = st.session_state.ai_filtered_df
