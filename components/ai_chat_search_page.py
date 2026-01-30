@@ -173,6 +173,27 @@ def render_ai_chat_search():
                 
                 # 過濾資料（內嵌函式）
                 filtered_df = df.copy()
+                # ====== 強制轉型：確保數字欄位真的是數字 ======
+                num_cols = {
+                    '總價(萬)': 'budget',
+                    '屋齡': 'age',
+                    '建坪': 'area',
+                    '房間數': 'rooms',
+                    '廳數': 'living_rooms',
+                    '衛數': 'bathrooms'
+                }
+                
+                for col in num_cols.keys():
+                    if col in filtered_df.columns:
+                        # 1. 轉成字串 2. 移除逗號 3. 轉成數字 (無法轉換的會變成 NaN)
+                        filtered_df[col] = pd.to_numeric(
+                            filtered_df[col].astype(str).str.replace(',', ''), 
+                            errors='coerce'
+                        )
+                
+                # 順手補一個：把 NaN 的地方填入 0，避免比大小時又噴錯
+                filtered_df = filtered_df.fillna({k: 0 for k in num_cols.keys()})
+                # ============================================
                 filter_steps = []  # 記錄每個篩選步驟
                 
                 try:
