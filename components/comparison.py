@@ -908,21 +908,21 @@ def _display_ai_analysis_section(self, results):
     # 其他方法保持不變...
 
     def _on_template_change(self, templates, default_prompt):
-    """處理模板變更的回調函數"""
-    selected_template = st.session_state.template_selector
-    
-    if selected_template != st.session_state.get("last_selected_template", ""):
-        # 更新選中的模板
-        st.session_state.selected_template = selected_template
+        """處理模板變更的回調函數"""
+        selected_template = st.session_state.template_selector
         
-        # 更新提示詞內容
-        if selected_template == "default":
-            st.session_state.custom_prompt = default_prompt
-        elif "content" in templates[selected_template]:
-            st.session_state.custom_prompt = templates[selected_template]["content"]
-        
-        # 記錄最後選擇的模板
-        st.session_state.last_selected_template = selected_template
+        if selected_template != st.session_state.get("last_selected_template", ""):
+            # 更新選中的模板
+            st.session_state.selected_template = selected_template
+            
+            # 更新提示詞內容
+            if selected_template == "default":
+                st.session_state.custom_prompt = default_prompt
+            elif "content" in templates[selected_template]:
+                st.session_state.custom_prompt = templates[selected_template]["content"]
+            
+            # 記錄最後選擇的模板
+            st.session_state.last_selected_template = selected_template
     
     # 其他方法保持不變...
     def _get_favorites_data(self):
