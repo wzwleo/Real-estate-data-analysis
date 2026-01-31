@@ -17,36 +17,6 @@ name_map = {
 # 建立反向對照表:中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
-def plot_radar(scores):
-    categories = list(scores.keys())
-    values = list(scores.values())
-
-    # 關閉環線前需要把首點補上（Plotly 要環狀）
-    categories.append(categories[0])
-    values.append(values[0])
-
-    fig = go.Figure()
-
-    fig.add_trace(go.Scatterpolar(
-        r=values,
-        theta=categories,
-        fill='toself',
-        name='AI 評分'
-    ))
-
-    fig.update_layout(
-        polar=dict(
-            radialaxis=dict(
-                visible=True,
-                range=[0, 10]   # 0～10 分
-            )
-        ),
-        showlegend=False,
-        title="AI 房屋評分雷達圖"
-    )
-
-    return fig
-
 def get_favorites_data():
     """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
@@ -146,9 +116,7 @@ def tab1_module():
                 <div> 車位：{selected_row.get('車位','未提供')}</div>
             </div>
             """, unsafe_allow_html=True)
-            st.write("\n")
-            # 刪除原有的分析按鈕
-            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
+            
         with col2:
             st.markdown(f"""
             <div style="
@@ -174,57 +142,11 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
 
-            st.write("\n")
-            chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
-
+        
         gemini_key = st.session_state.get("GEMINI_KEY","")
+        analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         if analyze_clicked:
             st.write("hi")
-        # -------------------- 保留：圖表分析邏輯 --------------------
-        if chart_clicked:
-            if not gemini_key:
-                st.error("❌ 右側 gemini API Key 有誤")
-            else:
-                try:
-                    genai.configure(api_key=gemini_key)
-                    model = genai.GenerativeModel("gemini-2.0-flash")
-
-                    address = selected_row.get('地址')
-                    city = address[:3]
-
-                    english_filename = reverse_name_map.get(city)
-                    file_path = os.path.join("./Data", english_filename)
-
-                    df = pd.read_csv(file_path)
-                    df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0]
-                    df = df[df['建坪'] > 0.1].copy()
-                    df['地坪單價(萬/坪)'] = df['總價(萬)'] / df['建坪']
-
-                    selected_type = f"{selected_row.get('類型')}"
-                    if selected_type:
-                        df = df[df['類型'].str.contains(selected_type, na=False)]
-
-                    avg_price = df.groupby('區域', as_index=False)['地坪單價(萬/坪)'].mean()
-                    avg_price['區域'] = avg_price['區域'] + '區'
-
-                    fig = px.bar(
-                        avg_price,
-                        x='區域',
-                        y='地坪單價(萬/坪)',
-                        color='區域',
-                        title=f'{city}平均建坪單價柱狀圖'
-                    )
-                    fig.update_traces(textposition='outside')
-                    fig.update_layout(
-                        xaxis_title='行政區',
-                        yaxis_title='平均建坪單價 (萬/坪)',
-                        title_x=0.5,
-                        showlegend=False,
-                        template='plotly_white'
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-                    
 
                 except Exception as e:
                     st.error(f"❌ 處理過程發生錯誤：{e}")
