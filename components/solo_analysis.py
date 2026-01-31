@@ -144,6 +144,8 @@ def tab1_module():
 
         
         gemini_key = st.session_state.get("GEMINI_KEY","")
+        
+        st.write("\n")
         analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         if analyze_clicked:
             st.write("hi")
