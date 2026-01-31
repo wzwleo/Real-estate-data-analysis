@@ -155,12 +155,25 @@ def tab1_module():
                 我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
                 每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。
                 """)
+                st.markdown("---")
+                
                 st.subheader("價格 💸")
+                st.markdown("---")
+                
                 st.subheader("坪數 📐")
+                st.markdown("---")
+                
                 st.subheader("屋齡 🕰")
+                st.markdown("---")
+                
                 st.subheader("樓層 🏢")
+                st.markdown("---")
+                
                 st.subheader("格局 🛋")
+                st.markdown("---")
+                
                 st.subheader("地段 🗺")
+                st.markdown("---")
                 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
