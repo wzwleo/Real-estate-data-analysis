@@ -148,7 +148,7 @@ def tab1_module():
             """, unsafe_allow_html=True)
             st.write("\n")
             # 刪除原有的分析按鈕
-            
+            analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:
             st.markdown(f"""
             <div style="
@@ -178,7 +178,8 @@ def tab1_module():
             chart_clicked = st.button("可視化圖表分析", use_container_width=True, key="chart_analysis_button")
 
         gemini_key = st.session_state.get("GEMINI_KEY","")
-
+        if analyze_clicked:
+            st.write("hi")
         # -------------------- 保留：圖表分析邏輯 --------------------
         if chart_clicked:
             if not gemini_key:
