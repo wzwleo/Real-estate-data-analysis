@@ -10,11 +10,11 @@ import json
 import plotly.graph_objects as go
 import re
 
-# 在檔案開頭,name_map 下方加入反向對照表
+# 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
     "Taichung-city_buy_properties.csv": "台中市",
 }
-# 建立反向對照表:中文 -> 英文檔名
+# 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
 def get_favorites_data():
@@ -89,8 +89,8 @@ def tab1_module():
         # 計算單價
         try:
             total_price = int(raw_price) * 10000
-            area_Price_per = f"{int(total_price)/area:,.0f}"
-            Actual_space_Price_per = f"{int(total_price)/float(Actual_space):,.0f}" if Actual_space != '未提供' else "未提供"
+            area_Price_per = f"{int(total_price/area):,}"
+            Actual_space_Price_per = f"{int(total_price/float(Actual_space)):,}" if Actual_space != '未提供' and float(Actual_space) != 0 else "未提供"
         except:
             area_Price_per = "未提供"
             Actual_space_Price_per = "未提供"
@@ -142,19 +142,22 @@ def tab1_module():
             </div>
             """, unsafe_allow_html=True)
 
-        
         gemini_key = st.session_state.get("GEMINI_KEY","")
         
         st.write("\n")
         analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
+        
         if analyze_clicked:
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
             try:
                 st.success("✅ 分析完成")
-                st.markdown("### 🏡 房屋逐項分析說明1**")
-                st.write("我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
-                每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。")
+                st.markdown("### 🏡 房屋逐項分析說明 1")
+                # 使用三引號處理跨行文字
+                st.write("""
+                我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
+                每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。
+                """)
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
