@@ -388,39 +388,40 @@ class ComparisonAnalyzer:
         """取得 Gemini API Key"""
         return st.session_state.get("GEMINI_KEY", "")
     
-    def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
-        """搜尋Google Places（使用中文關鍵字）"""
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        params = {
-            "query": keyword,
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "key": api_key,
-            "language": "zh-TW"
-        }
-
-        try:
-            r = requests.get(url, params=params, timeout=10).json()
-        except Exception as e:
-            st.warning(f"❌ 關鍵字 {keyword} 查詢失敗: {e}")
-            return []
-
-        results = []
-        for p in r.get("results", []):
-            loc = p["geometry"]["location"]
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-            
-            # 關鍵字本身就是中文，直接使用
-            results.append((
-                "關鍵字",
-                keyword,  # 直接使用中文關鍵字
-                p.get("name", "未命名"),
-                loc["lat"],
-                loc["lng"],
-                dist,
-                p.get("place_id", "")
-            ))
-        return results
+        def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
+            """搜尋Google Places（使用英文關鍵字）"""
+            url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+            params = {
+                "query": keyword,
+                "location": f"{lat},{lng}",
+                "radius": radius,
+                "key": api_key,
+                "language": "zh-TW"  # 保持回傳結果為中文
+            }
+        
+            try:
+                r = requests.get(url, params=params, timeout=10).json()
+            except Exception as e:
+                st.warning(f"❌ 關鍵字 {keyword} 查詢失敗: {e}")
+                return []
+        
+            results = []
+            for p in r.get("results", []):
+                loc = p["geometry"]["location"]
+                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                
+                # 將英文關鍵字轉回中文顯示
+                chinese_keyword = ENGLISH_TO_CHINESE.get(keyword, keyword)
+                results.append((
+                    "關鍵字",
+                    chinese_keyword,  # 儲存中文關鍵字
+                    p.get("name", "未命名"),
+                    loc["lat"],
+                    loc["lng"],
+                    dist,
+                    p.get("place_id", "")
+                ))
+            return results
     
     def _query_google_places_keyword(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
         """查詢Google Places關鍵字"""
