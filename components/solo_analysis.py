@@ -1,13 +1,9 @@
 import streamlit as st
 import pandas as pd
 import google.generativeai as genai
-import hnswlib
-from sentence_transformers import SentenceTransformer
 import os
-import numpy as np
 import plotly.express as px
 import json
-import plotly.graph_objects as go
 import re
 
 # 在檔案開頭, name_map 下方加入反向對照表
