@@ -1405,7 +1405,7 @@ class ComparisonAnalyzer:
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
-        # 準備AI分析資料
+      # 準備AI分析資料
         with st.spinner("🧠 準備分析資料..."):
             analysis_text = self._prepare_analysis_prompt(
                 houses_data, 
@@ -1421,25 +1421,36 @@ class ComparisonAnalyzer:
         # 建立唯一 key
         analysis_key = f"{analysis_mode}__{','.join(selected_houses)}__{keyword}__{','.join(selected_categories)}__{radius}"
         
-        # 顯示提示詞模板選擇
+        # 顯示提示詞模板選擇 - 修正版本
         st.markdown("### 📋 提示詞模板選擇")
         
         templates = self._get_prompt_templates(analysis_mode)
         
         # 建立模板選項
         template_options = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
+        
+        # 使用 session state 來儲存選擇的模板
+        if "selected_template" not in st.session_state:
+            st.session_state.selected_template = "default"
+        
+        # 使用 on_change 回調函數來處理模板選擇
+        def on_template_change():
+            # 當模板改變時，更新自定義提示詞
+            selected_template = st.session_state.template_selector
+            if selected_template != "default" and "content" in templates[selected_template]:
+                st.session_state.custom_prompt = templates[selected_template]["content"]
+                st.session_state.selected_template = selected_template
+                # 不清除結果，只更新提示詞
+                st.info(f"✅ 已套用「{templates[selected_template]['name']}」模板")
+        
+        # 修正選擇框 - 使用 on_change 參數
         selected_template = st.selectbox(
             "選擇提示詞模板",
             options=list(template_options.keys()),
             format_func=lambda x: template_options[x],
-            key="template_selector"
+            key="template_selector",
+            on_change=on_template_change
         )
-        
-        # 如果選擇了非預設模板，更新提示詞
-        if selected_template != "default" and "content" in templates[selected_template]:
-            if st.button(f"💾 套用「{templates[selected_template]['name']}」模板", type="secondary"):
-                st.session_state.custom_prompt = templates[selected_template]["content"]
-                st.rerun()
         
         # 顯示提示詞編輯區域
         st.markdown("### 📝 AI 分析提示詞設定")
@@ -1490,7 +1501,9 @@ class ComparisonAnalyzer:
         col_analyze, col_reset, col_save = st.columns([2, 1, 1])
         
         with col_analyze:
-            if st.button("🚀 開始AI分析", type="primary", use_container_width=True):
+            analyze_clicked = st.button("🚀 開始AI分析", type="primary", use_container_width=True)
+            
+            if analyze_clicked:
                 # 儲存自定義提示詞
                 st.session_state.custom_prompt = edited_prompt
                 
@@ -1528,6 +1541,7 @@ class ComparisonAnalyzer:
                         st.session_state.used_prompt = final_prompt  # 儲存使用的提示詞
                         
                         st.success("✅ AI 分析完成！")
+                        # 使用 st.rerun() 來更新顯示
                         st.rerun()
                         
                     except Exception as e:
@@ -1539,6 +1553,9 @@ class ComparisonAnalyzer:
             if st.button("🔄 恢復預設提示詞", type="secondary", use_container_width=True):
                 # 恢復預設提示詞
                 st.session_state.custom_prompt = default_prompt
+                st.session_state.selected_template = "default"
+                st.success("✅ 已恢復預設提示詞")
+                # 使用 st.rerun() 來更新顯示
                 st.rerun()
         
         with col_save:
@@ -1546,6 +1563,7 @@ class ComparisonAnalyzer:
                 # 儲存當前提示詞
                 st.session_state.custom_prompt = edited_prompt
                 st.success("✅ 提示詞已儲存！")
+                # 不需要 rerun，只是更新 session state
         
         # 提示詞變更提醒
         if prompt_changed:
@@ -1619,9 +1637,3 @@ class ComparisonAnalyzer:
                 mime="text/plain",
                 use_container_width=True
             )
-
-
-# 如果需要，可以保留單獨的函數供外部調用
-def get_comparison_analyzer():
-    """取得比較分析器實例"""
-    return ComparisonAnalyzer()
