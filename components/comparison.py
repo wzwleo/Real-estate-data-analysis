@@ -388,40 +388,111 @@ class ComparisonAnalyzer:
         """取得 Gemini API Key"""
         return st.session_state.get("GEMINI_KEY", "")
     
-        def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
-            """搜尋Google Places（使用英文關鍵字）"""
-            url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-            params = {
-                "query": keyword,
-                "location": f"{lat},{lng}",
-                "radius": radius,
-                "key": api_key,
-                "language": "zh-TW"  # 保持回傳結果為中文
-            }
+    def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
+        """搜尋Google Places（使用英文關鍵字）"""
+        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        params = {
+            "query": keyword,
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "key": api_key,
+            "language": "zh-TW"  # 保持回傳結果為中文
+        }
+
+        try:
+            r = requests.get(url, params=params, timeout=10).json()
+        except Exception as e:
+            st.warning(f"❌ 關鍵字 {keyword} 查詢失敗: {e}")
+            return []
+
+        results = []
+        for p in r.get("results", []):
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+            
+            # 將英文關鍵字轉回中文顯示
+            chinese_keyword = ENGLISH_TO_CHINESE.get(keyword, keyword)
+            results.append((
+                "關鍵字",
+                chinese_keyword,  # 儲存中文關鍵字
+                p.get("name", "未命名"),
+                loc["lat"],
+                loc["lng"],
+                dist,
+                p.get("place_id", "")
+            ))
+        return results
+    
+    def _query_google_places_keyword(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+        """查詢Google Places關鍵字"""
+        results, seen = [], set()
         
-            try:
-                r = requests.get(url, params=params, timeout=10).json()
-            except Exception as e:
-                st.warning(f"❌ 關鍵字 {keyword} 查詢失敗: {e}")
-                return []
-        
-            results = []
-            for p in r.get("results", []):
-                loc = p["geometry"]["location"]
-                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+        total_tasks = 0
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                total_tasks += len(selected_subtypes[cat])
+        total_tasks += (1 if extra_keyword else 0)
+
+        if total_tasks == 0:
+            st.warning("⚠️ 請至少選擇一個搜尋項目")
+            return []
+
+        progress = st.progress(0)
+        progress_text = st.empty()
+        completed = 0
+
+        def update_progress(task_desc):
+            nonlocal completed
+            completed += 1
+            progress.progress(min(completed / total_tasks, 1.0))
+            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
+
+        for cat in selected_categories:
+            if cat not in selected_subtypes:
+                continue
                 
-                # 將英文關鍵字轉回中文顯示
-                chinese_keyword = ENGLISH_TO_CHINESE.get(keyword, keyword)
-                results.append((
-                    "關鍵字",
-                    chinese_keyword,  # 儲存中文關鍵字
-                    p.get("name", "未命名"),
-                    loc["lat"],
-                    loc["lng"],
-                    dist,
-                    p.get("place_id", "")
-                ))
-            return results
+            for english_kw in selected_subtypes[cat]:  # 現在是英文關鍵字
+                update_progress(f"查詢 {cat}-{english_kw}")
+                
+                try:
+                    places = self._search_text_google_places(lat, lng, api_key, english_kw, radius)
+                    
+                    for p in places:
+                        if p[5] > radius:
+                            continue
+                        pid = p[6]
+                        if pid in seen:
+                            continue
+                        seen.add(pid)
+                        results.append((cat, english_kw, p[2], p[3], p[4], p[5], p[6]))
+
+                    time.sleep(0.5)
+                    
+                except Exception as e:
+                    st.warning(f"查詢 {english_kw} 時發生錯誤: {str(e)[:50]}")
+                    continue
+
+        if extra_keyword:
+            update_progress(f"額外關鍵字: {extra_keyword}")
+            try:
+                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
+                for p in places:
+                    if p[5] > radius:
+                        continue
+                    pid = p[6]
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
+                    
+                time.sleep(0.3)
+            except Exception as e:
+                st.warning(f"查詢額外關鍵字時發生錯誤: {str(e)[:50]}")
+
+        progress.progress(1.0)
+        progress_text.text("✅ 查詢完成！")
+        results.sort(key=lambda x: x[5])
+        return results
     
     def _query_google_places_keyword(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
         """查詢Google Places關鍵字"""
