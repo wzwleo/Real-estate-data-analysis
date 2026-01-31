@@ -224,36 +224,7 @@ def tab1_module():
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
-                    # 圖表下方的 AI 分析
-                    avg_text = "\n".join([f"{row['區域']} 平均地坪單價: {row['地坪單價(萬/坪)']} 萬/坪" 
-                                          for _, row in avg_price.iterrows()])
                     
-                    target_house_info = f"""
-                    地址：{selected_row.get('地址','未提供')}
-                    建坪：{area_text}
-                    建坪單價：{area_Price_per} 元/坪
-                    類型：{selected_row.get('類型','未提供')}
-                    格局：{selected_row.get('格局','未提供')}
-                    屋齡：{selected_row.get('屋齡','未提供')}
-                    """
-
-                    prompt = f"""
-                    你是一位台灣不動產市場專家，請針對下列目標房屋的建坪單價和區域平均建坪單價資訊，提供簡短的價格評估：
-                    目標房屋：
-                    {target_house_info}
-                    
-                    區域平均建坪單價：
-                    {avg_text}
-                    
-                    請指出目標房價是否高於或低於平均水平，並給予專業分析。
-                    """
-
-                    with st.spinner("Gemini 正在分析圖表數據..."):
-                        response = model.generate_content(prompt)
-                    
-                    st.success("✅ 圖表分析完成")
-                    st.markdown("### 📊 **Gemini 建坪圖表分析結果**")
-                    st.markdown(response.text)
 
                 except Exception as e:
                     st.error(f"❌ 處理過程發生錯誤：{e}")
