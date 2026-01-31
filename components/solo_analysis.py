@@ -153,7 +153,7 @@ def tab1_module():
                 st.stop()
             try:
                 st.success("✅ 分析完成")
-                st.markdown("### 🏡 房屋逐項分析說明**")
+                st.markdown("### 🏡 房屋逐項分析說明1**")
                 st.write("我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
                 每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。")
             except Exception as e:
