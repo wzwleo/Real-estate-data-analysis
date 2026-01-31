@@ -5,7 +5,7 @@ PLACE_TYPES = {
         "圖書館", "library",
         "幼兒園", "preschool",
         "小學", "primary_school",
-        "中學", "secondary_school",,
+        "中學", "secondary_school",
         "大學", "university",
         "學校", "school"
         # 刪除：補習班、托兒所 (Google Places 無對應類型)
