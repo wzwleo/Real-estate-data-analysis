@@ -336,7 +336,7 @@ class ComparisonAnalyzer:
                     st.warning("⚠️ 請選擇要分析的房屋")
                     return
 
-                # 儲存所有分析設定到 session state
+                # 儲存所有分析設定
                 st.session_state.analysis_settings = {
                     "analysis_mode": analysis_mode,
                     "selected_houses": selected_houses,
@@ -346,28 +346,34 @@ class ComparisonAnalyzer:
                     "selected_subtypes": selected_subtypes,
                     "server_key": server_key,
                     "gemini_key": gemini_key,
-                    "fav_df_json": fav_df.to_json(orient='split')  # 儲存 DataFrame
+                    "fav_df_json": fav_df.to_json(orient='split')
                 }
                 
-                # 設置分析完成標記
-                st.session_state.analysis_completed = False
+                # 清除舊的結果
+                if "analysis_results" in st.session_state:
+                    del st.session_state.analysis_results
+                if "gemini_result" in st.session_state:
+                    del st.session_state.gemini_result
                 
-                # 重新運行以觸發分析
+                # 設置分析標記
+                st.session_state.analysis_in_progress = True
+                
+                # 重新運行
                 st.rerun()
         
         with col_clear:
             if st.button("🗑️ 清除結果", type="secondary", use_container_width=True, key="clear_results"):
-                # 清除相關的 session state
-                keys_to_clear = ['gemini_result', 'gemini_key', 'places_data', 'houses_data', 
-                               'custom_prompt', 'used_prompt', 'analysis_settings', 
-                               'analysis_completed', 'analysis_results']
+                # 清除所有相關的 session state
+                keys_to_clear = ['analysis_settings', 'analysis_results', 'analysis_in_progress',
+                               'gemini_result', 'gemini_key', 'places_data', 'houses_data', 
+                               'custom_prompt', 'used_prompt', 'selected_template', 'last_template']
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
         
-        # 檢查是否有已儲存的分析設定需要執行
-        if "analysis_settings" in st.session_state and not st.session_state.get("analysis_completed", False):
+        # 檢查是否需要執行分析
+        if "analysis_settings" in st.session_state and st.session_state.get("analysis_in_progress", False):
             # 從 session state 恢復設定
             settings = st.session_state.analysis_settings
             
@@ -376,111 +382,97 @@ class ComparisonAnalyzer:
             
             # 執行分析
             with st.spinner("🔍 執行分析中..."):
-                self._execute_analysis(
-                    settings["analysis_mode"],
-                    settings["selected_houses"],
-                    fav_df,
-                    settings["server_key"],
-                    settings["gemini_key"],
-                    settings["radius"],
-                    settings["keyword"],
-                    settings["selected_categories"],
-                    settings["selected_subtypes"]
-                )
-            
-            # 標記分析完成
-            st.session_state.analysis_completed = True
-            st.rerun()
-        
-        # 顯示分析結果（如果有）
-        if "analysis_results" in st.session_state:
-            results = st.session_state.analysis_results
-            self._display_analysis_results(
-                results["analysis_mode"],
-                results["houses_data"],
-                results["places_data"],
-                results["facility_counts"],
-                results["category_counts"],
-                results["selected_categories"],
-                results["radius"],
-                results["keyword"],
-                results["num_houses"]
-            )
-    
-    def _execute_analysis(self, analysis_mode, selected_houses, fav_df, 
-                         server_key, gemini_key, radius, keyword, 
-                         selected_categories, selected_subtypes):
-        """執行分析並儲存結果到 session state"""
-        try:
-            # 取得房屋資料
-            houses_data = {}
-            
-            # 地址解析
-            for idx, house_option in enumerate(selected_houses):
-                house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
-                house_name = f"房屋 {chr(65+idx)}" if len(selected_houses) > 1 else "分析房屋"
-                
-                lat, lng = geocode_address(house_info["地址"], server_key)
-                if lat is None or lng is None:
-                    st.error(f"❌ {house_name} 地址解析失敗")
+                try:
+                    # 取得房屋資料
+                    houses_data = {}
+                    
+                    # 地址解析
+                    for idx, house_option in enumerate(settings["selected_houses"]):
+                        house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
+                        house_name = f"房屋 {chr(65+idx)}" if len(settings["selected_houses"]) > 1 else "分析房屋"
+                        
+                        lat, lng = geocode_address(house_info["地址"], settings["server_key"])
+                        if lat is None or lng is None:
+                            st.error(f"❌ {house_name} 地址解析失敗")
+                            return
+                        
+                        houses_data[house_name] = {
+                            "name": house_name,
+                            "title": house_info['標題'],
+                            "address": house_info['地址'],
+                            "lat": lat,
+                            "lng": lng,
+                            "original_name": house_info['標題']
+                        }
+                    
+                    # 查詢每個房屋的周邊設施
+                    places_data = {}
+                    
+                    for house_name, house_info in houses_data.items():
+                        lat, lng = house_info["lat"], house_info["lng"]
+                        
+                        places = self._query_google_places_keyword(
+                            lat, lng, settings["server_key"], 
+                            settings["selected_categories"], settings["selected_subtypes"],
+                            settings["radius"], extra_keyword=settings["keyword"]
+                        )
+                        
+                        places_data[house_name] = places
+                    
+                    # 計算各房屋的設施數量
+                    facility_counts = {}
+                    category_counts = {}
+                    
+                    for house_name, places in places_data.items():
+                        total_count = len(places)
+                        facility_counts[house_name] = total_count
+                        
+                        # 計算各類別數量
+                        cat_counts = {}
+                        for cat, kw, name, lat, lng, dist, pid in places:
+                            cat_counts[cat] = cat_counts.get(cat, 0) + 1
+                        category_counts[house_name] = cat_counts
+                    
+                    # 儲存結果到 session state
+                    st.session_state.analysis_results = {
+                        "analysis_mode": settings["analysis_mode"],
+                        "houses_data": houses_data,
+                        "places_data": places_data,
+                        "facility_counts": facility_counts,
+                        "category_counts": category_counts,
+                        "selected_categories": settings["selected_categories"],
+                        "radius": settings["radius"],
+                        "keyword": settings["keyword"],
+                        "num_houses": len(houses_data)
+                    }
+                    
+                    # 標記分析完成
+                    st.session_state.analysis_in_progress = False
+                    
+                    # 重新運行以顯示結果
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"❌ 分析執行失敗: {str(e)}")
+                    st.session_state.analysis_in_progress = False
                     return
-                
-                houses_data[house_name] = {
-                    "name": house_name,
-                    "title": house_info['標題'],
-                    "address": house_info['地址'],
-                    "lat": lat,
-                    "lng": lng,
-                    "original_name": house_info['標題']
-                }
-            
-            # 查詢每個房屋的周邊設施
-            places_data = {}
-            
-            for house_name, house_info in houses_data.items():
-                lat, lng = house_info["lat"], house_info["lng"]
-                
-                places = self._query_google_places_keyword(
-                    lat, lng, server_key, selected_categories, selected_subtypes,
-                    radius, extra_keyword=keyword
-                )
-                
-                places_data[house_name] = places
-            
-            # 計算各房屋的設施數量
-            facility_counts = {}
-            category_counts = {}
-            
-            for house_name, places in places_data.items():
-                total_count = len(places)
-                facility_counts[house_name] = total_count
-                
-                # 計算各類別數量
-                cat_counts = {}
-                for cat, kw, name, lat, lng, dist, pid in places:
-                    cat_counts[cat] = cat_counts.get(cat, 0) + 1
-                category_counts[house_name] = cat_counts
-            
-            # 儲存結果到 session state
-            st.session_state.analysis_results = {
-                "analysis_mode": analysis_mode,
-                "houses_data": houses_data,
-                "places_data": places_data,
-                "facility_counts": facility_counts,
-                "category_counts": category_counts,
-                "selected_categories": selected_categories,
-                "radius": radius,
-                "keyword": keyword,
-                "num_houses": len(houses_data)
-            }
-            
-        except Exception as e:
-            st.error(f"❌ 分析執行失敗: {str(e)}")
+        
+        # 顯示分析結果
+        if "analysis_results" in st.session_state:
+            self._display_analysis_results(st.session_state.analysis_results)
     
-    def _display_analysis_results(self, analysis_mode, houses_data, places_data, 
-                                 facility_counts, category_counts, selected_categories,
-                                 radius, keyword, num_houses):
+    def _display_analysis_results(self, results):
         """顯示分析結果"""
+        analysis_mode = results["analysis_mode"]
+        houses_data = results["houses_data"]
+        places_data = results["places_data"]
+        facility_counts = results["facility_counts"]
+        category_counts = results["category_counts"]
+        selected_categories = results["selected_categories"]
+        radius = results["radius"]
+        keyword = results["keyword"]
+        num_houses = results["num_houses"]
+        
         # 顯示分析標題
         if analysis_mode == "單一房屋分析":
             st.markdown(f"## 📊 單一房屋分析結果")
@@ -657,38 +649,32 @@ class ComparisonAnalyzer:
                     )
         
         # AI 分析部分
-        self._display_ai_analysis_section(
-            analysis_mode, houses_data, places_data, 
-            facility_counts, category_counts, selected_categories,
-            radius, keyword, num_houses
-        )
+        self._display_ai_analysis_section(results)
     
-    def _display_ai_analysis_section(self, analysis_mode, houses_data, places_data,
-                                    facility_counts, category_counts, selected_categories,
-                                    radius, keyword, num_houses):
+    def _display_ai_analysis_section(self, results):
         """顯示AI分析部分"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
         # 準備AI分析資料
         analysis_text = self._prepare_analysis_prompt(
-            houses_data, 
-            places_data, 
-            facility_counts, 
-            category_counts,
-            selected_categories,
-            radius,
-            keyword,
-            analysis_mode
+            results["houses_data"], 
+            results["places_data"], 
+            results["facility_counts"], 
+            results["category_counts"],
+            results["selected_categories"],
+            results["radius"],
+            results["keyword"],
+            results["analysis_mode"]
         )
         
         # 建立唯一 key
-        analysis_key = f"{analysis_mode}__{','.join(list(houses_data.keys()))}__{keyword}__{','.join(selected_categories)}__{radius}"
+        analysis_key = f"{results['analysis_mode']}__{','.join(list(results['houses_data'].keys()))}__{results['keyword']}__{','.join(results['selected_categories'])}__{results['radius']}"
         
         # 顯示提示詞模板選擇
         st.markdown("### 📋 提示詞模板選擇")
         
-        templates = self._get_prompt_templates(analysis_mode)
+        templates = self._get_prompt_templates(results["analysis_mode"])
         
         # 建立模板選項
         template_options = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
@@ -700,21 +686,15 @@ class ComparisonAnalyzer:
         if "custom_prompt" not in st.session_state:
             st.session_state.custom_prompt = analysis_text
         
-        # 使用 session state 來追蹤模板選擇
-        if "last_template" not in st.session_state:
-            st.session_state.last_template = "default"
-        
-        # 模板選擇處理 - 使用 callback 模式
-        def update_template():
+        # 使用 callback 處理模板選擇
+        def on_template_change():
             selected_template = st.session_state.template_selector
-            if selected_template != st.session_state.last_template:
+            if selected_template != st.session_state.get("last_template", ""):
                 if selected_template != "default" and "content" in templates[selected_template]:
                     st.session_state.custom_prompt = templates[selected_template]["content"]
-                elif selected_template == "default":
-                    st.session_state.custom_prompt = analysis_text
-                
-                st.session_state.selected_template = selected_template
-                st.session_state.last_template = selected_template
+                    st.session_state.selected_template = selected_template
+                    st.session_state.last_template = selected_template
+                    # 使用 callback 更新，不需要 rerun
         
         # 模板選擇框
         selected_template = st.selectbox(
@@ -722,14 +702,14 @@ class ComparisonAnalyzer:
             options=list(template_options.keys()),
             format_func=lambda x: template_options[x],
             key="template_selector",
-            on_change=update_template,
+            on_change=on_template_change,
             index=list(template_options.keys()).index(st.session_state.selected_template) 
             if st.session_state.selected_template in template_options else 0
         )
         
-        # 立即更新模板（如果選擇改變）
-        if selected_template != st.session_state.last_template:
-            update_template()
+        # 如果選擇改變了，立即更新
+        if selected_template != st.session_state.get("last_template", ""):
+            on_template_change()
         
         # 顯示提示詞編輯區域
         st.markdown("### 📝 AI 分析提示詞設定")
@@ -752,11 +732,10 @@ class ComparisonAnalyzer:
             # 檢查提示詞是否有變更
             prompt_changed = edited_prompt != custom_prompt
             
-            # 保存按鈕
+            # 保存按鈕 - 使用 callback
             if st.button("💾 儲存提示詞修改", type="secondary", use_container_width=True, key="save_prompt_btn"):
                 st.session_state.custom_prompt = edited_prompt
-                st.success("✅ 提示詞已儲存！")
-                st.rerun()
+                # 不需要 rerun，只需更新 session state
         
         with col_info:
             st.markdown("#### 💡 提示詞使用說明")
@@ -779,13 +758,16 @@ class ComparisonAnalyzer:
             - 設定具體的評分標準
             """)
             
-            # 恢復預設按鈕
+            # 恢復預設按鈕 - 使用 callback
             if st.button("🔄 恢復預設提示詞", type="secondary", use_container_width=True, key="reset_prompt_btn"):
                 st.session_state.custom_prompt = analysis_text
                 st.session_state.selected_template = "default"
                 st.session_state.last_template = "default"
-                st.success("✅ 已恢復預設提示詞")
-                st.rerun()
+                # 不需要 rerun
+        
+        # 提示詞變更提醒
+        if prompt_changed:
+            st.info("📝 提示詞已修改，請點擊「儲存提示詞修改」後再開始AI分析")
         
         # 開始AI分析按鈕
         if st.button("🚀 開始AI分析", type="primary", use_container_width=True, key="start_ai_analysis"):
@@ -813,10 +795,6 @@ class ComparisonAnalyzer:
                     # 使用當前提示詞
                     final_prompt = edited_prompt
                     
-                    # 顯示使用的提示詞預覽
-                    with st.expander("📋 查看本次使用的提示詞", expanded=False):
-                        st.text_area("送給 Gemini 的提示詞", final_prompt, height=200, key="final_prompt_display", disabled=True)
-                    
                     # 呼叫 Gemini
                     resp = model.generate_content(final_prompt)
                     
@@ -825,17 +803,13 @@ class ComparisonAnalyzer:
                     st.session_state.gemini_key = analysis_key
                     st.session_state.used_prompt = final_prompt
                     
-                    st.success("✅ AI 分析完成！")
+                    # 重新運行以顯示結果
                     st.rerun()
                     
                 except Exception as e:
                     st.error(f"❌ Gemini API 錯誤: {str(e)}")
                     st.info("請檢查：1. API 金鑰是否正確 2. 配額是否用盡 3. 網路連線是否正常")
                     return
-        
-        # 提示詞變更提醒
-        if prompt_changed:
-            st.info("📝 提示詞已修改，請點擊「儲存提示詞修改」後再開始AI分析")
         
         # 顯示分析結果
         if "gemini_result" in st.session_state:
@@ -857,27 +831,27 @@ class ComparisonAnalyzer:
             # 重新分析按鈕
             if st.button("🔄 重新分析", type="secondary", use_container_width=True, key="reanalyze_btn"):
                 # 清除之前的結果
-                keys_to_clear = ['gemini_result', 'gemini_key']
+                keys_to_clear = ['gemini_result', 'gemini_key', 'used_prompt']
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
                 st.rerun()
             
             # 提供下載選項
-            if analysis_mode == "單一房屋分析":
+            if results["analysis_mode"] == "單一房屋分析":
                 report_title = "房屋分析報告"
             else:
-                report_title = f"{num_houses}間房屋比較報告"
+                report_title = f"{results['num_houses']}間房屋比較報告"
             
             report_text = f"""
             {report_title}
             生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}
-            分析模式：{analysis_mode}
+            分析模式：{results['analysis_mode']}
             
-            分析房屋 ({num_houses}間):
+            分析房屋 ({results['num_houses']}間):
             """
             
-            for house_name, house_info in houses_data.items():
+            for house_name, house_info in results["houses_data"].items():
                 report_text += f"""
             - {house_name}: {house_info['title']}
               地址：{house_info['address']}
@@ -886,9 +860,9 @@ class ComparisonAnalyzer:
             report_text += f"""
             
             搜尋條件：
-            - 半徑：{radius} 公尺
-            - 選擇類別：{', '.join(selected_categories)}
-            - 額外關鍵字：{keyword if keyword else '無'}
+            - 半徑：{results['radius']} 公尺
+            - 選擇類別：{', '.join(results['selected_categories'])}
+            - 額外關鍵字：{results['keyword'] if results['keyword'] else '無'}
             
             提示詞設定：
             {st.session_state.get('used_prompt', '預設提示詞')[:500]}...
@@ -905,6 +879,8 @@ class ComparisonAnalyzer:
                 use_container_width=True,
                 key="download_report_btn"
             )
+    
+    # 其他方法保持不變...
     
     # 其他方法保持不變...
     def _get_favorites_data(self):
