@@ -147,6 +147,3 @@ def tab1_module():
         analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         if analyze_clicked:
             st.write("hi")
-
-                except Exception as e:
-                    st.error(f"❌ 處理過程發生錯誤：{e}")
