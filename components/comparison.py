@@ -651,91 +651,116 @@ class ComparisonAnalyzer:
         # AI 分析部分
         self._display_ai_analysis_section(results)
     
-    def _display_ai_analysis_section(self, results):
-        """顯示AI分析部分"""
-        st.markdown("---")
-        st.subheader("🤖 AI 智能分析")
+def _display_ai_analysis_section(self, results):
+    """顯示AI分析部分"""
+    st.markdown("---")
+    st.subheader("🤖 AI 智能分析")
+    
+    # 準備AI分析資料
+    analysis_text = self._prepare_analysis_prompt(
+        results["houses_data"], 
+        results["places_data"], 
+        results["facility_counts"], 
+        results["category_counts"],
+        results["selected_categories"],
+        results["radius"],
+        results["keyword"],
+        results["analysis_mode"]
+    )
+    
+    # 建立唯一 key
+    analysis_key = f"{results['analysis_mode']}__{','.join(list(results['houses_data'].keys()))}__{results['keyword']}__{','.join(results['selected_categories'])}__{results['radius']}"
+    
+    # 顯示提示詞模板選擇
+    st.markdown("### 📋 提示詞模板選擇")
+    
+    templates = self._get_prompt_templates(results["analysis_mode"])
+    
+    # 建立模板選項
+    template_options = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
+    
+    # 初始化 session state
+    if "selected_template" not in st.session_state:
+        st.session_state.selected_template = "default"
+    
+    if "custom_prompt" not in st.session_state:
+        st.session_state.custom_prompt = analysis_text
+    
+    # 模板選擇框 - 關鍵修改：使用 on_change 處理模板切換
+    selected_template = st.selectbox(
+        "選擇提示詞模板",
+        options=list(template_options.keys()),
+        format_func=lambda x: template_options[x],
+        key="template_selector",
+        on_change=self._on_template_change,
+        args=(templates, analysis_text),
+        index=list(template_options.keys()).index(st.session_state.selected_template) 
+        if st.session_state.selected_template in template_options else 0
+    )
+    
+    # 顯示提示詞編輯區域
+    st.markdown("### 📝 AI 分析提示詞設定")
+    
+    col_prompt, col_info = st.columns([3, 1])
+    
+    with col_prompt:
+        # 使用一個獨立的 key 來控制提示詞編輯框的重新渲染
+        prompt_key = f"prompt_editor_{analysis_key}_{selected_template}"
         
-        # 準備AI分析資料
-        analysis_text = self._prepare_analysis_prompt(
-            results["houses_data"], 
-            results["places_data"], 
-            results["facility_counts"], 
-            results["category_counts"],
-            results["selected_categories"],
-            results["radius"],
-            results["keyword"],
-            results["analysis_mode"]
+        # 如果模板改變了，更新提示詞內容
+        if selected_template != st.session_state.get("last_selected_template", ""):
+            if selected_template != "default" and "content" in templates[selected_template]:
+                st.session_state.custom_prompt = templates[selected_template]["content"]
+            st.session_state.last_selected_template = selected_template
+        
+        # 顯示可編輯的文字區域
+        edited_prompt = st.text_area(
+            "編輯AI分析提示詞",
+            value=st.session_state.custom_prompt,
+            height=400,
+            key=prompt_key,  # 使用動態 key 確保重新渲染
+            help="您可以修改提示詞來調整AI的分析方向和重點"
         )
         
-        # 建立唯一 key
-        analysis_key = f"{results['analysis_mode']}__{','.join(list(results['houses_data'].keys()))}__{results['keyword']}__{','.join(results['selected_categories'])}__{results['radius']}"
+        # 保存按鈕
+        if st.button("💾 儲存提示詞修改", type="secondary", use_container_width=True, key="save_prompt_btn"):
+            st.session_state.custom_prompt = edited_prompt
+            st.success("✅ 提示詞已儲存！")
         
-        # 顯示提示詞模板選擇
-        st.markdown("### 📋 提示詞模板選擇")
+        # 提示詞變更提醒
+        if edited_prompt != st.session_state.get("last_saved_prompt", ""):
+            st.info("📝 提示詞已修改，點擊「儲存提示詞修改」按鈕保存")
+    
+    with col_info:
+        st.markdown("#### 💡 提示詞使用說明")
+        st.markdown("""
+        **預設提示詞包含：**
+        - 房屋資訊
+        - 搜尋條件
+        - 設施統計
+        - 分析要求
         
-        templates = self._get_prompt_templates(results["analysis_mode"])
+        **您可以：**
+        1. 調整分析重點
+        2. 添加特定問題
+        3. 修改評分標準
+        4. 調整語言風格
         
-        # 建立模板選項
-        template_options = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
+        **建議：**
+        - 保持基本資訊完整
+        - 明確指定分析方向
+        - 設定具體的評分標準
+        """)
         
-        # 初始化 session state
-        if "selected_template" not in st.session_state:
-            st.session_state.selected_template = "default"
-        
-        if "custom_prompt" not in st.session_state:
+        # 恢復預設按鈕
+        if st.button("🔄 恢復預設提示詞", type="secondary", use_container_width=True, key="reset_prompt_btn"):
             st.session_state.custom_prompt = analysis_text
-        
-        # 使用 callback 處理模板選擇
-        def on_template_change():
-            selected_template = st.session_state.template_selector
-            if selected_template != st.session_state.get("last_template", ""):
-                if selected_template != "default" and "content" in templates[selected_template]:
-                    st.session_state.custom_prompt = templates[selected_template]["content"]
-                    st.session_state.selected_template = selected_template
-                    st.session_state.last_template = selected_template
-                    # 使用 callback 更新，不需要 rerun
-        
-        # 模板選擇框
-        selected_template = st.selectbox(
-            "選擇提示詞模板",
-            options=list(template_options.keys()),
-            format_func=lambda x: template_options[x],
-            key="template_selector",
-            on_change=on_template_change,
-            index=list(template_options.keys()).index(st.session_state.selected_template) 
-            if st.session_state.selected_template in template_options else 0
-        )
-        
-        # 如果選擇改變了，立即更新
-        if selected_template != st.session_state.get("last_template", ""):
-            on_template_change()
-        
-        # 顯示提示詞編輯區域
-        st.markdown("### 📝 AI 分析提示詞設定")
-        
-        col_prompt, col_info = st.columns([3, 1])
-        
-        with col_prompt:
-            # 使用 session state 中的提示詞
-            custom_prompt = st.session_state.get("custom_prompt", analysis_text)
-            
-            # 顯示可編輯的文字區域
-            edited_prompt = st.text_area(
-                "編輯AI分析提示詞",
-                value=custom_prompt,
-                height=400,
-                key="prompt_editor",
-                help="您可以修改提示詞來調整AI的分析方向和重點"
-            )
-            
-            # 檢查提示詞是否有變更
-            prompt_changed = edited_prompt != custom_prompt
-            
-            # 保存按鈕 - 使用 callback
-            if st.button("💾 儲存提示詞修改", type="secondary", use_container_width=True, key="save_prompt_btn"):
-                st.session_state.custom_prompt = edited_prompt
-                # 不需要 rerun，只需更新 session state
+            st.session_state.selected_template = "default"
+            st.session_state.last_selected_template = "default"
+            st.rerun()  # 重新渲染頁面
+    
+    # 其他部分保持不變...
+    # 開始AI分析按鈕等...
         
         with col_info:
             st.markdown("#### 💡 提示詞使用說明")
@@ -881,6 +906,23 @@ class ComparisonAnalyzer:
             )
     
     # 其他方法保持不變...
+
+    def _on_template_change(self, templates, default_prompt):
+    """處理模板變更的回調函數"""
+    selected_template = st.session_state.template_selector
+    
+    if selected_template != st.session_state.get("last_selected_template", ""):
+        # 更新選中的模板
+        st.session_state.selected_template = selected_template
+        
+        # 更新提示詞內容
+        if selected_template == "default":
+            st.session_state.custom_prompt = default_prompt
+        elif "content" in templates[selected_template]:
+            st.session_state.custom_prompt = templates[selected_template]["content"]
+        
+        # 記錄最後選擇的模板
+        st.session_state.last_selected_template = selected_template
     
     # 其他方法保持不變...
     def _get_favorites_data(self):
