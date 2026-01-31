@@ -401,12 +401,23 @@ class ComparisonAnalyzer:
         }
     
         try:
-            r = requests.get(url, params=params, timeout=10).json()
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            r = response.json()
+        except requests.exceptions.Timeout:
+            st.warning(f"❌ 查詢 {place_type} 超時")
+            return []
         except Exception as e:
-            st.warning(f"❌ 類型 {place_type} 查詢失敗: {e}")
+            st.warning(f"❌ 查詢 {place_type} 失敗: {e}")
             return []
     
         results = []
+        if r.get("status") != "OK":
+            if r.get("status") == "ZERO_RESULTS":
+                return []  # 沒有結果是正常的
+            st.warning(f"⚠️ 查詢 {place_type} 返回狀態: {r.get('status')}")
+            return []
+    
         for p in r.get("results", []):
             loc = p["geometry"]["location"]
             dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
