@@ -352,7 +352,7 @@ class ComparisonAnalyzer:
         with col_clear:
             if st.button("🗑️ 清除結果", type="secondary", use_container_width=True, key="clear_results"):
                 # 清除相關的 session state
-                keys_to_clear = ['gemini_result', 'gemini_key', 'places_data', 'houses_data']
+                keys_to_clear = ['gemini_result', 'gemini_key', 'places_data', 'houses_data', 'custom_prompt', 'used_prompt']
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
@@ -1011,6 +1011,87 @@ class ComparisonAnalyzer:
         
         return prompt
     
+    def _get_prompt_templates(self, analysis_mode):
+        """取得提示詞模板"""
+        templates = {
+            "default": {
+                "name": "預設分析模板",
+                "description": "標準的全面性分析"
+            },
+            "detailed": {
+                "name": "詳細分析模板",
+                "description": "更深入的詳細分析",
+                "content": """
+                你是一位專業的房地產分析師，請對以下房屋進行極其詳細的分析。
+                
+                【要求】
+                1. 提供1-5星的詳細評分，並說明每個星等的評分標準
+                2. 分析每個生活機能類別的優缺點
+                3. 提供具體的數據支持和比較
+                4. 考慮不同時間段的需求（平日/假日、白天/晚上）
+                5. 分析噪音、交通、安全等環境因素
+                6. 預測未來3-5年的發展潛力
+                7. 提供具體的改善建議
+                
+                請使用專業術語，但讓非專業人士也能理解。
+                """
+            },
+            "investment": {
+                "name": "投資分析模板",
+                "description": "專注於投資回報率的分析",
+                "content": """
+                你是一位房地產投資專家，請從投資角度分析以下房產。
+                
+                【投資分析重點】
+                1. 租金收益率預估
+                2. 資本增值潛力評估
+                3. 目標租客族群分析
+                4. 空置風險評估
+                5. 管理成本估算
+                6. 投資回收期計算
+                7. 競爭優勢分析
+                8. 風險因素與對策
+                
+                請提供具體的數字和百分比估計。
+                """
+            },
+            "family": {
+                "name": "家庭需求模板",
+                "description": "專注於家庭生活需求的分析",
+                "content": """
+                你是一位家庭生活規劃專家，請分析以下房屋對家庭的適合度。
+                
+                【家庭需求分析】
+                1. 兒童教育資源評估（學校、補習班、圖書館）
+                2. 育兒便利性（公園、醫療、安全）
+                3. 家庭採購便利性（超市、市場）
+                4. 家庭娛樂設施（公園、運動場所）
+                5. 社區安全與環境
+                6. 通勤便利性對家庭的影響
+                7. 鄰里關係與社區活動
+                
+                考慮不同家庭階段的需求（新生兒、學齡兒童、青少年）。
+                """
+            },
+            "simple": {
+                "name": "簡明報告模板",
+                "description": "簡潔扼要的分析報告",
+                "content": """
+                請提供簡潔的房屋分析報告，包含：
+                
+                【簡明分析】
+                1. 整體評價（1-5星）
+                2. 主要優點（3點）
+                3. 主要缺點（3點）
+                4. 最適合族群
+                5. 一句話總結
+                
+                請使用簡短的段落和要點式說明。
+                """
+            }
+        }
+        return templates
+    
     def _run_analysis(self, analysis_mode, selected_houses, fav_df, 
                      server_key, gemini_key, radius, keyword, 
                      selected_categories, selected_subtypes):
@@ -1319,78 +1400,183 @@ class ComparisonAnalyzer:
                     )
         
         # ============================
-        # AI 分析
+        # AI 分析 - 可編輯提示詞版本
         # ============================
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
+        # 準備AI分析資料
+        with st.spinner("🧠 準備分析資料..."):
+            analysis_text = self._prepare_analysis_prompt(
+                houses_data, 
+                places_data, 
+                facility_counts, 
+                category_counts,
+                selected_categories,
+                radius,
+                keyword,
+                analysis_mode
+            )
+        
         # 建立唯一 key
         analysis_key = f"{analysis_mode}__{','.join(selected_houses)}__{keyword}__{','.join(selected_categories)}__{radius}"
         
-        # 檢查是否需要重新分析
-        should_analyze = (
-            "gemini_result" not in st.session_state or
-            st.session_state.get("gemini_key") != analysis_key
+        # 顯示提示詞模板選擇
+        st.markdown("### 📋 提示詞模板選擇")
+        
+        templates = self._get_prompt_templates(analysis_mode)
+        
+        # 建立模板選項
+        template_options = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
+        selected_template = st.selectbox(
+            "選擇提示詞模板",
+            options=list(template_options.keys()),
+            format_func=lambda x: template_options[x],
+            key="template_selector"
         )
         
-        if should_analyze:
-            # 防爆檢查
-            now = time.time()
-            last = st.session_state.get("last_gemini_call", 0)
+        # 如果選擇了非預設模板，更新提示詞
+        if selected_template != "default" and "content" in templates[selected_template]:
+            if st.button(f"💾 套用「{templates[selected_template]['name']}」模板", type="secondary"):
+                st.session_state.custom_prompt = templates[selected_template]["content"]
+                st.rerun()
+        
+        # 顯示提示詞編輯區域
+        st.markdown("### 📝 AI 分析提示詞設定")
+        
+        col_prompt, col_info = st.columns([3, 1])
+        
+        with col_prompt:
+            # 預設提示詞
+            default_prompt = analysis_text
             
-            if now - last < 30:
-                st.warning("⚠️ AI 分析請等待 30 秒後再試")
-                return
+            # 如果session state中有自定義提示詞，使用它
+            custom_prompt = st.session_state.get("custom_prompt", default_prompt)
             
-            st.session_state.last_gemini_call = now
+            # 顯示可編輯的文字區域
+            edited_prompt = st.text_area(
+                "編輯AI分析提示詞",
+                value=custom_prompt,
+                height=400,
+                key="prompt_editor",
+                help="您可以修改提示詞來調整AI的分析方向和重點"
+            )
             
-            with st.spinner("🧠 AI 分析中..."):
-                try:
-                    import google.generativeai as genai
-                    genai.configure(api_key=gemini_key)
-                    model = genai.GenerativeModel("gemini-2.0-flash")
-                    
-                    # 準備分析資料
-                    analysis_text = self._prepare_analysis_prompt(
-                        houses_data, 
-                        places_data, 
-                        facility_counts, 
-                        category_counts,
-                        selected_categories,
-                        radius,
-                        keyword,
-                        analysis_mode
-                    )
-                    
-                    # 顯示提示詞預覽
-                    with st.expander("📝 查看 AI 分析提示詞", expanded=False):
-                        st.text_area("送給 Gemini 的提示詞", analysis_text, height=300)
-                    
-                    # 呼叫 Gemini
-                    resp = model.generate_content(analysis_text)
-                    
-                    # 儲存結果
-                    st.session_state.gemini_result = resp.text
-                    st.session_state.gemini_key = analysis_key
-                    st.session_state.places_data = places_data
-                    st.session_state.houses_data = houses_data
-                    
-                    st.success("✅ AI 分析完成！")
-                    
-                except Exception as e:
-                    st.error(f"❌ Gemini API 錯誤: {str(e)}")
-                    st.info("請檢查：1. API 金鑰是否正確 2. 配額是否用盡 3. 網路連線是否正常")
+            # 比較提示詞是否有變更
+            prompt_changed = edited_prompt != custom_prompt
+            
+        with col_info:
+            st.markdown("#### 💡 提示詞使用說明")
+            st.markdown("""
+            **預設提示詞包含：**
+            - 房屋資訊
+            - 搜尋條件
+            - 設施統計
+            - 分析要求
+            
+            **您可以：**
+            1. 調整分析重點
+            2. 添加特定問題
+            3. 修改評分標準
+            4. 調整語言風格
+            
+            **建議：**
+            - 保持基本資訊完整
+            - 明確指定分析方向
+            - 設定具體的評分標準
+            """)
+        
+        # 按鈕區域
+        col_analyze, col_reset, col_save = st.columns([2, 1, 1])
+        
+        with col_analyze:
+            if st.button("🚀 開始AI分析", type="primary", use_container_width=True):
+                # 儲存自定義提示詞
+                st.session_state.custom_prompt = edited_prompt
+                
+                # 防爆檢查
+                now = time.time()
+                last = st.session_state.get("last_gemini_call", 0)
+                
+                if now - last < 30:
+                    st.warning("⚠️ AI 分析請等待 30 秒後再試")
                     return
+                
+                st.session_state.last_gemini_call = now
+                
+                with st.spinner("🧠 AI 分析中..."):
+                    try:
+                        import google.generativeai as genai
+                        genai.configure(api_key=gemini_key)
+                        model = genai.GenerativeModel("gemini-2.0-flash")
+                        
+                        # 使用編輯後的提示詞
+                        final_prompt = edited_prompt
+                        
+                        # 顯示使用中的提示詞預覽
+                        with st.expander("📋 查看本次使用的提示詞", expanded=False):
+                            st.text_area("送給 Gemini 的提示詞", final_prompt, height=200, key="final_prompt_display")
+                        
+                        # 呼叫 Gemini
+                        resp = model.generate_content(final_prompt)
+                        
+                        # 儲存結果
+                        st.session_state.gemini_result = resp.text
+                        st.session_state.gemini_key = analysis_key
+                        st.session_state.places_data = places_data
+                        st.session_state.houses_data = houses_data
+                        st.session_state.used_prompt = final_prompt  # 儲存使用的提示詞
+                        
+                        st.success("✅ AI 分析完成！")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Gemini API 錯誤: {str(e)}")
+                        st.info("請檢查：1. API 金鑰是否正確 2. 配額是否用盡 3. 網路連線是否正常")
+                        return
+        
+        with col_reset:
+            if st.button("🔄 恢復預設提示詞", type="secondary", use_container_width=True):
+                # 恢復預設提示詞
+                st.session_state.custom_prompt = default_prompt
+                st.rerun()
+        
+        with col_save:
+            if st.button("💾 儲存提示詞", type="secondary", use_container_width=True):
+                # 儲存當前提示詞
+                st.session_state.custom_prompt = edited_prompt
+                st.success("✅ 提示詞已儲存！")
+        
+        # 提示詞變更提醒
+        if prompt_changed:
+            st.info("📝 提示詞已修改，請點擊「開始AI分析」重新分析")
         
         # 顯示分析結果
         if "gemini_result" in st.session_state:
             st.markdown("### 📋 AI 分析報告")
+            
+            # 顯示使用的提示詞摘要
+            if "used_prompt" in st.session_state:
+                with st.expander("ℹ️ 查看本次使用的提示詞摘要", expanded=False):
+                    used_prompt = st.session_state.used_prompt
+                    # 顯示前500字作為摘要
+                    prompt_preview = used_prompt[:500] + ("..." if len(used_prompt) > 500 else "")
+                    st.text(prompt_preview)
             
             # 美化顯示
             with st.container():
                 st.markdown("---")
                 st.markdown(st.session_state.gemini_result)
                 st.markdown("---")
+            
+            # 重新分析按鈕
+            if st.button("🔄 使用修改後的提示詞重新分析", type="secondary", use_container_width=True):
+                # 清除之前的結果，觸發重新分析
+                keys_to_clear = ['gemini_result', 'gemini_key']
+                for key in keys_to_clear:
+                    if key in st.session_state:
+                        del st.session_state[key]
+                st.rerun()
             
             # 提供下載選項
             if analysis_mode == "單一房屋分析":
@@ -1418,6 +1604,9 @@ class ComparisonAnalyzer:
             - 半徑：{radius} 公尺
             - 選擇類別：{', '.join(selected_categories)}
             - 額外關鍵字：{keyword if keyword else '無'}
+            
+            提示詞設定：
+            {st.session_state.get('used_prompt', '預設提示詞')[:500]}...
             
             AI 分析結果：
             {st.session_state.gemini_result}
