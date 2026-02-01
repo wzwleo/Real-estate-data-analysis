@@ -32,8 +32,9 @@ def plot_price_scatter(target_row, df):
     
     # 提取區域資訊
     df = df.copy()
-    df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0]
-    df['類型'] = df['類型'].str.strip()
+    df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0].astype(str).str.strip()
+    df['類型'] = df['類型'].astype(str).str.strip()
+
     
     # 取得目標房型的區域和類型
     target_district = target_row['區域'] if '區域' in target_row else target_row['地址'].split('市')[1].split('區')[0] if '市' in target_row['地址'] and '區' in target_row['地址'] else None
@@ -44,7 +45,10 @@ def plot_price_scatter(target_row, df):
         return
     
     # 篩選同區同類型房屋
-    df_filtered = df[(df['區域'] == target_district) & (df['類型'] == target_type)]
+    df_filtered = df[
+        df['區域'].str.contains(target_district, na=False) &
+        df['類型'].str.contains(target_type, na=False)
+    ]
     
     if len(df_filtered) == 0:
         st.info(f"ℹ️ 找不到 {target_district}區 {target_type} 的其他房屋")
