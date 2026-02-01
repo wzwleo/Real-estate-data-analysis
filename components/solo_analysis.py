@@ -221,18 +221,20 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
-                # 取得所有房產資料作為比較背景
-                compare_base_df = pd.DataFrame()
-                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                    compare_base_df = st.session_state.all_properties_df
-                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                    compare_base_df = st.session_state.filtered_df
-        
-                if not compare_base_df.empty:
-                    # 呼叫圖表函式
-                    plot_price_scatter(selected_row, compare_base_df)
-                else:
-                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    # 取得所有房產資料作為比較背景
+                    compare_base_df = pd.DataFrame()
+                    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+                        compare_base_df = st.session_state.all_properties_df
+                    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+                        compare_base_df = st.session_state.filtered_df
+            
+                    if not compare_base_df.empty:
+                        # 呼叫圖表函式
+                        plot_price_scatter(selected_row, compare_base_df)
+                    else:
+                        st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
 
                 
