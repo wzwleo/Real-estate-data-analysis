@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import google.generativeai as genai
 import os
+import plotly.graph_objects as go
 import plotly.express as px
 import json
 import re
@@ -12,6 +13,72 @@ name_map = {
 }
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
+
+def plot_price_scatter(df_filtered, target_row, target_title):
+    """
+    製作總價與實際坪數散佈圖，並確保目標房型（紅星）處於最上層。
+    """
+    # 1. 準備數據
+    target_df = pd.DataFrame([target_row]).copy()
+    others_df = df_filtered[df_filtered['標題'] != target_title].copy()
+
+    # 2. 欄位更名與轉換
+    for temp_df in [target_df, others_df]:
+        temp_df.rename(columns={'建坪': '建物面積', '總價(萬)': '總價'}, inplace=True)
+        temp_df['實際坪數'] = pd.to_numeric(temp_df['主+陽'], errors='coerce')
+
+    # 3. 建立底圖 (其他房型)
+    # 強制 render_mode='svg' 確保圖層順序可控
+    fig = px.scatter(
+        others_df,
+        x='實際坪數',
+        y='總價',
+        render_mode='svg', 
+        hover_data=['標題', '地址', '樓層', '屋齡'],
+        opacity=0.4,
+        color_discrete_sequence=['#636EFA'] # 統一背景顏色
+    )
+
+    # 4. 加入目標房型 (紅星)
+    customdata = target_df[['標題', '地址', '樓層', '屋齡']].values.tolist()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=target_df['實際坪數'],
+            y=target_df['總價'],
+            mode='markers',
+            marker=dict(
+                size=25,
+                color='red',
+                symbol='star',
+                opacity=1,
+                # 雖然你不想要邊框，但若未來覺得不明顯，可在這加入 line 參數
+            ),
+            name='目標房型',
+            customdata=customdata,
+            hovertemplate=(
+                '<b>%{customdata[0]}</b><br>'
+                '地址：%{customdata[1]}<br>'
+                '樓層：%{customdata[2]}<br>'
+                '屋齡：%{customdata[3]} 年<br>'
+                '實際坪數：%{x} 坪<br>'
+                '總價：%{y} 萬<extra></extra>'
+            )
+        )
+    )
+
+    # 5. 圖表佈局設定
+    fig.update_layout(
+        title='同區同類型房價 vs 實際坪數（紅星為目標房型）',
+        xaxis_title='實際坪數 (坪)',
+        yaxis_title='總價 (萬)',
+        template='plotly_white',
+        width=650,
+        height=650,
+        showlegend=True
+    )
+
+    return fig
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -158,6 +225,8 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
+                fig = plot_price_scatter(df_filtered, target_row, target_title)
+                fig.show()
                 st.markdown("---")
                 
                 st.subheader("坪數 📐")
