@@ -68,8 +68,6 @@ def plot_price_scatter(target_row, df_filtered):
         title='市場行情分布：總價 vs 實際坪數',
         xaxis_title='實際坪數 (坪)',
         yaxis_title='總價 (萬)',
-        width=600, 
-        height=600,
         template='plotly_white',
         height=500,
         margin=dict(l=20, r=20, t=50, b=20),
