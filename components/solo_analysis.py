@@ -172,7 +172,6 @@ def plot_price_scatter(target_row, df):
     )
     
     st.plotly_chart(fig)
-    st.caption(f"📊 {target_district} 共有 {len(df_filtered)} 筆包含「{target_type}」的物件")
 
 def get_favorites_data():
     """取得收藏房產的資料"""
