@@ -74,7 +74,7 @@ def plot_price_scatter(target_row, df_filtered):
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig)
 
 def get_favorites_data():
     """取得收藏房產的資料"""
