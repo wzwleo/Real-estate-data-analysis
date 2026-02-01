@@ -134,8 +134,8 @@ def plot_price_scatter(target_row, df):
         template='plotly_white',
         width=500,
         height=500,
-        xaxis=dict(range=x_range, showline=True, linecolor='green', linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
-        yaxis=dict(range=y_range, showline=True, linecolor='green', linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
+        xaxis=dict(range=x_range, showline=True, linewidth=2, linecolor='white', mirror=True, gridcolor='whitesmoke'),
+        yaxis=dict(range=y_range, showline=True, linewidth=2, linecolor='white', mirror=True, gridcolor='whitesmoke'),
         showlegend=True
     )
     
