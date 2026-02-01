@@ -407,7 +407,7 @@ def tab1_module():
                 {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
                 """
                 
-                with st.spinner("🤖 AI 正在解讀圖表並產生分析結論..."):
+                with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
                     response = model.generate_content(prompt)
                     
                 st.success("✅ 分析完成")
@@ -436,7 +436,7 @@ def tab1_module():
                     else:
                         st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 with col2:
-                    st.markdown("### 💰 價格分析結論（AI 解讀）")
+                    st.markdown("### 💰 價格分析結論")
                     st.write(response.text)
                 st.markdown("---")
 
