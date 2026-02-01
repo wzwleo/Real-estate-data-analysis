@@ -225,21 +225,34 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
+                
                 # 選中的房子
                 selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
                 target_title = selected_row['標題']
                 target_type = selected_row['類型']
-                # 假設地址格式是 "台中市 西屯區 國安一路"，取第二段當區域
-                target_district = selected_row['地址'].split(" ")[1]  
+                
+                # 取得區域（例：台中市西屯區 -> 西屯區）
+                address = selected_row['地址']
+                import re
+                m = re.match(r'.{3}(.+?區)', address)  # 前三個字是城市，抓區名
+                target_district = m.group(1) if m else ""
                 
                 # 篩選同區同類型房屋
                 df_filtered = fav_df[
                     (fav_df['類型'] == target_type) &
                     (fav_df['地址'].str.contains(target_district))
                 ].copy()
-                fig = plot_price_scatter(df_filtered, target_row, target_title)
-                st.plotly_chart(fig, use_container_width=True)
+                
+                # 如果沒有找到同區同類型房屋，就顯示提示
+                if df_filtered.empty:
+                    st.info(f"⚠️ 找不到同區同類型的房屋（{target_district} / {target_type}）")
+                else:
+                    # 把選中房子傳給散點圖函式
+                    fig = plot_price_scatter(df_filtered, selected_row, target_title)
+                    st.plotly_chart(fig, use_container_width=True)
+                
                 st.markdown("---")
+
                 
                 st.subheader("坪數 📐")
                 st.markdown("---")
