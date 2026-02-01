@@ -14,6 +14,93 @@ name_map = {
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
+def diagnose_filter_difference(selected_row, compare_base_df):
+    """診斷搜尋與製圖篩選差異"""
+    
+    st.write("### 🔍 詳細診斷報告")
+    
+    # 1. 檢查目標房型資訊
+    st.write("#### 1️⃣ 目標房型資訊")
+    target_district = selected_row.get('行政區')
+    target_type = selected_row.get('類型')
+    st.write(f"- 行政區：`{target_district}` (type: {type(target_district)})")
+    st.write(f"- 類型：`{target_type}` (type: {type(target_type)})")
+    
+    # 2. 檢查比較資料集的行政區和類型
+    st.write("#### 2️⃣ 比較資料集概況")
+    st.write(f"- 總筆數：{len(compare_base_df)}")
+    st.write(f"- 行政區欄位存在：{'行政區' in compare_base_df.columns}")
+    st.write(f"- 類型欄位存在：{'類型' in compare_base_df.columns}")
+    
+    # 3. 顯示行政區的唯一值
+    if '行政區' in compare_base_df.columns:
+        st.write("#### 3️⃣ 資料集中的行政區分布")
+        district_counts = compare_base_df['行政區'].value_counts()
+        st.dataframe(district_counts.head(20))
+        
+        # 檢查目標行政區是否存在
+        if target_district in district_counts.index:
+            st.success(f"✅ 找到 {target_district}：{district_counts[target_district]} 筆")
+        else:
+            st.error(f"❌ 找不到 {target_district}")
+            st.write("相似的行政區名稱：")
+            similar = [d for d in district_counts.index if target_district and target_district in str(d)]
+            st.write(similar[:10])
+    
+    # 4. 顯示類型的唯一值
+    if '類型' in compare_base_df.columns:
+        st.write("#### 4️⃣ 資料集中的類型分布")
+        type_counts = compare_base_df['類型'].value_counts()
+        st.dataframe(type_counts)
+        
+        # 檢查目標類型是否存在
+        if target_type in type_counts.index:
+            st.success(f"✅ 找到 {target_type}：{type_counts[target_type]} 筆")
+        else:
+            st.error(f"❌ 找不到 {target_type}")
+    
+    # 5. 逐步篩選測試
+    st.write("#### 5️⃣ 逐步篩選測試")
+    
+    # 只篩選行政區
+    filter_district = compare_base_df[compare_base_df['行政區'] == target_district]
+    st.write(f"- 只篩選行政區 ({target_district})：{len(filter_district)} 筆")
+    
+    # 只篩選類型
+    filter_type = compare_base_df[compare_base_df['類型'].astype(str).str.strip() == target_type]
+    st.write(f"- 只篩選類型 ({target_type})：{len(filter_type)} 筆")
+    
+    # 同時篩選
+    filter_both = compare_base_df[
+        (compare_base_df['行政區'] == target_district) &
+        (compare_base_df['類型'].astype(str).str.strip() == target_type)
+    ]
+    st.write(f"- 同時篩選：{len(filter_both)} 筆")
+    
+    # 6. 檢查是否有空白或特殊字符
+    st.write("#### 6️⃣ 字串檢查")
+    if '類型' in compare_base_df.columns:
+        # 檢查類型欄位是否有前後空白
+        has_whitespace = compare_base_df['類型'].astype(str).str.contains(r'^\s|\s$', regex=True).any()
+        st.write(f"- 類型欄位有前後空白：{has_whitespace}")
+        
+        # 顯示目標類型的所有變體
+        similar_types = compare_base_df[
+            compare_base_df['類型'].astype(str).str.contains(target_type, case=False, na=False)
+        ]['類型'].unique()
+        st.write(f"- 包含 '{target_type}' 的所有變體：")
+        for t in similar_types:
+            st.write(f"  - `{repr(t)}` (長度: {len(str(t))})")
+    
+    # 7. 顯示篩選結果的前幾筆
+    st.write("#### 7️⃣ 篩選結果範例")
+    if len(filter_both) > 0:
+        st.dataframe(filter_both[['標題', '地址', '行政區', '類型', '總價(萬)']].head(10))
+    else:
+        st.warning("無篩選結果")
+    
+    return filter_both
+
 def plot_price_scatter(target_row, df):
     """
     繪製同區同類型房價 vs 實際坪數散佈圖
@@ -328,17 +415,25 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
+                
+                # 取得比較資料
+                compare_base_df = pd.DataFrame()
+                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+                    compare_base_df = st.session_state.all_properties_df
+                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+                    compare_base_df = st.session_state.filtered_df
+                
+                # 🔍 診斷區塊
+                with st.expander("🔍 詳細診斷", expanded=True):
+                    if not compare_base_df.empty:
+                        diagnosed_df = diagnose_filter_difference(selected_row, compare_base_df)
+                    else:
+                        st.error("找不到比較資料")
+                
+                # 原有的圖表顯示
                 col1, col2 = st.columns([1, 1])
                 with col1:
-                    # 取得所有房產資料作為比較背景
-                    compare_base_df = pd.DataFrame()
-                    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                        compare_base_df = st.session_state.all_properties_df
-                    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                        compare_base_df = st.session_state.filtered_df
-            
                     if not compare_base_df.empty:
-                        # 呼叫圖表函式
                         plot_price_scatter(selected_row, compare_base_df)
                     else:
                         st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
