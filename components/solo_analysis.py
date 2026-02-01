@@ -14,17 +14,29 @@ name_map = {
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
-def plot_price_scatter(target_row, df_filtered):
-    """繪製總價與實際坪數散佈圖，目標房型紅星，其他房型透明點"""
+def plot_price_scatter(df, target_row):
+    """自動過濾同區同類型房型，繪製總價 vs 實際坪數散佈圖"""
     
-    # 1️⃣ 總價顯示格式
+    # 1️⃣ 先過濾同區同類型
+    df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0]
+    df['類型'] = df['類型'].str.strip()
+    
+    target_district = target_row['區域']
+    target_type = target_row['類型']
+    
+    df_filtered = df[(df['區域'] == target_district) & (df['類型'] == target_type)].copy()
+    
+    # 移除目標房型
+    others_df = df_filtered[df_filtered['標題'] != target_row['標題']].copy()
+    
+    # 2️⃣ 總價顯示格式
     def format_price(x):
         if x >= 10000:
             return f"{x/10000:.1f} 億"
         else:
             return f"{int(x)} 萬"
-
-    # 2️⃣ hover info 統一
+    
+    # 3️⃣ hover info 統一
     def make_hover(df):
         hover_text = []
         for _, row in df.iterrows():
@@ -33,22 +45,20 @@ def plot_price_scatter(target_row, df_filtered):
                 f"地址：{row['地址']}<br>"
                 f"樓層：{row['樓層']}<br>"
                 f"屋齡：{row['屋齡']} 年<br>"
-                f"實際坪數：{row['實際坪數']} 坪<br>"
-                f"總價：{format_price(row['總價'])}"
+                f"實際坪數：{row['主+陽']} 坪<br>"
+                f"總價：{format_price(row.get('總價(萬)', row.get('總價')))}"
             )
         return hover_text
-
-    # 3️⃣ 資料準備
+    
+    # 4️⃣ 轉換數值欄位
     target_df = pd.DataFrame([target_row])
-    others_df = df_filtered[df_filtered['標題'] != target_row.get('標題','')].copy()
-
-    # 欄位轉換
-    for df in [target_df, others_df]:
-        df['總價'] = pd.to_numeric(df.get('總價(萬)', df.get('總價')), errors='coerce')
-        df['實際坪數'] = pd.to_numeric(df.get('主+陽'), errors='coerce')
+    for df_ in [target_df, others_df]:
+        df_['總價'] = pd.to_numeric(df_.get('總價(萬)', df_.get('總價')), errors='coerce')
+        df_['實際坪數'] = pd.to_numeric(df_.get('主+陽'), errors='coerce')
+    
     others_df = others_df.dropna(subset=['總價','實際坪數'])
-
-    # 4️⃣ 散點圖底圖
+    
+    # 5️⃣ 繪圖底圖
     fig = px.scatter(
         others_df,
         x='實際坪數',
@@ -59,8 +69,8 @@ def plot_price_scatter(target_row, df_filtered):
         height=500
     )
     fig.update_traces(hovertemplate=make_hover(others_df))
-
-    # 5️⃣ 加入目標房型紅星
+    
+    # 6️⃣ 加入目標房型紅星
     customdata = target_df[['標題','地址','樓層','屋齡']].values.tolist()
     fig.add_scatter(
         x=target_df['實際坪數'],
@@ -71,10 +81,11 @@ def plot_price_scatter(target_row, df_filtered):
         customdata=customdata,
         hovertemplate=make_hover(target_df)[0] + "<extra></extra>"
     )
-
-    # 6️⃣ 固定顯示範圍 (2.5 倍)
+    
+    # 7️⃣ 固定顯示範圍 (2.5 倍)
     x_center = target_df['實際坪數'].iloc[0]
     y_center = target_df['總價'].iloc[0]
+    
     fig.update_layout(
         title='市場行情分布：總價 vs 實際坪數',
         xaxis_title='實際坪數 (坪)',
@@ -87,7 +98,7 @@ def plot_price_scatter(target_row, df_filtered):
         margin=dict(l=20,r=20,t=50,b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
-
+    
     st.plotly_chart(fig)
 
 def get_favorites_data():
