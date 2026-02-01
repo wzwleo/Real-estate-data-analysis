@@ -69,7 +69,8 @@ def plot_price_scatter(target_row, df_filtered):
         xaxis_title='實際坪數 (坪)',
         yaxis_title='總價 (萬)',
         template='plotly_white',
-        height=500,
+        width=500,
+        height=500, 
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
