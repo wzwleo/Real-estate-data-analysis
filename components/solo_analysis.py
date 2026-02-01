@@ -134,22 +134,9 @@ def plot_price_scatter(target_row, df):
         template='plotly_white',
         width=500,
         height=500,
-        xaxis=dict(range=x_range, showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
-        yaxis=dict(range=y_range, showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
-        showlegend=True,
-        shapes=[                  # 用矩形當邊框
-            dict(
-                type='rect',
-                xref='paper',
-                yref='paper',
-                x0=0,
-                y0=0,
-                x1=1,
-                y1=1,
-                line=dict(color='white', width=3),
-                fillcolor='rgba(0,0,0,0)'  # 透明填充
-            )
-        ]
+        xaxis=dict(range=x_range, showline=True, linewidth=2, linecolor='white', mirror=True, gridcolor='whitesmoke'),
+        yaxis=dict(range=y_range, showline=True, linewidth=2, linecolor='white', mirror=True, gridcolor='whitesmoke'),
+        showlegend=True
     )
     
     # 在 Streamlit 中顯示圖表
