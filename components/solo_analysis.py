@@ -15,19 +15,22 @@ name_map = {
 reverse_name_map = {v: k for k, v in name_map.items()}
 
 def plot_price_scatter(target_row, df_filtered):
-    """繪製總價與實際坪數散佈圖 (正方形白色背景版)"""
+    """繪製總價與實際坪數散佈圖"""
+    # 建立目標資料與其他資料的副本
     target_df = pd.DataFrame([target_row])
     target_title = target_row.get('標題', '')
     others_df = df_filtered[df_filtered['標題'] != target_title].copy()
 
-    # 數值轉換
+    # 確保數值欄位正確轉換
     target_df['總價'] = pd.to_numeric(target_df['總價(萬)'], errors='coerce')
     others_df['總價'] = pd.to_numeric(others_df['總價(萬)'], errors='coerce')
     target_df['實際坪數'] = pd.to_numeric(target_df['主+陽'], errors='coerce')
     others_df['實際坪數'] = pd.to_numeric(others_df['主+陽'], errors='coerce')
 
+    # 移除 NaN 以免繪圖錯誤
     others_df = others_df.dropna(subset=['實際坪數', '總價'])
 
+    # 建立散佈圖 (底圖)
     fig = px.scatter(
         others_df,
         x='實際坪數',
@@ -37,7 +40,7 @@ def plot_price_scatter(target_row, df_filtered):
         opacity=0.4,
     )
 
-    # 目標房屋 (紅星)
+    # 加入目標房屋 (紅星)
     customdata = target_df[['標題', '地址', '樓層', '屋齡']].values.tolist()
     fig.add_scatter(
         x=target_df['實際坪數'],
@@ -47,16 +50,33 @@ def plot_price_scatter(target_row, df_filtered):
             size=20,
             color='red',
             symbol='star',
-            line=dict(width=2, color='black')
+            line=dict(width=2, color='DarkSlateGrey')
         ),
         name='目標房型',
         customdata=customdata,
         hovertemplate=(
             '<b>%{customdata[0]}</b><br>'
+            '地址：%{customdata[1]}<br>'
+            '樓層：%{customdata[2]}<br>'
+            '屋齡：%{customdata[3]}<br>'
             '實際坪數：%{x} 坪<br>'
             '總價：%{y} 萬<extra></extra>'
         )
     )
+
+    fig.update_layout(
+        title='市場行情分布：總價 vs 實際坪數',
+        xaxis_title='實際坪數 (坪)',
+        yaxis_title='總價 (萬)',
+        width=600, 
+        height=600,
+        template='plotly_white',
+        height=500,
+        margin=dict(l=20, r=20, t=50, b=20),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    st.plotly_chart(fig)
 
     # --- 關鍵修改處 ---
     fig.update_layout(
