@@ -73,30 +73,7 @@ def plot_price_scatter(target_row, df_filtered):
         margin=dict(l=20, r=20, t=50, b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
-
     st.plotly_chart(fig)
-
-    # --- 關鍵修改處 ---
-    fig.update_layout(
-        title='市場行情分布',
-        xaxis_title='實際坪數 (坪)',
-        yaxis_title='總價 (萬)',
-        # 1. 設定為正方形 (長寬相同)
-        width=600, 
-        height=600,
-        # 2. 設定背景為純白色
-        paper_bgcolor='white',
-        plot_bgcolor='white',
-        # 3. 加上座標軸線條讓視覺更清晰
-        xaxis=dict(showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
-        yaxis=dict(showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
-        template='plotly_white',
-        margin=dict(l=40, r=40, t=60, b=40)
-    )
-
-    # 注意：在 Streamlit 中，若要維持 width/height 比例，
-    # use_container_width 必須設為 False，否則寬度會被拉滿
-    st.plotly_chart(fig, use_container_width=False)
 
 def get_favorites_data():
     """取得收藏房產的資料"""
