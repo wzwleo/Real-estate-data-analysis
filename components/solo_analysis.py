@@ -225,8 +225,13 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
-                fig = plot_price_scatter(df_filtered, target_row, target_title)
-                st.plotly_chart(fig, use_container_width=True)
+                if 'filtered_df' in st.session_state:
+                                    fig = plot_price_scatter(
+                                        st.session_state.filtered_df, 
+                                        selected_row, 
+                                        choice
+                                    )
+                    st.plotly_chart(fig, use_container_width=True)
                 st.markdown("---")
                 
                 st.subheader("坪數 📐")
