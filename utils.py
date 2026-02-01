@@ -60,31 +60,6 @@ def filter_properties(df, filters):
                     (filtered_df['車位'] == "無車位") | 
                     (filtered_df['車位'] == 0)
                 ]
-        # Gemini AI 特殊要求
-        if "rooms" in filters:
-            rooms = filters["rooms"]
-            if isinstance(rooms, dict):
-                filtered_df = filtered_df[(filtered_df['房間數'] >= rooms.get("min", 0)) &
-                                          (filtered_df['房間數'] <= rooms.get("max", 100))]
-            else:
-                filtered_df = filtered_df[filtered_df['房間數'] >= rooms]
-        if "living_rooms" in filters:
-            filtered_df = filtered_df[filtered_df['廳數'] >= filters["living_rooms"]]
-        if "bathrooms" in filters:
-            filtered_df = filtered_df[filtered_df['衛數'] >= filters["bathrooms"]]
-        if "floor" in filters and '樓層' in filtered_df.columns:
-            floor = filters["floor"]
-            if isinstance(floor, dict):
-                if "min" in floor:
-                    filtered_df = filtered_df[filtered_df['樓層'] >= floor["min"]]
-                if "max" in floor:
-                    filtered_df = filtered_df[filtered_df['樓層'] <= floor["max"]]
-            else:
-                filtered_df = filtered_df[filtered_df['樓層'] == floor]
-    except Exception as e:
-        st.error(f"篩選過程中發生錯誤: {e}")
-        return df
-    return filtered_df
 
 
 def display_pagination(df, items_per_page=10):
