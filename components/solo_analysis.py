@@ -132,8 +132,8 @@ def plot_price_scatter(target_row, df):
         xaxis_title='實際坪數 (坪)',
         yaxis_title='總價',
         template='plotly_white',
-        width=650,
-        height=650,
+        width=500,
+        height=500,
         xaxis=dict(range=x_range, showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
         yaxis=dict(range=y_range, showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
         showlegend=True
