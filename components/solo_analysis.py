@@ -225,13 +225,20 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
-                if 'filtered_df' in st.session_state:
-                                    fig = plot_price_scatter(
-                                        st.session_state.filtered_df, 
-                                        selected_row, 
-                                        choice
-                                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                # 選中的房子
+                selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
+                target_title = selected_row['標題']
+                target_type = selected_row['類型']
+                # 假設地址格式是 "台中市 西屯區 國安一路"，取第二段當區域
+                target_district = selected_row['地址'].split(" ")[1]  
+                
+                # 篩選同區同類型房屋
+                df_filtered = fav_df[
+                    (fav_df['類型'] == target_type) &
+                    (fav_df['地址'].str.contains(target_district))
+                ].copy()
+                fig = plot_price_scatter(df_filtered, target_row, target_title)
+                st.plotly_chart(fig, use_container_width=True)
                 st.markdown("---")
                 
                 st.subheader("坪數 📐")
