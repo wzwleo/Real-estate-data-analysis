@@ -105,8 +105,8 @@ def plot_price_scatter(target_row, df):
         y='總價',
         render_mode='svg',
         opacity=0.4,
-        width=650,
-        height=650
+        width=500,
+        height=500
     )
     fig.update_traces(hovertemplate=make_hover(others_df))
     
