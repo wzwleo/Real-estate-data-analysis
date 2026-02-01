@@ -388,7 +388,7 @@ def tab1_module():
                         },
                     
                         "市場密集度": {
-                            "是否位於主流價格帶": is_in_dense_area,
+                            "是否位於主流價格帶": "是" if is_in_dense_area else "否",
                             "主流價格帶占比(%)": round(dense_ratio * 100, 1)
                         }
                     }
