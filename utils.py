@@ -61,7 +61,11 @@ def filter_properties(df, filters):
                     (filtered_df['車位'] == 0)
                 ]
 
-
+    except Exception as e:
+        st.error(f"篩選過程中發生錯誤: {e}")
+        return df
+    return filtered_df
+    
 def display_pagination(df, items_per_page=10):
     """ 處理分頁邏輯 """
     if 'current_search_page' not in st.session_state:
