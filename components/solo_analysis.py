@@ -23,39 +23,49 @@ def plot_price_scatter(target_row, df):
     target_row : pd.Series
         目標房型的資料列
     df : pd.DataFrame
-        包含所有房產資料的 DataFrame
+        包含所有房產資料的 DataFrame (應已包含 '行政區' 欄位)
     """
     
     # 確保 df 是 DataFrame
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
     
-    # 提取區域資訊
     df = df.copy()
-    df['區域'] = df['地址'].str.extract(r'市(.+?)區')[0].astype(str).str.strip()
-    df['類型'] = df['類型'].astype(str).str.strip()
-
     
-    # 取得目標房型的區域和類型
-    target_district = target_row['區域'] if '區域' in target_row else target_row['地址'].split('市')[1].split('區')[0] if '市' in target_row['地址'] and '區' in target_row['地址'] else None
-    target_type = target_row['類型'].strip() if '類型' in target_row else None
+    # ✅ 統一使用 '類型' 欄位處理
+    if '類型' in df.columns:
+        df['類型'] = df['類型'].astype(str).str.strip()
     
-    if not target_district or not target_type:
-        st.warning("⚠️ 無法取得目標房型的區域或類型資訊")
+    # ✅ 統一使用 '行政區' 欄位（與搜尋邏輯一致）
+    target_district = target_row.get('行政區', None)
+    target_type = target_row.get('類型', None)
+    
+    if target_type and isinstance(target_type, str):
+        target_type = target_type.strip()
+    
+    # 驗證必要欄位
+    if not target_district:
+        st.warning("⚠️ 無法取得目標房型的行政區資訊")
         return
     
-    # 篩選同區同類型房屋
+    if not target_type:
+        st.warning("⚠️ 無法取得目標房型的類型資訊")
+        return
+    
+    # ✅ 使用與搜尋相同的篩選邏輯（精確比對）
     df_filtered = df[
-        df['區域'].str.contains(target_district, na=False) &
-        df['類型'].str.contains(target_type, na=False)
-    ]
+        (df['行政區'] == target_district) & 
+        (df['類型'].astype(str).str.strip() == target_type)
+    ].copy()
     
     if len(df_filtered) == 0:
-        st.info(f"ℹ️ 找不到 {target_district}區 {target_type} 的其他房屋")
+        st.info(f"ℹ️ 找不到 {target_district} {target_type} 的其他房屋")
         return
     
     # 處理總價顯示格式
     def format_price(x):
+        if pd.isna(x):
+            return "未知"
         if x >= 10000:
             return f"{x/10000:.1f} 億"
         else:
@@ -66,40 +76,42 @@ def plot_price_scatter(target_row, df):
         hover_text = []
         for i, row in df_input.iterrows():
             hover_text.append(
-                f"<b>{row['標題']}</b><br>"
-                f"地址：{row['地址']}<br>"
-                f"樓層：{row['樓層']}<br>"
-                f"屋齡：{row['屋齡']} 年<br>"
-                f"實際坪數：{row['實際坪數']} 坪<br>"
-                f"總價：{format_price(row['總價'])}"
+                f"<b>{row.get('標題', '未知')}</b><br>"
+                f"地址：{row.get('地址', '未知')}<br>"
+                f"樓層：{row.get('樓層', '未知')}<br>"
+                f"屋齡：{row.get('屋齡', '未知')} 年<br>"
+                f"實際坪數：{row.get('實際坪數', '未知')} 坪<br>"
+                f"總價：{format_price(row.get('總價', None))}"
             )
         return hover_text
     
     # 準備資料
     target_df = pd.DataFrame([target_row])
-    others_df = df_filtered[df_filtered['標題'] != target_row['標題']]
+    others_df = df_filtered[df_filtered['標題'] != target_row.get('標題')].copy()
     
     # 欄位重新命名（如果需要）
-    if '建坪' in target_df.columns:
-        target_df = target_df.rename(columns={'建坪': '建物面積'})
-    if '總價(萬)' in target_df.columns:
-        target_df = target_df.rename(columns={'總價(萬)': '總價'})
-    if '建坪' in others_df.columns:
-        others_df = others_df.rename(columns={'建坪': '建物面積'})
-    if '總價(萬)' in others_df.columns:
-        others_df = others_df.rename(columns={'總價(萬)': '總價'})
+    for df_temp in [target_df, others_df]:
+        if '建坪' in df_temp.columns and '建物面積' not in df_temp.columns:
+            df_temp.rename(columns={'建坪': '建物面積'}, inplace=True)
+        if '總價(萬)' in df_temp.columns and '總價' not in df_temp.columns:
+            df_temp.rename(columns={'總價(萬)': '總價'}, inplace=True)
     
     # 轉換數值欄位
-    target_df['實際坪數'] = pd.to_numeric(target_df['主+陽'], errors='coerce')
-    others_df['實際坪數'] = pd.to_numeric(others_df['主+陽'], errors='coerce')
-    target_df['總價'] = pd.to_numeric(target_df['總價'], errors='coerce')
-    others_df['總價'] = pd.to_numeric(others_df['總價'], errors='coerce')
+    target_df['實際坪數'] = pd.to_numeric(target_df.get('主+陽', [0]).iloc[0] if len(target_df) > 0 else 0, errors='coerce')
+    others_df['實際坪數'] = pd.to_numeric(others_df.get('主+陽', 0), errors='coerce')
+    target_df['總價'] = pd.to_numeric(target_df.get('總價', [0]).iloc[0] if len(target_df) > 0 else 0, errors='coerce')
+    others_df['總價'] = pd.to_numeric(others_df.get('總價', 0), errors='coerce')
     
     # 移除 NaN
     others_df = others_df.dropna(subset=['實際坪數', '總價'])
     
     if others_df.empty:
-        st.info(f"ℹ️ {target_district}區 {target_type} 沒有足夠的比較資料")
+        st.info(f"ℹ️ {target_district} {target_type} 沒有足夠的比較資料")
+        return
+    
+    # 驗證目標資料
+    if pd.isna(target_df['實際坪數'].iloc[0]) or pd.isna(target_df['總價'].iloc[0]):
+        st.warning("⚠️ 目標房型缺少必要的坪數或價格資訊")
         return
     
     # 建立散點圖 (其他房型)
@@ -112,19 +124,27 @@ def plot_price_scatter(target_row, df):
         width=500,
         height=500
     )
-    fig.update_traces(hovertemplate=make_hover(others_df))
+    
+    # 為其他點設置 hover
+    hover_others = make_hover(others_df)
+    fig.update_traces(
+        hovertemplate='%{customdata}<extra></extra>',
+        customdata=hover_others
+    )
     
     # 加入目標房型紅星
+    hover_target = make_hover(target_df)
     fig.add_scatter(
         x=target_df['實際坪數'],
         y=target_df['總價'],
         mode='markers',
         marker=dict(size=25, color='red', symbol='star'),
         name='目標房型',
-        hovertemplate=make_hover(target_df)[0] + "<extra></extra>"
+        hovertemplate='%{customdata}<extra></extra>',
+        customdata=[hover_target[0]]
     )
     
-    # 設定顯示範圍與正方形大小
+    # 設定顯示範圍
     x_center = target_df['實際坪數'].iloc[0]
     y_center = target_df['總價'].iloc[0]
     
@@ -132,19 +152,36 @@ def plot_price_scatter(target_row, df):
     y_range = (0, y_center * 2.5)
     
     fig.update_layout(
-        title=f'{target_district}區 {target_type} 房價 vs 實際坪數 (共 {len(df_filtered)} 筆)',
+        title=f'{target_district} {target_type} 房價 vs 實際坪數 (共 {len(df_filtered)} 筆)',
         xaxis_title='實際坪數 (坪)',
         yaxis_title='總價 (萬)',
         template='plotly_white',
         width=500,
         height=500,
-        xaxis=dict(range=x_range, showline=True, linewidth=2, linecolor='white', mirror=True, gridcolor='whitesmoke'),
-        yaxis=dict(range=y_range, showline=True, linewidth=2, linecolor='white', mirror=True, gridcolor='whitesmoke'),
+        xaxis=dict(
+            range=x_range, 
+            showline=True, 
+            linewidth=2, 
+            linecolor='white', 
+            mirror=True, 
+            gridcolor='whitesmoke'
+        ),
+        yaxis=dict(
+            range=y_range, 
+            showline=True, 
+            linewidth=2, 
+            linecolor='white', 
+            mirror=True, 
+            gridcolor='whitesmoke'
+        ),
         showlegend=True
     )
     
     # 在 Streamlit 中顯示圖表
     st.plotly_chart(fig)
+    
+    # 📊 顯示統計資訊
+    st.caption(f"📊 資料統計：{target_district} 共有 {len(df_filtered)} 筆 {target_type} 物件")
 
 def get_favorites_data():
     """取得收藏房產的資料"""
