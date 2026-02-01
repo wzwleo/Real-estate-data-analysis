@@ -308,132 +308,112 @@ def tab1_module():
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
+        
             try:
+                # ==================================================
+                # 第一階段：本地數值計算（不碰 AI）
+                # ==================================================
                 with st.spinner("📊 正在計算市場價格指標..."):
-                    # ===============================
-                    # 價格分析
-                    # ===============================
-                    
+        
                     # 比較母體（同區同類型）
                     compare_df = df_filtered.copy()
-                    
-                    # 確保數值欄位
+        
                     compare_df['總價'] = pd.to_numeric(compare_df['總價(萬)'], errors='coerce')
                     compare_df['實際坪數'] = pd.to_numeric(compare_df['主+陽'], errors='coerce')
                     compare_df = compare_df.dropna(subset=['總價', '實際坪數'])
-                    
+        
                     target_price = float(selected_row['總價(萬)'])
                     target_area = float(selected_row['主+陽'])
                     price_per_ping = round(target_price / target_area, 2)
-                    
-                    # 價格百分位
+        
                     price_percentile = (
                         (compare_df['總價'] < target_price).sum() / len(compare_df)
                     ) * 100
-                    
-                    # 排名
+        
                     price_rank = (compare_df['總價'] < target_price).sum() + 1
                     total_count = len(compare_df)
-                    
-                    # 市場基準
+        
                     median_price = compare_df['總價'].median()
                     mean_price = compare_df['總價'].mean()
                     price_vs_median_diff = round(target_price - median_price, 1)
-                    
-                    # 密集區（用 40~60 百分位當主流）
+        
                     is_in_dense_area = 40 <= price_percentile <= 60
                     dense_ratio = (
                         ((compare_df['總價'] >= compare_df['總價'].quantile(0.4)) &
                          (compare_df['總價'] <= compare_df['總價'].quantile(0.6)))
                         .sum() / total_count
                     )
-                    
+        
                     analysis_payload = {
                         "區域": target_district,
                         "房屋類型": target_type,
                         "比較樣本數": total_count,
-                    
                         "目標房屋": {
                             "總價(萬)": target_price,
                             "實際坪數": target_area,
                             "單價(萬/坪)": price_per_ping
                         },
-                    
                         "價格分布": {
                             "價格百分位": round(price_percentile, 1),
                             "價格排名": f"{price_rank}/{total_count}",
                             "市場中位數(萬)": round(median_price, 1),
                             "與中位數差距(萬)": price_vs_median_diff
                         },
-                    
                         "市場密集度": {
                             "是否位於主流價格帶": is_in_dense_area,
                             "主流價格帶占比(%)": round(dense_ratio * 100, 1)
                         }
                     }
+        
+                # ==================================================
+                # 第二階段：Gemini 只負責「讀數值 → 說人話」
+                # ==================================================
                 prompt = f"""
-                你是一位台灣房市分析顧問。
-                
-                以下是「已經計算完成」的價格分析數據（JSON），
-                請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
-                
-                請用繁體中文完成三件事：
-                1️⃣ 解讀該房屋價格在市場中的位置（偏低 / 主流 / 偏高）
-                2️⃣ 說明是否落在市場主流交易區間
-                3️⃣ 提供一段理性、保守、不誇大的購屋建議
-                
-                分析數據如下：
-                {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
-                """
-                
+        你是一位台灣房市分析顧問。
+        
+        以下是「已經計算完成」的價格分析數據（JSON），
+        請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+        
+        請用繁體中文完成三件事：
+        1️⃣ 解讀該房屋價格在市場中的位置（偏低 / 主流 / 偏高）
+        2️⃣ 說明是否落在市場主流交易區間
+        3️⃣ 提供一段理性、保守、不誇大的購屋建議
+        
+        分析數據如下：
+        {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
+        """
+        
                 with st.spinner("🤖 AI 正在解讀圖表並產生分析結論..."):
                     response = model.generate_content(prompt)
-                    
+        
+                # ==================================================
+                # 結果呈現（不再 loading）
+                # ==================================================
                 st.success("✅ 分析完成")
-                st.header("🏡 房屋逐項分析說明 ")
-                # 使用三引號處理跨行文字
-                st.write("""
-                我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
-                每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。
-                """)
+                st.header("🏡 房屋逐項分析說明")
                 st.markdown("---")
-                
+        
                 st.subheader("價格 💸")
-                
-                # 取得比較資料
-                compare_base_df = pd.DataFrame()
-                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                    compare_base_df = st.session_state.all_properties_df
-                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                    compare_base_df = st.session_state.filtered_df
-                
-                # 原有的圖表顯示
+        
                 col1, col2 = st.columns([1, 1])
                 with col1:
-                    if not compare_base_df.empty:
-                        plot_price_scatter(selected_row, compare_base_df)
-                    else:
-                        st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+                    plot_price_scatter(selected_row, compare_base_df)
                 with col2:
                     st.markdown("### 💰 價格分析結論（AI 解讀）")
                     st.write(response.text)
+        
                 st.markdown("---")
-
-                
+        
                 st.subheader("坪數 📐")
                 st.markdown("---")
-                
                 st.subheader("屋齡 🕰")
                 st.markdown("---")
-                
                 st.subheader("樓層 🏢")
                 st.markdown("---")
-                
                 st.subheader("格局 🛋")
                 st.markdown("---")
-                
                 st.subheader("地段 🗺")
                 st.markdown("---")
-                
+        
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
