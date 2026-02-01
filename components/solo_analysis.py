@@ -130,7 +130,7 @@ def plot_price_scatter(target_row, df):
     fig.update_layout(
         title=f'{target_district}區 {target_type} 房價 vs 實際坪數 (共 {len(df_filtered)} 筆)',
         xaxis_title='實際坪數 (坪)',
-        yaxis_title='總價',
+        yaxis_title='總價 (萬)',
         template='plotly_white',
         width=500,
         height=500,
