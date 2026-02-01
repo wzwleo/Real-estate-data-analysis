@@ -15,22 +15,19 @@ name_map = {
 reverse_name_map = {v: k for k, v in name_map.items()}
 
 def plot_price_scatter(target_row, df_filtered):
-    """繪製總價與實際坪數散佈圖"""
-    # 建立目標資料與其他資料的副本
+    """繪製總價與實際坪數散佈圖 (正方形白色背景版)"""
     target_df = pd.DataFrame([target_row])
     target_title = target_row.get('標題', '')
     others_df = df_filtered[df_filtered['標題'] != target_title].copy()
 
-    # 確保數值欄位正確轉換
+    # 數值轉換
     target_df['總價'] = pd.to_numeric(target_df['總價(萬)'], errors='coerce')
     others_df['總價'] = pd.to_numeric(others_df['總價(萬)'], errors='coerce')
     target_df['實際坪數'] = pd.to_numeric(target_df['主+陽'], errors='coerce')
     others_df['實際坪數'] = pd.to_numeric(others_df['主+陽'], errors='coerce')
 
-    # 移除 NaN 以免繪圖錯誤
     others_df = others_df.dropna(subset=['實際坪數', '總價'])
 
-    # 建立散佈圖 (底圖)
     fig = px.scatter(
         others_df,
         x='實際坪數',
@@ -40,7 +37,7 @@ def plot_price_scatter(target_row, df_filtered):
         opacity=0.4,
     )
 
-    # 加入目標房屋 (紅星)
+    # 目標房屋 (紅星)
     customdata = target_df[['標題', '地址', '樓層', '屋齡']].values.tolist()
     fig.add_scatter(
         x=target_df['實際坪數'],
@@ -50,31 +47,38 @@ def plot_price_scatter(target_row, df_filtered):
             size=20,
             color='red',
             symbol='star',
-            line=dict(width=2, color='DarkSlateGrey')
+            line=dict(width=2, color='black')
         ),
         name='目標房型',
         customdata=customdata,
         hovertemplate=(
             '<b>%{customdata[0]}</b><br>'
-            '地址：%{customdata[1]}<br>'
-            '樓層：%{customdata[2]}<br>'
-            '屋齡：%{customdata[3]}<br>'
             '實際坪數：%{x} 坪<br>'
             '總價：%{y} 萬<extra></extra>'
         )
     )
 
+    # --- 關鍵修改處 ---
     fig.update_layout(
-        title='市場行情分布：總價 vs 實際坪數',
+        title='市場行情分布',
         xaxis_title='實際坪數 (坪)',
         yaxis_title='總價 (萬)',
+        # 1. 設定為正方形 (長寬相同)
+        width=600, 
+        height=600,
+        # 2. 設定背景為純白色
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        # 3. 加上座標軸線條讓視覺更清晰
+        xaxis=dict(showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
+        yaxis=dict(showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
         template='plotly_white',
-        height=500,
-        margin=dict(l=20, r=20, t=50, b=20),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        margin=dict(l=40, r=40, t=60, b=40)
     )
 
-    st.plotly_chart(fig)
+    # 注意：在 Streamlit 中，若要維持 width/height 比例，
+    # use_container_width 必須設為 False，否則寬度會被拉滿
+    st.plotly_chart(fig, use_container_width=False)
 
 def get_favorites_data():
     """取得收藏房產的資料"""
