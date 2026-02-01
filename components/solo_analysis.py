@@ -15,65 +15,79 @@ name_map = {
 reverse_name_map = {v: k for k, v in name_map.items()}
 
 def plot_price_scatter(target_row, df_filtered):
-    """繪製總價與實際坪數散佈圖"""
-    # 建立目標資料與其他資料的副本
+    """繪製總價與實際坪數散佈圖，目標房型紅星，其他房型透明點"""
+    
+    # 1️⃣ 總價顯示格式
+    def format_price(x):
+        if x >= 10000:
+            return f"{x/10000:.1f} 億"
+        else:
+            return f"{int(x)} 萬"
+
+    # 2️⃣ hover info 統一
+    def make_hover(df):
+        hover_text = []
+        for _, row in df.iterrows():
+            hover_text.append(
+                f"<b>{row['標題']}</b><br>"
+                f"地址：{row['地址']}<br>"
+                f"樓層：{row['樓層']}<br>"
+                f"屋齡：{row['屋齡']} 年<br>"
+                f"實際坪數：{row['實際坪數']} 坪<br>"
+                f"總價：{format_price(row['總價'])}"
+            )
+        return hover_text
+
+    # 3️⃣ 資料準備
     target_df = pd.DataFrame([target_row])
-    target_title = target_row.get('標題', '')
-    others_df = df_filtered[df_filtered['標題'] != target_title].copy()
+    others_df = df_filtered[df_filtered['標題'] != target_row.get('標題','')].copy()
 
-    # 確保數值欄位正確轉換
-    target_df['總價'] = pd.to_numeric(target_df['總價(萬)'], errors='coerce')
-    others_df['總價'] = pd.to_numeric(others_df['總價(萬)'], errors='coerce')
-    target_df['實際坪數'] = pd.to_numeric(target_df['主+陽'], errors='coerce')
-    others_df['實際坪數'] = pd.to_numeric(others_df['主+陽'], errors='coerce')
+    # 欄位轉換
+    for df in [target_df, others_df]:
+        df['總價'] = pd.to_numeric(df.get('總價(萬)', df.get('總價')), errors='coerce')
+        df['實際坪數'] = pd.to_numeric(df.get('主+陽'), errors='coerce')
+    others_df = others_df.dropna(subset=['總價','實際坪數'])
 
-    # 移除 NaN 以免繪圖錯誤
-    others_df = others_df.dropna(subset=['實際坪數', '總價'])
-
-    # 建立散佈圖 (底圖)
+    # 4️⃣ 散點圖底圖
     fig = px.scatter(
         others_df,
         x='實際坪數',
         y='總價',
         render_mode='svg',
-        hover_data=['標題', '地址', '樓層', '屋齡'],
         opacity=0.4,
+        width=500,
+        height=500
     )
+    fig.update_traces(hovertemplate=make_hover(others_df))
 
-    # 加入目標房屋 (紅星)
-    customdata = target_df[['標題', '地址', '樓層', '屋齡']].values.tolist()
+    # 5️⃣ 加入目標房型紅星
+    customdata = target_df[['標題','地址','樓層','屋齡']].values.tolist()
     fig.add_scatter(
         x=target_df['實際坪數'],
         y=target_df['總價'],
         mode='markers',
-        marker=dict(
-            size=20,
-            color='red',
-            symbol='star',
-            line=dict(width=2, color='DarkSlateGrey')
-        ),
+        marker=dict(size=25, color='red', symbol='star', line=dict(width=2,color='DarkSlateGrey')),
         name='目標房型',
         customdata=customdata,
-        hovertemplate=(
-            '<b>%{customdata[0]}</b><br>'
-            '地址：%{customdata[1]}<br>'
-            '樓層：%{customdata[2]}<br>'
-            '屋齡：%{customdata[3]}<br>'
-            '實際坪數：%{x} 坪<br>'
-            '總價：%{y} 萬<extra></extra>'
-        )
+        hovertemplate=make_hover(target_df)[0] + "<extra></extra>"
     )
 
+    # 6️⃣ 固定顯示範圍 (2.5 倍)
+    x_center = target_df['實際坪數'].iloc[0]
+    y_center = target_df['總價'].iloc[0]
     fig.update_layout(
         title='市場行情分布：總價 vs 實際坪數',
         xaxis_title='實際坪數 (坪)',
-        yaxis_title='總價 (萬)',
+        yaxis_title='總價',
         template='plotly_white',
+        xaxis=dict(range=[0, x_center*2.5], showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
+        yaxis=dict(range=[0, y_center*2.5], showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
         width=500,
-        height=500, 
-        margin=dict(l=20, r=20, t=50, b=20),
+        height=500,
+        margin=dict(l=20,r=20,t=50,b=20),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
+
     st.plotly_chart(fig)
 
 def get_favorites_data():
