@@ -310,6 +310,21 @@ def tab1_module():
                 st.stop()
         
             try:
+                target_district = selected_row.get('行政區', None)
+                target_type = selected_row.get('類型', None)
+                if target_type and isinstance(target_type, str):
+                    target_type = target_type.strip()
+                    if '/' in target_type:
+                        target_type = target_type.split('/')[0].strip()
+                
+                df_filtered = fav_df[
+                    (fav_df['行政區'] == target_district) &
+                    (fav_df['類型'].astype(str).str.contains(target_type, case=False, na=False))
+                ].copy()
+                
+                if df_filtered.empty:
+                    st.warning("⚠️ 無法找到可比較的房屋資料")
+                    return
                 # ==================================================
                 # 第一階段：本地數值計算（不碰 AI）
                 # ==================================================
