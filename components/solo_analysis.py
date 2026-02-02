@@ -323,7 +323,11 @@ def plot_space_efficiency_scatter(target_row, df):
     )
     
     fig.update_layout(
-        title=f'{target_district} 包含「{target_type_main}」｜建坪 vs 實際坪數（空間效率）',
+        title=dict(
+            text=f'{target_district} 包含「{target_type_main}」的房型 建坪 vs 實際坪數 (共 {len(df_filtered)} 筆)',
+            x=0.8,         # 0=左邊，0.5=中間，1=右邊
+            xanchor='right' # 與 x 對齊方式，可選 'left', 'center', 'right'
+        )
         xaxis_title='建坪 (坪)',
         yaxis_title='實際坪數 (主+陽, 坪)',
         template='plotly_white',
