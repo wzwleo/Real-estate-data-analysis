@@ -648,11 +648,18 @@ class ComparisonAnalyzer:
                 current_page = total_pages
                 st.session_state.current_page = total_pages
             
-            start_idx = (current_page - 1) * page_size
-            end_idx = min(start_idx + page_size, len(facilities_table))
+            # 修復：確保 current_page 是整數，再進行計算
+            current_page_int = int(current_page)
+            page_size_int = int(page_size)
+            
+            # 第602行：計算 start_idx - 現在使用整數
+            start_idx = (current_page_int - 1) * page_size_int
+            end_idx = min(start_idx + page_size_int, len(facilities_table))
             
             # 顯示當前頁的表格
             current_df = facilities_table.iloc[start_idx:end_idx]
+        
+        # ... 其餘程式碼保持不變 ...
             
             # 使用 Streamlit 的 dataframe 顯示
             st.dataframe(
