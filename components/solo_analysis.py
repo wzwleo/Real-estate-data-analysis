@@ -293,14 +293,12 @@ def plot_space_efficiency_scatter(target_row, df):
     )
     
     # 理想線：y = x（100% 使用率）
-    max_area = df_filtered['建坪'].max()
     fig.add_scatter(
         x=[0, max_area],
         y=[0, max_area],
         mode='lines',
-        line=dict(dash='dash', color='gray', width=1),
-        name='100% 使用率',
-        hoverinfo='skip'
+        line=dict(dash='dash', color='gray'),
+        name='100% 使用率'
     )
     
     # 目標房屋
@@ -321,32 +319,20 @@ def plot_space_efficiency_scatter(target_row, df):
         hovertemplate='%{customdata}<extra></extra>',
         customdata=[target_hover]
     )
-    
+    buffer = 1.5  # 放大倍率
     fig.update_layout(
         title=dict(
             text=f'{target_district} 包含「{target_type_main}」的房型 建坪 vs 實際坪數 (共 {len(df_filtered)} 筆)',
-            x=1,         # 0=左邊，0.5=中間，1=右邊
+            x=0.9,         # 0=左邊，0.5=中間，1=右邊
             xanchor='right' # 與 x 對齊方式，可選 'left', 'center', 'right'
         ),
         xaxis_title='建坪 (坪)',
-        yaxis_title='實際坪數 (主+陽, 坪)',
+        yaxis_title='實際坪數 (坪)',
         template='plotly_white',
         width=500,
         height=500,
-        xaxis=dict(
-            showline=True, 
-            linewidth=2, 
-            linecolor='white', 
-            mirror=True, 
-            gridcolor='whitesmoke'
-        ),
-        yaxis=dict(
-            showline=True, 
-            linewidth=2, 
-            linecolor='white', 
-            mirror=True, 
-            gridcolor='whitesmoke'
-        ),
+        xaxis=dict(range=[0, target_area*buffer], showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
+        yaxis=dict(range=[0, target_area*buffer], showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke', scaleanchor="x", scaleratio=1),
         showlegend=True
     )
     
