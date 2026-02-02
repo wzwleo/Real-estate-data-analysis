@@ -644,7 +644,7 @@ def tab1_module():
                     else:
                         st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 with col2:
-                    st.markdown("📌 價格分析結論")
+                    st.markdown("### 📌 價格分析結論")
                     st.write(price_response.text)
                 st.markdown("---")
 
@@ -652,7 +652,7 @@ def tab1_module():
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
-                    st.markdown("📌 坪數分析結論")
+                    st.markdown("### 📌 坪數分析結論")
                     st.write(space_response.text)
                 with col2:
                     # 取得比較資料
