@@ -85,7 +85,7 @@ def render_ai_chat_search():
                         st.dataframe(debug_info['filtered_sample'])
     
     # ====== 使用者輸入 ======
-    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房 5樓以上』"):
+    if prompt := st.chat_input("請輸入查詢條件，例如：『台中市 2000 萬內 3 房 5樓以上』"):
         # 清除之前的解析結果
         if 'ai_latest_filters' in st.session_state:
             del st.session_state.ai_latest_filters
