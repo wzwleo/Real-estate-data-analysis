@@ -325,7 +325,7 @@ def plot_space_efficiency_scatter(target_row, df):
     fig.update_layout(
         title=dict(
             text=f'{target_district} 包含「{target_type_main}」的房型 建坪 vs 實際坪數 (共 {len(df_filtered)} 筆)',
-            x=0.8,         # 0=左邊，0.5=中間，1=右邊
+            x=1,         # 0=左邊，0.5=中間，1=右邊
             xanchor='right' # 與 x 對齊方式，可選 'left', 'center', 'right'
         ),
         xaxis_title='建坪 (坪)',
@@ -351,13 +351,6 @@ def plot_space_efficiency_scatter(target_row, df):
     )
     
     st.plotly_chart(fig)
-    
-    # 顯示統計資訊
-    avg_usage_rate = (df_filtered['空間使用率'].mean() * 100)
-    st.caption(
-        f"📊 空間效率統計：{target_district} 包含「{target_type_main}」平均使用率 {avg_usage_rate:.1f}%，"
-        f"目標房型使用率 {target_usage_rate:.1f}%"
-    )
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -578,26 +571,69 @@ def tab1_module():
                             "主流價格帶占比(%)": round(dense_ratio * 100, 1)
                         }
                     }
-                prompt = f"""
-                你是一位台灣房市分析顧問。
+                    price_prompt = f"""
+                    你是一位台灣房市分析顧問。
+                    
+                    以下是「已經計算完成」的價格分析數據（JSON），
+                    請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                    
+                    請用繁體中文完成三件事：
+                    1️⃣ 解讀該房屋價格在市場中的位置（偏低 / 主流 / 偏高）
+                    2️⃣ 說明是否落在市場主流交易區間
+                    3️⃣ 提供一段理性、保守、不誇大的購屋建議
+                    
+                    分析數據如下：
+                    {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
+                    """
+                    
+                    # ===============================
+                    # 坪數分析
+                    # ===============================
+                    compare_df['空間使用率'] = compare_df['實際坪數'] / compare_df['建坪']
+                    target_usage_rate = target_area / float(selected_row['建坪']) if selected_row['建坪'] > 0 else 0
+                    usage_percentile = (compare_df['空間使用率'] < target_usage_rate).sum() / total_count * 100
+                    median_usage = compare_df['空間使用率'].median()  # 同區中位數
+                    mean_usage = compare_df['空間使用率'].mean()      # 同區平均使用率
+                    actual_price_per_ping = target_price / target_area
                 
-                以下是「已經計算完成」的價格分析數據（JSON），
-                請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                    floor_area_payload = {
+                        "區域": target_district,
+                        "房屋類型": target_type,
+                        "比較樣本數": total_count,
+                        "目標房屋": {
+                            "建坪": selected_row['建坪'],
+                            "實際坪數": target_area,
+                            "空間使用率": round(target_usage_rate, 2),
+                            "實際單價(萬/坪)": round(actual_price_per_ping, 2)
+                        },
+                        "坪數分布": {
+                            "使用率百分位": round(usage_percentile, 1),
+                            "中位數使用率": round(median_usage, 2),
+                            "平均使用率": round(mean_usage, 2)
+                        }
+                    }
                 
-                請用繁體中文完成三件事：
-                1️⃣ 解讀該房屋價格在市場中的位置（偏低 / 主流 / 偏高）
-                2️⃣ 說明是否落在市場主流交易區間
-                3️⃣ 提供一段理性、保守、不誇大的購屋建議
+                    space_prompt = f"""
+                    你是一位台灣房市分析顧問。
                 
-                分析數據如下：
-                {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
-                """
+                    以下是「已經計算完成」的坪數分析數據（JSON），
+                    請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                
+                    請用繁體中文完成三件事：
+                    1️⃣ 解讀該房屋空間使用效率（偏高 / 主流 / 偏低）
+                    2️⃣ 說明在同區同類型中使用效率的排名與百分位
+                    3️⃣ 提供一段理性、保守、不誇大的購屋建議
+                
+                    分析數據如下：
+                    {json.dumps(floor_area_payload, ensure_ascii=False, indent=2)}
+                    """
                 
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    response = model.generate_content(prompt)
+                    price_response = model.generate_content(price_prompt)
+                    space_response = model.generate_content(space_prompt)
                     
                 st.success("✅ 分析完成")
-                st.header("🏡 房屋逐項分析說明 ")
+                st.header("🏡 房屋分析說明 ")
                 # 使用三引號處理跨行文字
                 st.write("""
                 我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
@@ -622,15 +658,15 @@ def tab1_module():
                         st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 with col2:
                     st.markdown("### 💰 價格分析結論")
-                    st.write(response.text)
+                    st.write(price_response.text)
                 st.markdown("---")
 
                 st.subheader("坪數 📐")
                 col1, col2 = st.columns([1, 1])
                 
                 with col1:
-                    st.write("坪數分析文字說明（待補充）")
-                
+                    st.write("📐 坪數分析結論")
+                    st.write(space_response.text)
                 with col2:
                     # 取得比較資料
                     compare_base_df = pd.DataFrame()
