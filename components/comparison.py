@@ -43,7 +43,8 @@ class ComparisonAnalyzer:
             'current_page': 1,
             'last_gemini_call': 0,
             'template_selector_key': 'default',
-            'prompt_editor_key': 'default_prompt'
+            'prompt_editor_key': 'default_prompt',
+            'category_coverage': {}  # 新增：記錄類別覆蓋情況
         }
         
         for key, value in defaults.items():
@@ -107,7 +108,8 @@ class ComparisonAnalyzer:
             'analysis_in_progress',
             'analysis_results',
             'gemini_result',
-            'current_page'
+            'current_page',
+            'category_coverage'
         ]
         for key in keys_to_reset:
             if key in st.session_state:
@@ -231,7 +233,8 @@ class ComparisonAnalyzer:
             'analysis_results',
             'gemini_result',
             'places_data',
-            'custom_prompt'
+            'custom_prompt',
+            'category_coverage'  # 清除覆蓋情況
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -450,9 +453,14 @@ class ComparisonAnalyzer:
         return selected_categories, selected_subtypes
     
     def _render_selection_summary(self, selected_categories, selected_subtypes):
-        """渲染選擇摘要"""
+        """渲染選擇摘要 - 新增類別覆蓋檢查"""
         st.markdown("---")
         st.subheader("📋 已選擇的設施摘要")
+        
+        # 檢查是否有分析結果可以顯示覆蓋情況
+        if "analysis_results" in st.session_state and "category_coverage" in st.session_state:
+            self._display_category_coverage(selected_categories, selected_subtypes)
+            return
         
         # 使用網格布局顯示摘要
         num_cols = min(len(selected_categories), 4)
@@ -470,6 +478,106 @@ class ComparisonAnalyzer:
                         <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
                     </div>
                     """, unsafe_allow_html=True)
+                    
+                    # 顯示前幾個項目
+                    if count <= 5:
+                        chinese_names = []
+                        for english_kw in selected_subtypes[cat]:
+                            chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                            chinese_names.append(chinese_name)
+                        items_display = "、".join(chinese_names)
+                        st.caption(f"✓ {items_display}")
+                    else:
+                        chinese_names = []
+                        for english_kw in selected_subtypes[cat][:3]:
+                            chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                            chinese_names.append(chinese_name)
+                        items_display = "、".join(chinese_names)
+                        st.caption(f"✓ {items_display}等{count}種設施")
+    
+    def _display_category_coverage(self, selected_categories, selected_subtypes):
+        """顯示類別覆蓋情況"""
+        st.markdown("### 📊 各類別設施查詢結果")
+        
+        category_coverage = st.session_state.get("category_coverage", {})
+        
+        if not category_coverage:
+            st.info("尚未進行分析，請先執行分析")
+            return
+        
+        # 為每個房屋顯示覆蓋情況
+        if "analysis_results" in st.session_state:
+            results = st.session_state.analysis_results
+            houses_data = results["houses_data"]
+            
+            # 單一房屋或多房屋
+            if results["num_houses"] == 1 or results["analysis_mode"] == "單一房屋分析":
+                house_name = list(houses_data.keys())[0]
+                self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+            else:
+                # 多房屋比較 - 使用選項卡
+                coverage_tabs = st.tabs([f"{house_name} 覆蓋情況" for house_name in houses_data.keys()])
+                
+                for idx, house_name in enumerate(houses_data.keys()):
+                    with coverage_tabs[idx]:
+                        self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+    
+    def _display_single_house_coverage(self, house_name, selected_categories, selected_subtypes, category_coverage):
+        """顯示單一房屋的類別覆蓋情況"""
+        st.markdown(f"### 🏠 {house_name}")
+        
+        if house_name not in category_coverage:
+            st.info("該房屋尚未進行類別覆蓋分析")
+            return
+        
+        house_coverage = category_coverage[house_name]
+        
+        # 計算總體覆蓋率
+        total_selected = 0
+        total_found = 0
+        
+        for cat in selected_categories:
+            if cat in selected_subtypes and cat in house_coverage:
+                total_selected += len(selected_subtypes[cat])
+                total_found += sum(1 for found in house_coverage[cat].values() if found)
+        
+        overall_coverage = (total_found / total_selected * 100) if total_selected > 0 else 0
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("選擇設施數", total_selected)
+        with col2:
+            st.metric("找到設施數", total_found)
+        with col3:
+            st.metric("覆蓋率", f"{overall_coverage:.1f}%")
+        
+        # 顯示各類別詳細情況
+        for cat in selected_categories:
+            if cat not in selected_subtypes or cat not in house_coverage:
+                continue
+            
+            color = CATEGORY_COLORS.get(cat, "#000000")
+            subtype_count = len(selected_subtypes[cat])
+            found_count = sum(1 for found in house_coverage[cat].values() if found)
+            cat_coverage = (found_count / subtype_count * 100) if subtype_count > 0 else 0
+            
+            with st.expander(f"{cat} 類別覆蓋情況 ({found_count}/{subtype_count} - {cat_coverage:.1f}%)", expanded=True):
+                # 顯示進度條
+                st.progress(cat_coverage / 100)
+                
+                # 顯示每個子類別的情況
+                for english_kw in selected_subtypes[cat]:
+                    chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                    found = house_coverage[cat].get(english_kw, False)
+                    
+                    col_status, col_name = st.columns([1, 5])
+                    with col_status:
+                        if found:
+                            st.success("✅")
+                        else:
+                            st.error("❌")
+                    with col_name:
+                        st.text(chinese_name)
     
     def _render_action_buttons(self, analysis_mode, selected_houses, selected_categories, 
                               radius, keyword, selected_subtypes, fav_df):
@@ -554,7 +662,8 @@ class ComparisonAnalyzer:
             'places_data',
             'houses_data',
             'custom_prompt',
-            'used_prompt'
+            'used_prompt',
+            'category_coverage'  # 清除覆蓋情況
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -574,7 +683,8 @@ class ComparisonAnalyzer:
             'used_prompt',
             'selected_template',
             'last_template',
-            'selected_houses'
+            'selected_houses',
+            'category_coverage'  # 清除覆蓋情況
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -619,18 +729,21 @@ class ComparisonAnalyzer:
             # 步驟2: 查詢周邊設施
             status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
             places_data = {}
+            category_coverage = {}  # 新增：記錄類別覆蓋
             
             total_houses = len(houses_data)
             for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
                 lat, lng = house_info["lat"], house_info["lng"]
                 
-                places = self._query_google_places_keyword(
+                # 查詢設施並記錄覆蓋情況
+                places, house_coverage = self._query_google_places_with_coverage(
                     lat, lng, settings["server_key"], 
                     settings["selected_categories"], settings["selected_subtypes"],
                     settings["radius"], extra_keyword=settings["keyword"]
                 )
                 
                 places_data[house_name] = places
+                category_coverage[house_name] = house_coverage
                 
                 # 更新進度
                 progress_value = 25 + int(((house_idx + 1) / total_houses) * 25)
@@ -672,6 +785,9 @@ class ComparisonAnalyzer:
                 "facilities_table": facilities_table
             }
             
+            # 儲存類別覆蓋情況
+            st.session_state.category_coverage = category_coverage
+            
             progress_bar.progress(100)
             status_text.text("✅ 分析完成！")
             
@@ -685,6 +801,143 @@ class ComparisonAnalyzer:
         except Exception as e:
             st.error(f"❌ 分析執行失敗: {str(e)}")
             st.session_state.analysis_in_progress = False
+    
+    def _query_google_places_with_coverage(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+        """查詢Google Places並記錄類別覆蓋情況"""
+        results, seen = [], set()
+        
+        # 初始化覆蓋記錄
+        category_coverage = {}
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                category_coverage[cat] = {subtype: False for subtype in selected_subtypes[cat]}
+        
+        total_tasks = 0
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                total_tasks += len(selected_subtypes[cat])
+        total_tasks += (1 if extra_keyword else 0)
+
+        if total_tasks == 0:
+            return results, category_coverage
+
+        progress = st.progress(0)
+        progress_text = st.empty()
+        completed = 0
+
+        def update_progress(task_desc):
+            nonlocal completed
+            completed += 1
+            progress.progress(min(completed / total_tasks, 1.0))
+            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
+
+        for cat in selected_categories:
+            if cat not in selected_subtypes:
+                continue
+                
+            for place_type in selected_subtypes[cat]:
+                update_progress(f"查詢 {cat}-{place_type}")
+                
+                try:
+                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
+                    
+                    # 更新覆蓋記錄
+                    if places:
+                        category_coverage[cat][place_type] = True
+                    
+                    for p in places:
+                        if p[5] > radius:
+                            continue
+                        pid = p[6]
+                        if pid in seen:
+                            continue
+                        seen.add(pid)
+                        
+                        # 修正分類
+                        actual_category, actual_subtype = self._determine_actual_category(p[2], p[1])
+                        
+                        results.append((actual_category, actual_subtype, p[2], p[3], p[4], p[5], p[6]))
+
+                    time.sleep(0.3)
+                    
+                except Exception as e:
+                    continue
+
+        if extra_keyword:
+            update_progress(f"額外關鍵字: {extra_keyword}")
+            try:
+                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
+                for p in places:
+                    if p[5] > radius:
+                        continue
+                    pid = p[6]
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
+                    
+                time.sleep(0.3)
+            except Exception as e:
+                pass
+
+        progress.progress(1.0)
+        progress_text.text("✅ 查詢完成！")
+        results.sort(key=lambda x: x[5])
+        
+        return results, category_coverage
+    
+    def _determine_actual_category(self, place_name, place_type):
+        """根據設施名稱判斷實際分類"""
+        place_name_lower = place_name.lower()
+        
+        # 幼兒園相關關鍵字
+        preschool_keywords = [
+            "幼兒園", "幼稚園", "托兒所", "幼兒", 
+            "附設幼兒園", "附設幼稚園",
+            "preschool", "kindergarten", "daycare", "nursery"
+        ]
+        
+        # 小學相關關鍵字
+        elementary_keywords = [
+            "小學", "國民小學", "國小", "小學校",
+            "elementary", "primary", "elementary_school", "primary_school"
+        ]
+        
+        # 中學相關關鍵字
+        middle_school_keywords = [
+            "中學", "國中", "初中", "國民中學", 
+            "middle_school", "junior_high", "secondary_school"
+        ]
+        
+        # 高中相關關鍵字
+        high_school_keywords = [
+            "高中", "高級中學", "高職", "職業學校",
+            "high_school", "senior_high", "vocational"
+        ]
+        
+        # 大學相關關鍵字
+        university_keywords = [
+            "大學", "學院", "科大", "技術學院",
+            "university", "college", "institute"
+        ]
+        
+        # 檢查名稱中的關鍵字
+        keywords_priority = [
+            (preschool_keywords, "教育", "preschool"),
+            (elementary_keywords, "教育", "elementary_school"),
+            (middle_school_keywords, "教育", "middle_school"),
+            (high_school_keywords, "教育", "high_school"),
+            (university_keywords, "教育", "university")
+        ]
+        
+        for keyword_list, category, subtype in keywords_priority:
+            for keyword in keyword_list:
+                if keyword.lower() in place_name_lower:
+                    return category, subtype
+        
+        # 如果無法從名稱判斷，使用原本的分類
+        chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
+        return "教育", place_type
     
     def _display_analysis_results(self, results):
         """顯示分析結果"""
@@ -933,6 +1186,275 @@ class ComparisonAnalyzer:
                         browser_key=browser_key
                     )
     
+    def _render_map_improved(self, lat, lng, places, radius, title="房屋", house_info=None, browser_key=""):
+        """改良版地圖渲染"""
+        if not browser_key:
+            st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
+            return
+        
+        if not places:
+            st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
+            return
+        
+        # 準備設施資料
+        facilities_data = []
+        for cat, kw, name, p_lat, p_lng, dist, pid in places:
+            color = CATEGORY_COLORS.get(cat, "#000000")
+            facilities_data.append({
+                "name": name,
+                "category": cat,
+                "subcategory": kw,
+                "lat": p_lat,
+                "lng": p_lng,
+                "distance": dist,
+                "color": color,
+                "maps_url": f"https://www.google.com/maps/search/?api=1&query={p_lat},{p_lng}&query_place_id={pid}"
+            })
+        
+        # 建立HTML地圖
+        html_content = self._generate_map_html(
+            lat, lng, facilities_data, radius, title, house_info, browser_key
+        )
+        
+        # 顯示地圖
+        st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
+        st.markdown(f"📊 **共找到 {len(places)} 個設施** (搜尋半徑: {radius}公尺)")
+        html(html_content, height=550)
+        
+        # 顯示設施列表
+        self._display_facilities_list(places)
+    
+    def _generate_map_html(self, lat, lng, facilities_data, radius, title, house_info, browser_key):
+        """生成地圖HTML"""
+        categories = {}
+        for facility in facilities_data:
+            cat = facility["category"]
+            if cat not in categories:
+                categories[cat] = facility["color"]
+        
+        # 生成圖例HTML
+        legend_html = ""
+        for cat, color in categories.items():
+            legend_html += f"""
+            <div class="legend-item">
+                <div class="legend-color" style="background-color:{color};"></div>
+                <span>{cat}</span>
+            </div>
+            """
+        
+        html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>{title} 周邊設施地圖</title>
+            <style>
+                #map {{
+                    height: 500px;
+                    width: 100%;
+                }}
+                #legend {{
+                    background: white;
+                    padding: 10px;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                    font-size: 12px;
+                    margin: 10px;
+                    max-width: 200px;
+                }}
+                .legend-item {{
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 5px;
+                }}
+                .legend-color {{
+                    width: 12px;
+                    height: 12px;
+                    margin-right: 5px;
+                    border-radius: 2px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div id="map"></div>
+            
+            <script>
+                function initMap() {{
+                    console.log('開始初始化地圖...');
+                    
+                    // 中心點座標
+                    var center = {{lat: {lat}, lng: {lng}}};
+                    
+                    // 建立地圖
+                    var map = new google.maps.Map(document.getElementById('map'), {{
+                        zoom: 16,
+                        center: center,
+                        mapTypeControl: true,
+                        streetViewControl: true,
+                        fullscreenControl: true
+                    }});
+                    
+                    // 主房屋標記
+                    var mainMarker = new google.maps.Marker({{
+                        position: center,
+                        map: map,
+                        title: "{title}",
+                        icon: {{
+                            url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                            scaledSize: new google.maps.Size(40, 40)
+                        }},
+                        zIndex: 1000
+                    }});
+                    
+                    // 主房屋資訊視窗
+                    var mainInfoContent = '<div style="padding:15px;">' +
+                                         '<h4 style="margin-top:0; color:#d32f2f;">🏠 {title}</h4>' +
+                                         '<p><strong>地址：</strong>{house_info["address"] if house_info else "未知"}</p>' +
+                                         '<p><strong>搜尋半徑：</strong>{radius} 公尺</p>' +
+                                         '<p><strong>設施數量：</strong>{len(facilities_data)} 個</p>' +
+                                         '</div>';
+                    
+                    var mainInfoWindow = new google.maps.InfoWindow({{
+                        content: mainInfoContent
+                    }});
+                    
+                    mainMarker.addListener("click", function() {{
+                        mainInfoWindow.open(map, mainMarker);
+                    }});
+                    
+                    // 建立圖例
+                    var legendDiv = document.createElement('div');
+                    legendDiv.id = 'legend';
+                    legendDiv.innerHTML = '<h4 style="margin-top:0; margin-bottom:10px;">設施類別圖例</h4>' + `{legend_html}`;
+                    map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
+                    
+                    // 添加設施標記
+                    var facilities = {json.dumps(facilities_data, ensure_allow_html=False)};
+                    
+                    facilities.forEach(function(facility) {{
+                        var position = {{lat: facility.lat, lng: facility.lng}};
+                        
+                        var marker = new google.maps.Marker({{
+                            position: position,
+                            map: map,
+                            title: facility.name + " (" + facility.distance + "m)",
+                            icon: {{
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: facility.color,
+                                fillOpacity: 0.9,
+                                strokeColor: "#FFFFFF",
+                                strokeWeight: 2
+                            }},
+                            animation: google.maps.Animation.DROP
+                        }});
+                        
+                        var infoContent = '<div style="padding:10px; max-width:250px;">' +
+                                          '<h5 style="margin-top:0; margin-bottom:5px;">' + facility.name + '</h5>' +
+                                          '<p style="margin:5px 0;">' +
+                                          '<span style="color:' + facility.color + '; font-weight:bold;">' + 
+                                          facility.category + ' - ' + facility.subcategory + 
+                                          '</span></p>' +
+                                          '<p style="margin:5px 0;"><strong>距離：</strong>' + facility.distance + ' 公尺</p>' +
+                                          '<a href="' + facility.maps_url + '" target="_blank" ' +
+                                          'style="display:inline-block; margin-top:5px; padding:5px 10px; ' +
+                                          'background-color:#1a73e8; color:white; text-decoration:none; ' +
+                                          'border-radius:3px; font-size:12px;">' +
+                                          '🗺️ 在 Google 地圖中查看</a>' +
+                                          '</div>';
+                        
+                        var infoWindow = new google.maps.InfoWindow({{
+                            content: infoContent
+                        }});
+                        
+                        marker.addListener("click", function() {{
+                            infoWindow.open(map, marker);
+                        }});
+                    }});
+                    
+                    // 繪製搜尋半徑圓
+                    var circle = new google.maps.Circle({{
+                        strokeColor: "#FF0000",
+                        strokeOpacity: 0.8,
+                        strokeWeight: 2,
+                        fillColor: "#FF0000",
+                        fillOpacity: 0.1,
+                        map: map,
+                        center: center,
+                        radius: {radius}
+                    }});
+                    
+                    // 自動打開主房屋資訊視窗
+                    setTimeout(function() {{
+                        mainInfoWindow.open(map, mainMarker);
+                    }}, 1000);
+                    
+                    console.log('地圖初始化完成');
+                }}
+                
+                // 錯誤處理
+                function handleMapError() {{
+                    console.error('地圖載入失敗');
+                    document.getElementById('map').innerHTML = 
+                        '<div style="padding:20px; text-align:center; color:red;">' +
+                        '<h3>❌ 地圖載入失敗</h3>' +
+                        '<p>請檢查：</p>' +
+                        '<ul style="text-align:left;">' +
+                        '<li>Google Maps API Key 是否正確</li>' +
+                        '<li>網路連線是否正常</li>' +
+                        '<li>API Key 是否有足夠配額</li>' +
+                        '</ul></div>';
+                }}
+            </script>
+            
+            <script src="https://maps.googleapis.com/maps/api/js?key={browser_key}&callback=initMap" 
+                    async defer 
+                    onerror="handleMapError()"></script>
+        </body>
+        </html>
+        """
+        return html_content
+    
+    def _display_facilities_list(self, places):
+        """顯示設施列表"""
+        st.markdown("### 📍 全部設施列表")
+        
+        if len(places) > 0:
+            with st.expander(f"顯示所有 {len(places)} 個設施", expanded=True):
+                for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places, 1):
+                    color = CATEGORY_COLORS.get(cat, "#000000")
+                    maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
+                    
+                    # 距離分類
+                    if dist <= 300:
+                        dist_color = "#28a745"
+                        dist_class = "很近"
+                    elif dist <= 600:
+                        dist_color = "#ffc107"
+                        dist_class = "中等"
+                    else:
+                        dist_color = "#dc3545"
+                        dist_class = "較遠"
+                    
+                    with st.container():
+                        col1, col2, col3, col4 = st.columns([6, 2, 2, 2])
+                        
+                        with col1:
+                            st.write(f"**{i}.**")
+                            st.write(f"**{name}**")
+                        
+                        with col2:
+                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{cat}</span>', unsafe_allow_html=True)
+                        
+                        with col3:
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺</span>', unsafe_allow_html=True)
+                        
+                        with col4:
+                            st.link_button("🗺️ 地圖", maps_url)
+                        
+                        st.divider()
+        else:
+            st.info("📭 未找到任何設施")
+    
     def _display_ai_analysis_section(self, results):
         """顯示AI分析部分"""
         st.markdown("---")
@@ -1094,7 +1616,7 @@ class ComparisonAnalyzer:
                 key="download_report_btn_main"
             )
     
-    # 以下是原有的輔助方法，保持不變...
+    # 以下是原有的輔助方法
     def _create_facilities_table(self, houses_data, places_data):
         """建立設施表格資料"""
         all_facilities = []
@@ -1122,280 +1644,10 @@ class ComparisonAnalyzer:
         
         return pd.DataFrame(all_facilities)
     
-    def _render_map_improved(self, lat, lng, places, radius, title="房屋", house_info=None, browser_key=""):
-        """改良版地圖渲染"""
-        if not browser_key:
-            st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
-            return
-        
-        if not places:
-            st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
-            return
-        
-        # 準備設施資料
-        facilities_data = []
-        for cat, kw, name, p_lat, p_lng, dist, pid in places:
-            color = CATEGORY_COLORS.get(cat, "#000000")
-            facilities_data.append({
-                "name": name,
-                "category": cat,
-                "subcategory": kw,
-                "lat": p_lat,
-                "lng": p_lng,
-                "distance": dist,
-                "color": color,
-                "maps_url": f"https://www.google.com/maps/search/?api=1&query={p_lat},{p_lng}&query_place_id={pid}"
-            })
-        
-        # 建立HTML地圖
-        html_content = self._generate_map_html(
-            lat, lng, facilities_data, radius, title, house_info, browser_key
-        )
-        
-        # 顯示地圖
-        st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
-        st.markdown(f"📊 **共找到 {len(places)} 個設施** (搜尋半徑: {radius}公尺)")
-        html(html_content, height=550)
-        
-        # 顯示設施列表
-        self._display_facilities_list(places)
-    
-    def _generate_map_html(self, lat, lng, facilities_data, radius, title, house_info, browser_key):
-        """生成地圖HTML"""
-        categories = {}
-        for facility in facilities_data:
-            cat = facility["category"]
-            if cat not in categories:
-                categories[cat] = facility["color"]
-        
-        # 生成圖例HTML
-        legend_html = ""
-        for cat, color in categories.items():
-            legend_html += f"""
-            <div class="legend-item">
-                <div class="legend-color" style="background-color:{color};"></div>
-                <span>{cat}</span>
-            </div>
-            """
-        
-        html_content = f"""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>{title} 周邊設施地圖</title>
-            <style>
-                #map {{
-                    height: 500px;
-                    width: 100%;
-                }}
-                #legend {{
-                    background: white;
-                    padding: 10px;
-                    border: 1px solid #ccc;
-                    border-radius: 5px;
-                    font-size: 12px;
-                    margin: 10px;
-                    max-width: 200px;
-                }}
-                .legend-item {{
-                    display: flex;
-                    align-items: center;
-                    margin-bottom: 5px;
-                }}
-                .legend-color {{
-                    width: 12px;
-                    height: 12px;
-                    margin-right: 5px;
-                    border-radius: 2px;
-                }}
-            </style>
-        </head>
-        <body>
-            <div id="map"></div>
-            
-            <script>
-                function initMap() {{
-                    console.log('開始初始化地圖...');
-                    
-                    // 中心點座標
-                    var center = {{lat: {lat}, lng: {lng}}};
-                    
-                    // 建立地圖
-                    var map = new google.maps.Map(document.getElementById('map'), {{
-                        zoom: 16,
-                        center: center,
-                        mapTypeControl: true,
-                        streetViewControl: true,
-                        fullscreenControl: true
-                    }});
-                    
-                    // 主房屋標記
-                    var mainMarker = new google.maps.Marker({{
-                        position: center,
-                        map: map,
-                        title: "{title}",
-                        icon: {{
-                            url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
-                            scaledSize: new google.maps.Size(40, 40)
-                        }},
-                        zIndex: 1000
-                    }});
-                    
-                    // 主房屋資訊視窗
-                    var mainInfoContent = '<div style="padding:15px;">' +
-                                         '<h4 style="margin-top:0; color:#d32f2f;">🏠 {title}</h4>' +
-                                         '<p><strong>地址：</strong>{house_info["address"] if house_info else "未知"}</p>' +
-                                         '<p><strong>搜尋半徑：</strong>{radius} 公尺</p>' +
-                                         '<p><strong>設施數量：</strong>{len(facilities_data)} 個</p>' +
-                                         '</div>';
-                    
-                    var mainInfoWindow = new google.maps.InfoWindow({{
-                        content: mainInfoContent
-                    }});
-                    
-                    mainMarker.addListener("click", function() {{
-                        mainInfoWindow.open(map, mainMarker);
-                    }});
-                    
-                    // 建立圖例
-                    var legendDiv = document.createElement('div');
-                    legendDiv.id = 'legend';
-                    legendDiv.innerHTML = '<h4 style="margin-top:0; margin-bottom:10px;">設施類別圖例</h4>' + `{legend_html}`;
-                    map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
-                    
-                    // 添加設施標記
-                    var facilities = {json.dumps(facilities_data, ensure_ascii=False)};
-                    
-                    facilities.forEach(function(facility) {{
-                        var position = {{lat: facility.lat, lng: facility.lng}};
-                        
-                        var marker = new google.maps.Marker({{
-                            position: position,
-                            map: map,
-                            title: facility.name + " (" + facility.distance + "m)",
-                            icon: {{
-                                path: google.maps.SymbolPath.CIRCLE,
-                                scale: 8,
-                                fillColor: facility.color,
-                                fillOpacity: 0.9,
-                                strokeColor: "#FFFFFF",
-                                strokeWeight: 2
-                            }},
-                            animation: google.maps.Animation.DROP
-                        }});
-                        
-                        var infoContent = '<div style="padding:10px; max-width:250px;">' +
-                                          '<h5 style="margin-top:0; margin-bottom:5px;">' + facility.name + '</h5>' +
-                                          '<p style="margin:5px 0;">' +
-                                          '<span style="color:' + facility.color + '; font-weight:bold;">' + 
-                                          facility.category + ' - ' + facility.subcategory + 
-                                          '</span></p>' +
-                                          '<p style="margin:5px 0;"><strong>距離：</strong>' + facility.distance + ' 公尺</p>' +
-                                          '<a href="' + facility.maps_url + '" target="_blank" ' +
-                                          'style="display:inline-block; margin-top:5px; padding:5px 10px; ' +
-                                          'background-color:#1a73e8; color:white; text-decoration:none; ' +
-                                          'border-radius:3px; font-size:12px;">' +
-                                          '🗺️ 在 Google 地圖中查看</a>' +
-                                          '</div>';
-                        
-                        var infoWindow = new google.maps.InfoWindow({{
-                            content: infoContent
-                        }});
-                        
-                        marker.addListener("click", function() {{
-                            infoWindow.open(map, marker);
-                        }});
-                    }});
-                    
-                    // 繪製搜尋半徑圓
-                    var circle = new google.maps.Circle({{
-                        strokeColor: "#FF0000",
-                        strokeOpacity: 0.8,
-                        strokeWeight: 2,
-                        fillColor: "#FF0000",
-                        fillOpacity: 0.1,
-                        map: map,
-                        center: center,
-                        radius: {radius}
-                    }});
-                    
-                    // 自動打開主房屋資訊視窗
-                    setTimeout(function() {{
-                        mainInfoWindow.open(map, mainMarker);
-                    }}, 1000);
-                    
-                    console.log('地圖初始化完成');
-                }}
-                
-                // 錯誤處理
-                function handleMapError() {{
-                    console.error('地圖載入失敗');
-                    document.getElementById('map').innerHTML = 
-                        '<div style="padding:20px; text-align:center; color:red;">' +
-                        '<h3>❌ 地圖載入失敗</h3>' +
-                        '<p>請檢查：</p>' +
-                        '<ul style="text-align:left;">' +
-                        '<li>Google Maps API Key 是否正確</li>' +
-                        '<li>網路連線是否正常</li>' +
-                        '<li>API Key 是否有足夠配額</li>' +
-                        '</ul></div>';
-                }}
-            </script>
-            
-            <script src="https://maps.googleapis.com/maps/api/js?key={browser_key}&callback=initMap" 
-                    async defer 
-                    onerror="handleMapError()"></script>
-        </body>
-        </html>
-        """
-        return html_content
-    
-    def _display_facilities_list(self, places):
-        """顯示設施列表"""
-        st.markdown("### 📍 全部設施列表")
-        
-        if len(places) > 0:
-            with st.expander(f"顯示所有 {len(places)} 個設施", expanded=True):
-                for i, (cat, kw, name, lat, lng, dist, pid) in enumerate(places, 1):
-                    color = CATEGORY_COLORS.get(cat, "#000000")
-                    maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
-                    
-                    # 距離分類
-                    if dist <= 300:
-                        dist_color = "#28a745"
-                        dist_class = "很近"
-                    elif dist <= 600:
-                        dist_color = "#ffc107"
-                        dist_class = "中等"
-                    else:
-                        dist_color = "#dc3545"
-                        dist_class = "較遠"
-                    
-                    with st.container():
-                        col1, col2, col3, col4 = st.columns([6, 2, 2, 2])
-                        
-                        with col1:
-                            st.write(f"**{i}.**")
-                            st.write(f"**{name}**")
-                        
-                        with col2:
-                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{cat}</span>', unsafe_allow_html=True)
-                        
-                        with col3:
-                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺</span>', unsafe_allow_html=True)
-                        
-                        with col4:
-                            st.link_button("🗺️ 地圖", maps_url)
-                        
-                        st.divider()
-        else:
-            st.info("📭 未找到任何設施")
-    
     def _prepare_analysis_prompt(self, houses_data, places_data, facility_counts, 
                                 category_counts, selected_categories, radius, 
                                 keyword, analysis_mode, facilities_table):
         """準備分析提示詞"""
-        # 保持原有的 prompt 生成邏輯不變
         if analysis_mode == "單一房屋分析":
             house_name = list(houses_data.keys())[0]
             house_info = houses_data[house_name]
@@ -1430,6 +1682,18 @@ class ComparisonAnalyzer:
                 - 經度、緯度：設施的GPS座標
                 """
             
+            # 加入類別覆蓋情況
+            category_coverage_info = ""
+            if "category_coverage" in st.session_state and house_name in st.session_state.category_coverage:
+                house_coverage = st.session_state.category_coverage[house_name]
+                category_coverage_info = "\n【類別設施覆蓋情況】\n"
+                for cat in selected_categories:
+                    if cat in house_coverage:
+                        total = len(house_coverage[cat])
+                        found = sum(1 for v in house_coverage[cat].values() if v)
+                        coverage_rate = (found / total * 100) if total > 0 else 0
+                        category_coverage_info += f"- {cat}: 找到 {found}/{total} 種設施 (覆蓋率: {coverage_rate:.1f}%)\n"
+            
             prompt = f"""
             你是一位專業的房地產分析師，請對以下房屋的生活機能進行詳細分析。
             
@@ -1449,6 +1713,8 @@ class ComparisonAnalyzer:
             
             【各類別設施數量】
             {chr(10).join([f'- {cat}: {num} 個' for cat, num in category_stats.items()])}
+            
+            {category_coverage_info}
             
             {table_summary}
             
@@ -1778,75 +2044,6 @@ class ComparisonAnalyzer:
                 dist,
                 p.get("place_id", "")
             ))
-        return results
-    
-    def _query_google_places_keyword(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """查詢Google Places關鍵字 - 使用 Nearby Search + Type"""
-        results, seen = [], set()
-        
-        total_tasks = 0
-        for cat in selected_categories:
-            if cat in selected_subtypes:
-                total_tasks += len(selected_subtypes[cat])
-        total_tasks += (1 if extra_keyword else 0)
-
-        if total_tasks == 0:
-            return []
-
-        progress = st.progress(0)
-        progress_text = st.empty()
-        completed = 0
-
-        def update_progress(task_desc):
-            nonlocal completed
-            completed += 1
-            progress.progress(min(completed / total_tasks, 1.0))
-            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-
-        for cat in selected_categories:
-            if cat not in selected_subtypes:
-                continue
-                
-            for place_type in selected_subtypes[cat]:
-                update_progress(f"查詢 {cat}-{place_type}")
-                
-                try:
-                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
-                    
-                    for p in places:
-                        if p[5] > radius:
-                            continue
-                        pid = p[6]
-                        if pid in seen:
-                            continue
-                        seen.add(pid)
-                        results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
-
-                    time.sleep(0.3)
-                    
-                except Exception as e:
-                    continue
-
-        if extra_keyword:
-            update_progress(f"額外關鍵字: {extra_keyword}")
-            try:
-                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
-                for p in places:
-                    if p[5] > radius:
-                        continue
-                    pid = p[6]
-                    if pid in seen:
-                        continue
-                    seen.add(pid)
-                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
-                    
-                time.sleep(0.3)
-            except Exception as e:
-                pass
-
-        progress.progress(1.0)
-        progress_text.text("✅ 查詢完成！")
-        results.sort(key=lambda x: x[5])
         return results
 
 
