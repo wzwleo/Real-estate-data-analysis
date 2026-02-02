@@ -173,6 +173,188 @@ def plot_price_scatter(target_row, df):
     
     st.plotly_chart(fig)
 
+def plot_space_efficiency_scatter(target_row, df):
+    """
+    繪製建坪 vs 實際坪數散佈圖（空間效率分析）
+    
+    Parameters:
+    -----------
+    target_row : pd.Series
+        目標房型的資料列
+    df : pd.DataFrame
+        包含所有房產資料的 DataFrame
+    """
+    
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame([df])
+    
+    df = df.copy()
+    
+    # 使用行政區欄位
+    if '類型' in df.columns:
+        df['類型'] = df['類型'].astype(str).str.strip()
+    
+    target_district = target_row.get('行政區', None)
+    target_type = target_row.get('類型', None)
+    
+    if target_type and isinstance(target_type, str):
+        target_type = target_type.strip()
+        # 處理混合類型
+        if '/' in target_type:
+            target_type_main = target_type.split('/')[0].strip()
+        else:
+            target_type_main = target_type
+    else:
+        st.warning("⚠️ 無法取得目標房型的類型資訊")
+        return
+    
+    if not target_district:
+        st.warning("⚠️ 無法取得目標房型的行政區資訊")
+        return
+    
+    # 使用模糊比對篩選
+    df_filtered = df[
+        (df['行政區'] == target_district) & 
+        (df['類型'].astype(str).str.contains(target_type_main, case=False, na=False))
+    ].copy()
+    
+    if len(df_filtered) == 0:
+        st.info(f"ℹ️ 找不到 {target_district} 包含「{target_type_main}」的房屋")
+        return
+    
+    # 欄位重新命名
+    if '建坪' not in df_filtered.columns and '建物面積' in df_filtered.columns:
+        df_filtered.rename(columns={'建物面積': '建坪'}, inplace=True)
+    if '總價(萬)' not in df_filtered.columns and '總價' in df_filtered.columns:
+        df_filtered.rename(columns={'總價': '總價(萬)'}, inplace=True)
+    
+    # 轉換數值
+    df_filtered['建坪'] = pd.to_numeric(df_filtered.get('建坪', 0), errors='coerce')
+    df_filtered['主+陽'] = pd.to_numeric(df_filtered.get('主+陽', 0), errors='coerce')
+    df_filtered['總價(萬)'] = pd.to_numeric(df_filtered.get('總價(萬)', 0), errors='coerce')
+    
+    # 避免異常值
+    df_filtered = df_filtered[
+        (df_filtered['建坪'] > 0) &
+        (df_filtered['主+陽'] > 0) &
+        (df_filtered['總價(萬)'] > 0)
+    ].copy()
+    
+    if df_filtered.empty:
+        st.info(f"ℹ️ {target_district} 包含「{target_type_main}」沒有足夠的有效資料")
+        return
+    
+    # 基本衍生指標
+    df_filtered['建坪單價(萬/坪)'] = df_filtered['總價(萬)'] / df_filtered['建坪']
+    df_filtered['實際單價(萬/坪)'] = df_filtered['總價(萬)'] / df_filtered['主+陽']
+    df_filtered['空間使用率'] = df_filtered['主+陽'] / df_filtered['建坪']
+    
+    # 目標房屋資料
+    target_area = pd.to_numeric(target_row.get('建坪', 0), errors='coerce')
+    target_actual_area = pd.to_numeric(target_row.get('主+陽', 0), errors='coerce')
+    target_total_price = pd.to_numeric(target_row.get('總價(萬)', 0), errors='coerce')
+    
+    if pd.isna(target_area) or pd.isna(target_actual_area) or target_area == 0:
+        st.warning("⚠️ 目標房型缺少必要的坪數資訊")
+        return
+    
+    target_actual_price = target_total_price / target_actual_area if target_actual_area > 0 else 0
+    target_usage_rate = (target_actual_area / target_area * 100) if target_area > 0 else 0
+    
+    # 建立 hover 資訊
+    def make_hover_space(df_input):
+        hover_text = []
+        for i, row in df_input.iterrows():
+            usage_rate = (row['主+陽'] / row['建坪'] * 100) if row['建坪'] > 0 else 0
+            hover_text.append(
+                f"<b>{row.get('標題', '未知')}</b><br>"
+                f"建坪：{row.get('建坪', 0):.1f} 坪<br>"
+                f"實際坪數：{row.get('主+陽', 0):.1f} 坪<br>"
+                f"空間使用率：{usage_rate:.1f}%<br>"
+                f"總價：{row.get('總價(萬)', 0):.0f} 萬"
+            )
+        return hover_text
+    
+    # 建立散點圖
+    fig = px.scatter(
+        df_filtered,
+        x='建坪',
+        y='主+陽',
+        render_mode='svg',
+        opacity=0.4,
+        width=500,
+        height=500
+    )
+    
+    hover_others = make_hover_space(df_filtered)
+    fig.update_traces(
+        hovertemplate='%{customdata}<extra></extra>',
+        customdata=hover_others
+    )
+    
+    # 理想線：y = x（100% 使用率）
+    max_area = df_filtered['建坪'].max()
+    fig.add_scatter(
+        x=[0, max_area],
+        y=[0, max_area],
+        mode='lines',
+        line=dict(dash='dash', color='gray', width=1),
+        name='100% 使用率',
+        hoverinfo='skip'
+    )
+    
+    # 目標房屋
+    target_hover = (
+        f"<b>{target_row.get('標題', '目標房屋')}</b><br>"
+        f"建坪：{target_area:.1f} 坪<br>"
+        f"實際坪數：{target_actual_area:.1f} 坪<br>"
+        f"空間使用率：{target_usage_rate:.1f}%<br>"
+        f"總價：{target_total_price:.0f} 萬"
+    )
+    
+    fig.add_scatter(
+        x=[target_area],
+        y=[target_actual_area],
+        mode='markers',
+        marker=dict(size=25, color='red', symbol='star'),
+        name='目標房型',
+        hovertemplate='%{customdata}<extra></extra>',
+        customdata=[target_hover]
+    )
+    
+    fig.update_layout(
+        title=f'{target_district} 包含「{target_type_main}」｜建坪 vs 實際坪數（空間效率）',
+        xaxis_title='建坪 (坪)',
+        yaxis_title='實際坪數 (主+陽, 坪)',
+        template='plotly_white',
+        width=500,
+        height=500,
+        xaxis=dict(
+            showline=True, 
+            linewidth=2, 
+            linecolor='white', 
+            mirror=True, 
+            gridcolor='whitesmoke'
+        ),
+        yaxis=dict(
+            showline=True, 
+            linewidth=2, 
+            linecolor='white', 
+            mirror=True, 
+            gridcolor='whitesmoke'
+        ),
+        showlegend=True
+    )
+    
+    st.plotly_chart(fig)
+    
+    # 顯示統計資訊
+    avg_usage_rate = (df_filtered['空間使用率'].mean() * 100)
+    st.caption(
+        f"📊 空間效率統計：{target_district} 包含「{target_type_main}」平均使用率 {avg_usage_rate:.1f}%，"
+        f"目標房型使用率 {target_usage_rate:.1f}%"
+    )
+
 def get_favorites_data():
     """取得收藏房產的資料"""
     if 'favorites' not in st.session_state or not st.session_state.favorites:
@@ -420,7 +602,6 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("價格 💸")
-                
                 # 取得比較資料
                 compare_base_df = pd.DataFrame()
                 if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
@@ -440,8 +621,26 @@ def tab1_module():
                     st.write(response.text)
                 st.markdown("---")
 
-                
                 st.subheader("坪數 📐")
+                col1, col2 = st.columns([1, 1])
+                
+                with col1:
+                    st.write("坪數分析文字說明（待補充）")
+                
+                with col2:
+                    # 取得比較資料
+                    compare_base_df = pd.DataFrame()
+                    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+                        compare_base_df = st.session_state.all_properties_df
+                    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+                        compare_base_df = st.session_state.filtered_df
+                    
+                    if not compare_base_df.empty:
+                        # 呼叫空間效率圖表函式
+                        plot_space_efficiency_scatter(selected_row, compare_base_df)
+                    else:
+                        st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+                
                 st.markdown("---")
                 
                 st.subheader("屋齡 🕰")
