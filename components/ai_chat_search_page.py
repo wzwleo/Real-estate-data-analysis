@@ -2,6 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 import json
 import pandas as pd
+import re
 
 def render_ai_chat_search():
     st.header("🤖 AI 房市顧問")
@@ -84,7 +85,7 @@ def render_ai_chat_search():
                         st.dataframe(debug_info['filtered_sample'])
     
     # ====== 使用者輸入 ======
-    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房』"):
+    if prompt := st.chat_input("請輸入查詢條件，例如：『台北 2000 萬內 3 房 5樓以上』"):
         # 清除之前的解析結果
         if 'ai_latest_filters' in st.session_state:
             del st.session_state.ai_latest_filters
@@ -105,33 +106,41 @@ def render_ai_chat_search():
             result_text = ""
             try:
                 system_prompt = """
-    你是一個房產搜尋助手。請根據使用者的自然語言查詢，提取出搜尋條件。
-    
-    請以 JSON 格式回傳，格式如下：
-    {
-        "city": "台北市 或 台中市",
-        "district": "行政區名稱(例如: 西屯區、大安區)",
-        "budget_min": 最低預算(萬),
-        "budget_max": 最高預算(萬),
-        "age_min": 最小屋齡,
-        "age_max": 最大屋齡,
-        "area_min": 最小建坪,
-        "area_max": 最大建坪,
-        "housetype": "華廈/公寓/大樓/套房/透天/店面/辦公/別墅/倉庫/廠房/土地/單售車位/其他",
-        "car_grip": "需要/不要/不限",
-    }
-    
-    注意：
-    - 只回傳 JSON，不要有其他文字
-    - "district" 欄位：請精確提取使用者提到的行政區。如果使用者說「西屯」請回傳「西屯區」。
-    - 如果使用者沒提到某個條件，該欄位則可以省略
-    - 預算單位是「萬」
-    - 如果使用者提到「上下」、「左右」、「大約」，請自動計算一個合理的範圍。
-    - 預算範例：若說「1800萬左右」，請回傳 "budget_min": 1750, "budget_max": 1850。
-    - 如果使用者只說「1800萬以內」或「低於1800萬」，則 "budget_min" 可省略，只設 "budget_max": 1800。
-    - 坪數與屋齡同理，若有「左右」字眼，請給出範圍。
-    - 城市只能是「台中市」
-    """
+你是一個房產搜尋助手。請根據使用者的自然語言查詢，提取出搜尋條件。
+
+請以 JSON 格式回傳，格式如下：
+{
+    "city": "台北市 或 台中市",
+    "district": "行政區名稱(例如: 西屯區、大安區)",
+    "budget_min": 最低預算(萬),
+    "budget_max": 最高預算(萬),
+    "age_min": 最小屋齡,
+    "age_max": 最大屋齡,
+    "area_min": 最小建坪,
+    "area_max": 最大建坪,
+    "floor_min": 最低樓層,
+    "floor_max": 最高樓層,
+    "housetype": "華廈/公寓/大樓/套房/透天/店面/辦公/別墅/倉庫/廠房/土地/單售車位/其他",
+    "car_grip": "需要/不要/不限",
+}
+
+注意：
+- 只回傳 JSON，不要有其他文字
+- "district" 欄位：請精確提取使用者提到的行政區。如果使用者說「西屯」請回傳「西屯區」。
+- 如果使用者沒提到某個條件，該欄位則可以省略
+- 預算單位是「萬」
+- 如果使用者提到「上下」、「左右」、「大約」，請自動計算一個合理的範圍。
+- 預算範例：若說「1800萬左右」，請回傳 "budget_min": 1750, "budget_max": 1850。
+- 如果使用者只說「1800萬以內」或「低於1800萬」，則 "budget_min" 可省略，只設 "budget_max": 1800。
+- 坪數與屋齡同理，若有「左右」字眼，請給出範圍。
+- **樓層處理：**
+  - 如果使用者說「5樓以上」或「高樓層」，請設定 "floor_min": 5
+  - 如果使用者說「10樓以下」或「低樓層」，請設定 "floor_max": 10
+  - 如果使用者說「3-8樓」，請設定 "floor_min": 3, "floor_max": 8
+  - 如果使用者說「不要1樓」或「避開1樓」，請設定 "floor_min": 2
+  - 高樓層通常指5樓以上，低樓層通常指3樓以下
+- 城市只能是「台中市」
+"""
                 
                 full_prompt = f"{system_prompt}\n\n使用者查詢：{prompt}"
                 response = model.generate_content(full_prompt)
@@ -171,8 +180,25 @@ def render_ai_chat_search():
                         
                     if '地址' in df.columns:
                         df['行政區'] = df['地址'].apply(quick_parse_district)
-    
-    
+                    
+                    # ====== 新增：樓層預處理 ======
+                    def parse_floor(floor_str):
+                        """
+                        從樓層字串中提取實際樓層數字
+                        例如：'2樓/12樓' -> 2, '10樓/20樓' -> 10
+                        """
+                        if pd.isna(floor_str) or not isinstance(floor_str, str):
+                            return None
+                        
+                        # 使用正規表達式提取第一個數字（所在樓層）
+                        match = re.search(r'^(\d+)樓', floor_str)
+                        if match:
+                            return int(match.group(1))
+                        return None
+                    
+                    if '樓層' in df.columns:
+                        df['實際樓層'] = df['樓層'].apply(parse_floor)
+                    # ================================
                     
                     original_count = len(df)
                     
@@ -185,7 +211,8 @@ def render_ai_chat_search():
                         '建坪': 'area',
                         '房間數': 'rooms',
                         '廳數': 'living_rooms',
-                        '衛數': 'bathrooms'
+                        '衛數': 'bathrooms',
+                        '實際樓層': 'floor'  # 新增樓層欄位
                     }
                     
                     for col in num_cols.keys():
@@ -196,8 +223,9 @@ def render_ai_chat_search():
                                 errors='coerce'
                             )
                     
-                    # 順手補一個：把 NaN 的地方填入 0，避免比大小時又噴錯
-                    filtered_df = filtered_df.fillna({k: 0 for k in num_cols.keys()})
+                    # 順手補一個：把 NaN 的地方填入 0，避免比大小時又噴錯（樓層除外）
+                    fill_dict = {k: 0 for k in num_cols.keys() if k != '實際樓層'}
+                    filtered_df = filtered_df.fillna(fill_dict)
                     # ============================================
                     filter_steps = []  # 記錄每個篩選步驟
                     
@@ -223,6 +251,7 @@ def render_ai_chat_search():
                                 
                                 after_count = len(filtered_df)
                                 filter_steps.append(f"行政區({raw_districts}): {before_count} → {after_count}")
+                        
                         # 房屋類型篩選
                         if filters.get('housetype') and filters['housetype'] != "不限":
                             if '類型' in filtered_df.columns:
@@ -274,6 +303,30 @@ def render_ai_chat_search():
                             filtered_df = filtered_df[filtered_df['建坪'] <= filters['area_max']]
                             after_count = len(filtered_df)
                             filter_steps.append(f"建坪<={filters['area_max']}: {before_count} → {after_count}")
+                        
+                        # ====== 新增：樓層篩選 ======
+                        # 樓層下限
+                        if filters.get('floor_min', 0) > 0 and '實際樓層' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            # 只篩選有效樓層資料
+                            filtered_df = filtered_df[
+                                (filtered_df['實際樓層'].notna()) & 
+                                (filtered_df['實際樓層'] >= filters['floor_min'])
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"樓層>={filters['floor_min']}樓: {before_count} → {after_count}")
+                        
+                        # 樓層上限
+                        if filters.get('floor_max', 0) > 0 and '實際樓層' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            # 只篩選有效樓層資料
+                            filtered_df = filtered_df[
+                                (filtered_df['實際樓層'].notna()) & 
+                                (filtered_df['實際樓層'] <= filters['floor_max'])
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"樓層<={filters['floor_max']}樓: {before_count} → {after_count}")
+                        # ============================
                         
                         # 車位篩選
                         if 'car_grip' in filters and '車位' in filtered_df.columns:
