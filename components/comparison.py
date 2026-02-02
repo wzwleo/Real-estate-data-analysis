@@ -43,12 +43,16 @@ class ComparisonAnalyzer:
             st.info("⭐ 尚未有收藏房產，無法分析")
             return
         
+        # 初始化 session state 變數
+        self._init_session_state()
+        
         # 模式選擇 - 兩種模式
         analysis_mode = st.radio(
             "選擇分析模式",
             ["單一房屋分析", "多房屋比較"],
             horizontal=True,
-            key="analysis_mode"
+            key="analysis_mode",
+            on_change=self._clear_selections_on_mode_change
         )
         
         options = fav_df['標題'] + " | " + fav_df['地址']
@@ -56,10 +60,18 @@ class ComparisonAnalyzer:
         
         if analysis_mode == "單一房屋分析":
             # 單一房屋分析模式
-            choice_single = st.selectbox("選擇要分析的房屋", options, key="compare_single")
+            default_index = 0
+            if "last_single_selection" in st.session_state:
+                try:
+                    default_index = list(options).index(st.session_state.last_single_selection)
+                except:
+                    default_index = 0
+            
+            choice_single = st.selectbox("選擇要分析的房屋", options, key="compare_single", index=default_index)
             
             if choice_single:
                 selected_houses = [choice_single]
+                st.session_state.last_single_selection = choice_single
                 
                 # 顯示選擇的房屋資訊
                 house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice_single].iloc[0]
@@ -87,12 +99,26 @@ class ComparisonAnalyzer:
                 
         else:  # 多房屋比較
             # 多房屋比較模式
+            default_selections = []
+            if "last_multi_selections" in st.session_state:
+                # 只保留仍然存在的選項
+                for selection in st.session_state.last_multi_selections:
+                    if selection in list(options):
+                        default_selections.append(selection)
+            
+            # 確保至少有1個預設選擇
+            if not default_selections and len(options) > 0:
+                default_selections = options[:min(1, len(options))]
+            
             selected_houses = st.multiselect(
                 "選擇要比較的房屋（可選1個或多個）",
                 options,
-                default=options[:min(3, len(options))] if len(options) >= 1 else [],
+                default=default_selections,
                 key="multi_compare"
             )
+            
+            if selected_houses:
+                st.session_state.last_multi_selections = selected_houses
             
             if not selected_houses:
                 st.warning("⚠️ 請至少選擇1個房屋")
@@ -364,9 +390,12 @@ class ComparisonAnalyzer:
         with col_clear:
             if st.button("🗑️ 清除結果", type="secondary", use_container_width=True, key="clear_results"):
                 # 清除所有相關的 session state
-                keys_to_clear = ['analysis_settings', 'analysis_results', 'analysis_in_progress',
-                               'gemini_result', 'gemini_key', 'places_data', 'houses_data', 
-                               'custom_prompt', 'used_prompt', 'selected_template', 'last_template']
+                keys_to_clear = [
+                    'analysis_settings', 'analysis_results', 'analysis_in_progress',
+                    'gemini_result', 'gemini_key', 'places_data', 'houses_data', 
+                    'custom_prompt', 'used_prompt', 'selected_template', 'last_template',
+                    'last_single_selection', 'last_multi_selections', 'current_page'
+                ]
                 for key in keys_to_clear:
                     if key in st.session_state:
                         del st.session_state[key]
@@ -465,6 +494,30 @@ class ComparisonAnalyzer:
         if "analysis_results" in st.session_state:
             self._display_analysis_results(st.session_state.analysis_results)
     
+    def _init_session_state(self):
+        """初始化 session state 變數"""
+        if "analysis_mode" not in st.session_state:
+            st.session_state.analysis_mode = "單一房屋分析"
+        
+        if "last_single_selection" not in st.session_state:
+            st.session_state.last_single_selection = None
+        
+        if "last_multi_selections" not in st.session_state:
+            st.session_state.last_multi_selections = []
+        
+        if "current_page" not in st.session_state:
+            st.session_state.current_page = 1
+    
+    def _clear_selections_on_mode_change(self):
+        """當模式變更時清除相關選擇"""
+        # 當分析模式改變時，清除某些選項
+        if "selected_template" in st.session_state:
+            st.session_state.selected_template = "default"
+        
+        # 清除分頁狀態
+        if "current_page" in st.session_state:
+            st.session_state.current_page = 1
+    
     def _create_facilities_table(self, houses_data, places_data):
         """建立設施表格資料"""
         all_facilities = []
@@ -525,26 +578,28 @@ class ComparisonAnalyzer:
             page_size = 50
             total_pages = max(1, (len(facilities_table) + page_size - 1) // page_size)
             
+            # 初始化分頁狀態
+            if "current_page" not in st.session_state:
+                st.session_state.current_page = 1
+            
             # 分頁控制
             if total_pages > 1:
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col1:
                     if st.button("◀️ 上一頁", key="prev_page"):
-                        st.session_state.current_page = max(1, st.session_state.get("current_page", 1) - 1)
+                        if st.session_state.current_page > 1:
+                            st.session_state.current_page -= 1
                         st.rerun()
                 with col2:
-                    current_page = st.session_state.get("current_page", 1)
-                    st.write(f"第 {current_page}/{total_pages} 頁")
+                    st.write(f"第 {st.session_state.current_page}/{total_pages} 頁")
                 with col3:
                     if st.button("下一頁 ▶️", key="next_page"):
-                        st.session_state.current_page = min(total_pages, st.session_state.get("current_page", 1) + 1)
+                        if st.session_state.current_page < total_pages:
+                            st.session_state.current_page += 1
                         st.rerun()
-            else:
-                st.session_state.current_page = 1
             
             # 取得當前頁的資料
-            current_page = st.session_state.get("current_page", 1)
-            start_idx = (current_page - 1) * page_size
+            start_idx = (st.session_state.current_page - 1) * page_size
             end_idx = min(start_idx + page_size, len(facilities_table))
             
             # 顯示當前頁的表格
@@ -702,7 +757,7 @@ class ComparisonAnalyzer:
                 
                 st_echarts(chart_data, height="300px")
         
-        # 顯示地圖 - 關鍵修正
+        # 顯示地圖
         st.markdown("---")
         st.subheader("🗺️ 地圖檢視")
         
@@ -873,7 +928,7 @@ class ComparisonAnalyzer:
                     legendDiv.innerHTML = '<h4 style="margin-top:0; margin-bottom:10px;">設施類別圖例</h4>';
                     
                     // 圖例項目
-                    {self._generate_legend_html(categories)}
+                    {'\n'.join([f'legendDiv.innerHTML += \'<div class="legend-item"><div class="legend-color" style="background-color:{color};"></div><span>{cat}</span></div>\';' for cat, color in categories.items()])}
                     
                     map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
                     
@@ -975,18 +1030,6 @@ class ComparisonAnalyzer:
         
         # 顯示設施列表
         self._display_facilities_list(places)
-    
-    def _generate_legend_html(self, categories):
-        """生成圖例HTML"""
-        legend_items = []
-        for cat, color in categories.items():
-            legend_items.append(
-                f'legendDiv.innerHTML += \'<div class="legend-item">\' + '
-                f'\'<div class="legend-color" style="background-color:{color};"></div>\' + '
-                f'\'<span>{cat}</span>\' + '
-                f'\'</div>\';'
-            )
-        return '\n'.join(legend_items)
     
     def _display_facilities_list(self, places):
         """顯示設施列表"""
