@@ -274,7 +274,8 @@ def plot_space_efficiency_scatter(target_row, df):
                 f"總價：{row.get('總價(萬)', 0):.0f} 萬"
             )
         return hover_text
-    
+
+    max_area = max(df_filtered['建坪'].max(), df_filtered['主+陽'].max())
     # 建立散點圖
     fig = px.scatter(
         df_filtered,
