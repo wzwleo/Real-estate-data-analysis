@@ -204,7 +204,7 @@ class ComparisonAnalyzer:
             placeholder="例如：公園、健身房、銀行等"
         )
         
-        # 生活機能選擇
+        # 生活機能選擇 - 移除快速選擇，只保留自訂選擇
         st.markdown("---")
         st.subheader("🔍 選擇生活機能類別")
         
@@ -335,57 +335,10 @@ class ComparisonAnalyzer:
                 st.metric("價格差距", f"{price_diff:.1f}%")
     
     def _render_category_selection(self):
-        """渲染類別選擇界面"""
-        # 快速選擇模式
-        quick_mode = st.radio(
-            "選擇方式",
-            ["快速選擇（常用組合）", "自訂選擇"],
-            horizontal=True,
-            key="quick_mode_radio"
-        )
-        
+        """渲染類別選擇界面 - 移除快速選擇，只保留自訂選擇"""
         selected_categories = []
         selected_subtypes = {}
         
-        if quick_mode == "快速選擇（常用組合）":
-            selected_categories, selected_subtypes = self._render_preset_selection()
-        else:
-            selected_categories, selected_subtypes = self._render_custom_selection()
-        
-        return selected_categories, selected_subtypes
-    
-    def _render_preset_selection(self):
-        """渲染預設組合選擇"""
-        preset_options = {
-            "基礎生活圈": ["教育", "購物", "交通運輸", "健康與保健"],
-            "完整生活機能": ["教育", "購物", "交通運輸", "健康與保健", "餐飲美食", "生活服務"],
-            "家庭需求": ["教育", "購物", "健康與保健", "生活服務"],
-            "投資潛力": ["交通運輸", "購物", "餐飲美食"],
-            "退休養老": ["健康與保健", "生活服務", "餐飲美食"],
-            "上班族通勤": ["交通運輸", "餐飲美食", "購物"]
-        }
-        
-        selected_preset = st.selectbox(
-            "選擇預設組合",
-            list(preset_options.keys()),
-            key="preset_selection_select"
-        )
-        
-        selected_categories = []
-        selected_subtypes = {}
-        
-        if selected_preset:
-            selected_categories = preset_options[selected_preset]
-            for cat in selected_categories:
-                selected_subtypes[cat] = PLACE_TYPES[cat][1::2]
-            
-            st.success(f"✅ 已選擇「{selected_preset}」組合")
-            st.info(f"包含: {', '.join(selected_categories)}")
-        
-        return selected_categories, selected_subtypes
-    
-    def _render_custom_selection(self):
-        """渲染自訂選擇界面"""
         # 大類別選擇
         st.markdown("### 選擇大類別")
         all_categories = list(PLACE_TYPES.keys())
@@ -408,9 +361,6 @@ class ComparisonAnalyzer:
                 category_selection[cat] = st.checkbox(f"選擇{cat}", key=checkbox_key)
         
         # 細分設施選擇
-        selected_categories = []
-        selected_subtypes = {}
-        
         selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
         
         if selected_main_cats:
@@ -458,10 +408,30 @@ class ComparisonAnalyzer:
         st.subheader("📋 已選擇的設施摘要")
         
         # 檢查是否有分析結果可以顯示覆蓋情況
-        if "analysis_results" in st.session_state and "category_coverage" in st.session_state:
-            self._display_category_coverage(selected_categories, selected_subtypes)
-            return
+        if ("analysis_results" in st.session_state and 
+            "category_coverage" in st.session_state and 
+            st.session_state.category_coverage):
+            
+            # 檢查選取的房屋是否在覆蓋記錄中
+            if "selected_houses" in st.session_state and st.session_state.selected_houses:
+                # 取得分析結果
+                results = st.session_state.analysis_results
+                houses_data = results.get("houses_data", {})
+                
+                if houses_data:
+                    # 取得第一個房屋名稱
+                    house_name = list(houses_data.keys())[0]
+                    
+                    # 檢查該房屋是否有覆蓋記錄
+                    if house_name in st.session_state.category_coverage:
+                        self._display_category_coverage(selected_categories, selected_subtypes)
+                        return
         
+        # 如果沒有分析結果，顯示基本的選擇摘要
+        self._display_basic_selection_summary(selected_categories, selected_subtypes)
+    
+    def _display_basic_selection_summary(self, selected_categories, selected_subtypes):
+        """顯示基本的選擇摘要"""
         # 使用網格布局顯示摘要
         num_cols = min(len(selected_categories), 4)
         summary_cols = st.columns(num_cols)
@@ -494,10 +464,13 @@ class ComparisonAnalyzer:
                             chinese_names.append(chinese_name)
                         items_display = "、".join(chinese_names)
                         st.caption(f"✓ {items_display}等{count}種設施")
+        
+        st.info("🔍 分析完成後，此處將顯示各類別設施的查詢結果（找到/未找到）")
     
     def _display_category_coverage(self, selected_categories, selected_subtypes):
         """顯示類別覆蓋情況"""
         st.markdown("### 📊 各類別設施查詢結果")
+        st.markdown("以下是您選擇的設施類別在搜尋半徑內的查詢結果：")
         
         category_coverage = st.session_state.get("category_coverage", {})
         
@@ -508,7 +481,11 @@ class ComparisonAnalyzer:
         # 為每個房屋顯示覆蓋情況
         if "analysis_results" in st.session_state:
             results = st.session_state.analysis_results
-            houses_data = results["houses_data"]
+            houses_data = results.get("houses_data", {})
+            
+            if not houses_data:
+                st.warning("⚠️ 沒有房屋資料")
+                return
             
             # 單一房屋或多房屋
             if results["num_houses"] == 1 or results["analysis_mode"] == "單一房屋分析":
@@ -521,6 +498,8 @@ class ComparisonAnalyzer:
                 for idx, house_name in enumerate(houses_data.keys()):
                     with coverage_tabs[idx]:
                         self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+        else:
+            st.warning("⚠️ 沒有分析結果可用")
     
     def _display_single_house_coverage(self, house_name, selected_categories, selected_subtypes, category_coverage):
         """顯示單一房屋的類別覆蓋情況"""
@@ -538,18 +517,30 @@ class ComparisonAnalyzer:
         
         for cat in selected_categories:
             if cat in selected_subtypes and cat in house_coverage:
-                total_selected += len(selected_subtypes[cat])
-                total_found += sum(1 for found in house_coverage[cat].values() if found)
+                cat_selected = len(selected_subtypes[cat])
+                cat_found = 0
+                
+                # 計算該類別找到的設施數量
+                for subtype in selected_subtypes[cat]:
+                    if subtype in house_coverage[cat]:
+                        if house_coverage[cat][subtype]:
+                            cat_found += 1
+                
+                total_selected += cat_selected
+                total_found += cat_found
         
         overall_coverage = (total_found / total_selected * 100) if total_selected > 0 else 0
         
-        col1, col2, col3 = st.columns(3)
-        with col1:
+        # 顯示總體統計
+        stat_col1, stat_col2, stat_col3 = st.columns(3)
+        with stat_col1:
             st.metric("選擇設施數", total_selected)
-        with col2:
+        with stat_col2:
             st.metric("找到設施數", total_found)
-        with col3:
+        with stat_col3:
             st.metric("覆蓋率", f"{overall_coverage:.1f}%")
+        
+        st.markdown("---")
         
         # 顯示各類別詳細情況
         for cat in selected_categories:
@@ -558,17 +549,34 @@ class ComparisonAnalyzer:
             
             color = CATEGORY_COLORS.get(cat, "#000000")
             subtype_count = len(selected_subtypes[cat])
-            found_count = sum(1 for found in house_coverage[cat].values() if found)
+            found_count = 0
+            
+            # 計算找到的設施數量
+            for subtype in selected_subtypes[cat]:
+                if subtype in house_coverage[cat] and house_coverage[cat][subtype]:
+                    found_count += 1
+            
             cat_coverage = (found_count / subtype_count * 100) if subtype_count > 0 else 0
             
-            with st.expander(f"{cat} 類別覆蓋情況 ({found_count}/{subtype_count} - {cat_coverage:.1f}%)", expanded=True):
-                # 顯示進度條
+            # 使用容器顯示類別資訊
+            with st.container():
+                # 標題和統計
+                col_title, col_stats = st.columns([3, 1])
+                with col_title:
+                    st.markdown(f"<h4 style='color:{color};'>{cat}</h4>", unsafe_allow_html=True)
+                with col_stats:
+                    st.markdown(f"**{found_count}/{subtype_count}**")
+                
+                # 進度條
                 st.progress(cat_coverage / 100)
                 
                 # 顯示每個子類別的情況
                 for english_kw in selected_subtypes[cat]:
                     chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
-                    found = house_coverage[cat].get(english_kw, False)
+                    found = False
+                    
+                    if english_kw in house_coverage[cat]:
+                        found = house_coverage[cat][english_kw]
                     
                     col_status, col_name = st.columns([1, 5])
                     with col_status:
@@ -578,6 +586,8 @@ class ComparisonAnalyzer:
                             st.error("❌")
                     with col_name:
                         st.text(chinese_name)
+                
+                st.markdown("---")
     
     def _render_action_buttons(self, analysis_mode, selected_houses, selected_categories, 
                               radius, keyword, selected_subtypes, fav_df):
@@ -806,11 +816,13 @@ class ComparisonAnalyzer:
         """查詢Google Places並記錄類別覆蓋情況"""
         results, seen = [], set()
         
-        # 初始化覆蓋記錄
+        # 初始化覆蓋記錄 - 確保格式正確
         category_coverage = {}
         for cat in selected_categories:
             if cat in selected_subtypes:
-                category_coverage[cat] = {subtype: False for subtype in selected_subtypes[cat]}
+                category_coverage[cat] = {}
+                for subtype in selected_subtypes[cat]:
+                    category_coverage[cat][subtype] = False
         
         total_tasks = 0
         for cat in selected_categories:
@@ -1328,7 +1340,7 @@ class ComparisonAnalyzer:
                     map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
                     
                     // 添加設施標記
-                    var facilities = {json.dumps(facilities_data, ensure_allow_html=False)};
+                    var facilities = {json.dumps(facilities_data, ensure_ascii=False)};
                     
                     facilities.forEach(function(facility) {{
                         var position = {{lat: facility.lat, lng: facility.lng}};
