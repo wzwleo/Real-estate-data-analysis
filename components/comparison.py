@@ -507,38 +507,6 @@ class ComparisonAnalyzer:
         
         if "current_page" not in st.session_state:
             st.session_state.current_page = 1
-        
-        # 確保 current_page 是整數
-        self._ensure_page_number_is_int()
-    
-    def _ensure_page_number_is_int(self):
-        """確保 current_page 是整數"""
-        if "current_page" in st.session_state:
-            if isinstance(st.session_state.current_page, str):
-                try:
-                    st.session_state.current_page = int(st.session_state.current_page)
-                except (ValueError, TypeError):
-                    st.session_state.current_page = 1
-            elif not isinstance(st.session_state.current_page, int):
-                st.session_state.current_page = 1
-            
-            # 確保頁碼是正整數
-            if st.session_state.current_page < 1:
-                st.session_state.current_page = 1
-    
-    def _get_safe_page_number(self):
-        """安全地取得頁碼，確保返回整數"""
-        if "current_page" not in st.session_state:
-            return 1
-        
-        try:
-            # 嘗試轉換為整數
-            page_num = int(st.session_state.current_page)
-            # 確保頁碼是正整數
-            return max(1, page_num)
-        except (ValueError, TypeError):
-            # 如果轉換失敗，返回默認值
-            return 1
     
     def _clear_selections_on_mode_change(self):
         """當模式變更時清除相關選擇"""
@@ -614,52 +582,28 @@ class ComparisonAnalyzer:
             if "current_page" not in st.session_state:
                 st.session_state.current_page = 1
             
-            # 確保 current_page 是整數
-            self._ensure_page_number_is_int()
-            
             # 分頁控制
             if total_pages > 1:
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col1:
                     if st.button("◀️ 上一頁", key="prev_page"):
-                        # 確保 current_page 是整數
-                        current_page = self._get_safe_page_number()
-                        if current_page > 1:
-                            st.session_state.current_page = current_page - 1
+                        if st.session_state.current_page > 1:
+                            st.session_state.current_page -= 1
                         st.rerun()
                 with col2:
-                    # 確保顯示的頁碼是整數
-                    current_page = self._get_safe_page_number()
-                    st.write(f"第 {current_page}/{total_pages} 頁")
+                    st.write(f"第 {st.session_state.current_page}/{total_pages} 頁")
                 with col3:
                     if st.button("下一頁 ▶️", key="next_page"):
-                        current_page = self._get_safe_page_number()
-                        if current_page < total_pages:
-                            st.session_state.current_page = current_page + 1
+                        if st.session_state.current_page < total_pages:
+                            st.session_state.current_page += 1
                         st.rerun()
             
-            # 取得當前頁的資料 - 確保 current_page 是整數
-            current_page = self._get_safe_page_number()
-            # 確保頁碼在有效範圍內
-            if current_page < 1:
-                current_page = 1
-                st.session_state.current_page = 1
-            if current_page > total_pages:
-                current_page = total_pages
-                st.session_state.current_page = total_pages
-            
-            # 修復：確保 current_page 是整數，再進行計算
-            current_page_int = int(current_page)
-            page_size_int = int(page_size)
-            
-            # 第602行：計算 start_idx - 現在使用整數
-            start_idx = (current_page_int - 1) * page_size_int
-            end_idx = min(start_idx + page_size_int, len(facilities_table))
+            # 取得當前頁的資料
+            start_idx = (st.session_state.current_page - 1) * page_size
+            end_idx = min(start_idx + page_size, len(facilities_table))
             
             # 顯示當前頁的表格
             current_df = facilities_table.iloc[start_idx:end_idx]
-        
-        # ... 其餘程式碼保持不變 ...
             
             # 使用 Streamlit 的 dataframe 顯示
             st.dataframe(
