@@ -862,7 +862,7 @@ def tab1_module():
                     compare_base_df = st.session_state.all_properties_df
                 elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
                     compare_base_df = st.session_state.filtered_df
-                markdown("### 📌 屋齡分析結論")
+                st.markdown("### 📌 屋齡分析結論")
                 st.write(age_response.text)
                 if not compare_base_df.empty:
                     plot_age_distribution(selected_row, compare_base_df)
