@@ -117,7 +117,7 @@ def plot_age_distribution(target_row, df):
     
     # 設定 layout
     fig.update_layout(
-        title=f"{target_district} 包含「{target_type_main}」屋齡分布 (共 {len(df_filtered_age)} 筆)",
+        title=f"{target_district} 包含「{target_type_main}」的房型 屋齡分布 (共 {len(df_filtered_age)} 筆)",
         xaxis_title="屋齡範圍 (年)",
         yaxis_title="房屋數量",
         bargap=0.3,
@@ -728,10 +728,79 @@ def tab1_module():
                     分析數據如下：
                     {json.dumps(floor_area_payload, ensure_ascii=False, indent=2)}
                     """
+                    # ===============================
+                    # 屋齡分析
+                    # ===============================
+                    
+                    # 文字 -> 數字
+                    def parse_age(x):
+                        if pd.isna(x):
+                            return np.nan
+                        match = re.search(r"(\d+\.?\d*)", str(x))
+                        if match:
+                            return float(match.group(1))
+                        return np.nan
+                    
+                    # 為比較資料集添加屋齡數值
+                    compare_df['屋齡數值'] = compare_df['屋齡'].apply(parse_age)
+                    
+                    # 取得目標屋齡
+                    target_age = parse_age(selected_row['屋齡'])
+                    
+                    # 移除 NaN 值
+                    df_filtered_age = compare_df.dropna(subset=['屋齡數值'])
+                    
+                    median_age = df_filtered_age['屋齡數值'].median()
+                    mean_age = df_filtered_age['屋齡數值'].mean()
+                    min_age = df_filtered_age['屋齡數值'].min()
+                    max_age = df_filtered_age['屋齡數值'].max()
+                    age_percentile = (df_filtered_age['屋齡數值'] < target_age).sum() / len(df_filtered_age) * 100
+                    
+                    # 簡單分類
+                    if age_percentile <= 33:
+                        age_category = "偏新"
+                    elif age_percentile <= 66:
+                        age_category = "主流"
+                    else:
+                        age_category = "偏舊"
+                    
+                    age_analysis_payload = {
+                        "區域": target_district,
+                        "房屋類型": target_type,
+                        "比較樣本數": len(df_filtered_age),
+                        
+                        "目標房屋": {
+                            "屋齡(年)": round(target_age, 1)
+                        },
+                        
+                        "屋齡分布": {
+                            "屋齡百分位": round(age_percentile, 1),
+                            "屋齡評估": age_category,
+                            "新於物件比例(%)": round(100 - age_percentile, 1),
+                            "同區平均屋齡(年)": round(mean_age, 1),
+                            "同區中位數屋齡(年)": round(median_age, 1),
+                            "屋齡範圍": f"{min_age:.1f} ~ {max_age:.1f} 年",
+                            "與中位數差距(年)": round(target_age - median_age, 1)
+                        }
+                    }
+                    age_prompt = f"""
+                    以下是「已經計算完成」的屋齡分析數據（JSON），
+                    請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                    
+                    請用繁體中文完成三件事：
+                    1️⃣ 評價該房屋的屋齡狀態（{age_analysis_payload['屋齡分布']['屋齡評估']}）
+                    2️⃣ 說明屋齡對房屋價值和維護成本的影響
+                    3️⃣ 提供屋齡方面的購屋建議（是否適合、需注意事項）
+                    
+                    屋齡分析數據如下：
+                    {json.dumps(age_analysis_payload, ensure_ascii=False, indent=2)}
+                    """
                 
+                        
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
                     # price_response = model.generate_content(price_prompt)
                     # space_response = model.generate_content(space_prompt)
+                    age_response = model.generate_content(age_prompt)
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
@@ -793,11 +862,10 @@ def tab1_module():
                     compare_base_df = st.session_state.all_properties_df
                 elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
                     compare_base_df = st.session_state.filtered_df
-                
+                markdown("### 📌 屋齡分析結論")
+                st.write(age_response.text)
                 if not compare_base_df.empty:
-                    with st.spinner("📊 正在計算屋齡分布..."):
-                        # 呼叫屋齡分布圖表函式
-                        plot_age_distribution(selected_row, compare_base_df)
+                    plot_age_distribution(selected_row, compare_base_df)
                 else:
                     st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
