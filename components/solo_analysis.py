@@ -6,6 +6,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import json
 import re
+import numpy as np
 
 # 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
@@ -17,17 +18,8 @@ reverse_name_map = {v: k for k, v in name_map.items()}
 def plot_age_distribution(target_row, df):
     """
     繪製同區同類型屋齡分布直方圖
-    
-    Parameters:
-    -----------
-    target_row : pd.Series
-        目標房型的資料列
-    df : pd.DataFrame
-        包含所有房產資料的 DataFrame
     """
-    import re
-    import numpy as np
-    import plotly.graph_objects as go
+
     
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
@@ -119,45 +111,22 @@ def plot_age_distribution(target_row, df):
             marker=dict(color="red", size=15, symbol="star"),
             text=["目標房屋"],
             textposition="top center",
-            showlegend=False
+            name="目標房屋", 
+            showlegend=True
         ))
     
     # 設定 layout
     fig.update_layout(
-        title=f"{target_district} 包含「{target_type_main}」屋齡分布 (每 {bin_width} 年一箱，共 {len(df_filtered_age)} 筆)",
+        title=f"{target_district} 包含「{target_type_main}」屋齡分布 (共 {len(df_filtered_age)} 筆)",
         xaxis_title="屋齡範圍 (年)",
         yaxis_title="房屋數量",
         bargap=0.3,
         template="plotly_white",
-        width=500,
+        width=600,
         height=500
     )
     
     st.plotly_chart(fig, use_container_width=True)
-    
-    # 儲存屋齡分析數據到 session_state 供 AI 使用
-    age_percentile = (ages < target_age).sum() / len(ages) * 100
-    median_age = np.median(ages)
-    mean_age = np.mean(ages)
-    
-    st.session_state.age_analysis = {
-        "區域": target_district,
-        "房屋類型": target_type_main,
-        "比較樣本數": len(df_filtered_age),
-        
-        "目標房屋": {
-            "屋齡(年)": round(target_age, 1)
-        },
-        
-        "屋齡分布": {
-            "屋齡百分位": round(age_percentile, 1),
-            "新於物件比例(%)": round(100 - age_percentile, 1),
-            "同區平均屋齡(年)": round(mean_age, 1),
-            "同區中位數屋齡(年)": round(median_age, 1),
-            "與中位數差距(年)": round(target_age - median_age, 1)
-        }
-    }
-    
 
 def plot_price_scatter(target_row, df):
     """
