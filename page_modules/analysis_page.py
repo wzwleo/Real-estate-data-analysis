@@ -24,17 +24,48 @@ import_success = False
 try:
     # 嘗試導入個別分析模組
     from components.solo_analysis import tab1_module
+    
     # 嘗試導入比較模組
     from components.comparison import ComparisonAnalyzer
-    # 嘗試導入市場趨勢分析（如果存在）
+    
+    # 嘗試導入市場趨勢分析（改為嘗試不同名稱）
+    MARKET_TREND_AVAILABLE = False
+    MarketTrendAnalyzer = None
+    
+    # 嘗試不同可能的模組名稱
     try:
-        from components.market_trend import MarketTrendAnalyzer
+        from components.market_trend import CompleteMarketTrendAnalyzer
+        MarketTrendAnalyzer = CompleteMarketTrendAnalyzer
         MARKET_TREND_AVAILABLE = True
-    except ImportError:
-        MARKET_TREND_AVAILABLE = False
-        st.warning("市場趨勢分析模組不可用")
+        st.sidebar.success("✅ 市場趨勢模組載入成功")
+    except ImportError as e1:
+        try:
+            # 嘗試另一個可能的類別名稱
+            from components.market_trend import MarketTrendAnalyzer
+            MARKET_TREND_AVAILABLE = True
+            st.sidebar.success("✅ 市場趨勢模組載入成功")
+        except ImportError as e2:
+            try:
+                # 嘗試直接導入
+                import components.market_trend as market_trend_module
+                # 檢查模組中是否有可用的類別
+                if hasattr(market_trend_module, 'CompleteMarketTrendAnalyzer'):
+                    MarketTrendAnalyzer = market_trend_module.CompleteMarketTrendAnalyzer
+                    MARKET_TREND_AVAILABLE = True
+                elif hasattr(market_trend_module, 'MarketTrendAnalyzer'):
+                    MarketTrendAnalyzer = market_trend_module.MarketTrendAnalyzer
+                    MARKET_TREND_AVAILABLE = True
+                elif hasattr(market_trend_module, 'main'):
+                    # 如果是函數式模組
+                    MarketTrendAnalyzer = market_trend_module
+                    MARKET_TREND_AVAILABLE = True
+                st.sidebar.success("✅ 市場趨勢模組載入成功")
+            except ImportError as e3:
+                MARKET_TREND_AVAILABLE = False
+                st.sidebar.warning(f"市場趨勢分析模組導入嘗試失敗：{e1} | {e2} | {e3}")
     
     import_success = True
+    
 except ImportError as e:
     st.error(f"導入模組失敗: {e}")
     import traceback
@@ -52,6 +83,7 @@ def render_analysis_page():
         st.info("請確保以下模組存在：")
         st.info("1. components/solo_analysis.py")
         st.info("2. components/comparison.py")
+        st.info("3. components/market_trend.py")
         return
     
     # 初始化 session state
@@ -82,10 +114,26 @@ def render_analysis_page():
     
     # Tab3: 市場趨勢分析
     with tab3:
-        if MARKET_TREND_AVAILABLE:
+        if MARKET_TREND_AVAILABLE and MarketTrendAnalyzer:
             try:
-                analyzer = MarketTrendAnalyzer()
-                analyzer.render_analysis_tab()
+                # 根據類別類型執行
+                if callable(MarketTrendAnalyzer):
+                    # 如果是類別
+                    analyzer_instance = MarketTrendAnalyzer()
+                    
+                    # 檢查是否有 render_complete_dashboard 方法
+                    if hasattr(analyzer_instance, 'render_complete_dashboard'):
+                        analyzer_instance.render_complete_dashboard()
+                    elif hasattr(analyzer_instance, 'render_analysis_tab'):
+                        analyzer_instance.render_analysis_tab()
+                    elif hasattr(analyzer_instance, 'main'):
+                        analyzer_instance.main()
+                    else:
+                        st.error("市場趨勢分析模組沒有可用的渲染方法")
+                else:
+                    # 如果是函數式模組
+                    MarketTrendAnalyzer.main()
+                    
             except Exception as e:
                 st.error(f"市場趨勢分析模組錯誤: {e}")
                 import traceback
@@ -95,66 +143,24 @@ def render_analysis_page():
             st.subheader("📈 市場趨勢分析")
             st.info("完整市場趨勢分析功能正在開發中")
             
-            # 載入不動產資料
-            data_load_state = st.info("正在載入資料...")
-            
-            # 嘗試載入資料
-            try:
-                # 修正路徑：從當前目錄的上一層開始
-                data_dir = os.path.join(current_dir, "..")
-                csv_files = [
-                    f for f in os.listdir(data_dir) 
-                    if f.startswith("合併後不動產統計_") and f.endswith(".csv")
-                ]
+            # 顯示如何解決問題
+            with st.expander("🔧 如何啟用完整功能？", expanded=True):
+                st.markdown("""
+                ### 請確保以下設定：
+                1. **檔案位置**：`components/market_trend.py` 檔案存在
+                2. **檔案內容**：包含 `CompleteMarketTrendAnalyzer` 或 `MarketTrendAnalyzer` 類別
+                3. **必要套件**：已安裝以下套件：
+                   ```bash
+                   pip install plotly streamlit-echarts google-generativeai
+                   ```
+                4. **類別名稱**：檢查檔案中的類別名稱
+                """)
                 
-                if csv_files:
-                    df_list = []
-                    for file in csv_files[:3]:  # 最多載入3個檔案
-                        file_path = os.path.join(data_dir, file)
-                        try:
-                            df = pd.read_csv(file_path, encoding='utf-8')
-                            df_list.append(df)
-                        except:
-                            try:
-                                df = pd.read_csv(file_path, encoding='big5')
-                                df_list.append(df)
-                            except Exception as e:
-                                st.warning(f"無法讀取 {file}: {e}")
-                    
-                    if df_list:
-                        combined_df = pd.concat(df_list, ignore_index=True)
-                        st.session_state.all_properties_df = combined_df
-                        
-                        data_load_state.success(f"✅ 已載入 {len(combined_df)} 筆資料")
-                        
-                        # 顯示基本統計
-                        st.subheader("📊 資料總覽")
-                        col1, col2, col3, col4 = st.columns(4)
-                        with col1:
-                            st.metric("總資料筆數", len(combined_df))
-                        with col2:
-                            if '縣市' in combined_df.columns:
-                                st.metric("縣市數量", combined_df['縣市'].nunique())
-                        with col3:
-                            if '行政區' in combined_df.columns:
-                                st.metric("行政區數量", combined_df['行政區'].nunique())
-                        with col4:
-                            if '民國年' in combined_df.columns:
-                                years = combined_df['民國年'].unique()
-                                st.metric("資料年份", f"{len(years)} 年")
-                        
-                        # 顯示資料預覽
-                        with st.expander("📂 查看資料預覽"):
-                            st.dataframe(combined_df.head(10))
-                    else:
-                        st.warning("無法載入任何CSV檔案")
-                else:
-                    st.warning("找不到不動產統計CSV檔案")
-                    
-            except Exception as e:
-                st.error(f"載入資料時發生錯誤: {e}")
+                # 提供快速修復選項
+                if st.button("🔄 重新嘗試載入模組"):
+                    st.rerun()
 
 
 # 如果直接執行此檔案
 if __name__ == "__main__":
-    render_analysis_page()  
+    render_analysis_page()
