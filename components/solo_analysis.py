@@ -17,9 +17,11 @@ reverse_name_map = {v: k for k, v in name_map.items()}
 
 def plot_age_distribution(target_row, df):
     """
-    繪製同區同類型屋齡分布直方圖
+    繪製同區同類型屋齡分布直方圖（含建坪單價趨勢線）
     """
-
+    import re
+    import numpy as np
+    import plotly.graph_objects as go
     
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
@@ -90,43 +92,111 @@ def plot_age_distribution(target_row, df):
     # 計算每個箱子數量
     hist, bin_edges = np.histogram(ages, bins=bins)
     
-    # 建立長條圖
+    # ========== 計算每個屋齡區間的平均建坪單價 ==========
+    df_filtered_age['屋齡區間'] = pd.cut(
+        df_filtered_age['屋齡數值'], 
+        bins=bins, 
+        labels=[f"{int(bin_edges[i])}-{int(bin_edges[i+1])} 年" for i in range(len(hist))],
+        include_lowest=True
+    )
+    
+    # 確保有總價和建坪欄位
+    if '總價(萬)' in df_filtered_age.columns:
+        df_filtered_age['總價'] = pd.to_numeric(df_filtered_age['總價(萬)'], errors='coerce')
+    elif '總價' in df_filtered_age.columns:
+        df_filtered_age['總價'] = pd.to_numeric(df_filtered_age['總價'], errors='coerce')
+    else:
+        df_filtered_age['總價'] = 0
+    
+    if '建坪' in df_filtered_age.columns:
+        df_filtered_age['建坪數值'] = pd.to_numeric(df_filtered_age['建坪'], errors='coerce')
+    elif '建物面積' in df_filtered_age.columns:
+        df_filtered_age['建坪數值'] = pd.to_numeric(df_filtered_age['建物面積'], errors='coerce')
+    else:
+        df_filtered_age['建坪數值'] = 0
+    
+    # 過濾有效資料
+    df_valid = df_filtered_age[(df_filtered_age['總價'] > 0) & (df_filtered_age['建坪數值'] > 0)].copy()
+    df_valid['建坪單價'] = df_valid['總價'] / df_valid['建坪數值']
+    
+    # 計算每個區間的平均建坪單價
+    avg_price_per_age = df_valid.groupby('屋齡區間', observed=True)['建坪單價'].mean()
+    
+    # ========== 建立圖表 ==========
     fig = go.Figure()
     
+    # 屋齡分布長條圖
+    x_labels = [f"{int(bin_edges[i])}-{int(bin_edges[i+1])} 年" for i in range(len(hist))]
+    
     fig.add_trace(go.Bar(
-        x=[f"{int(bin_edges[i])}-{int(bin_edges[i+1])} 年" for i in range(len(hist))],
+        x=x_labels,
         y=hist,
         marker=dict(color='lightblue', line=dict(color='black', width=1)),
-        name="屋齡分布"
+        name="屋齡分布",
+        yaxis='y'
     ))
     
     # 標記目標房屋
     target_bin_index = np.digitize(target_age, bins) - 1
-    # 確保 target_bin_index 在有效範圍內
     if 0 <= target_bin_index < len(hist):
         fig.add_trace(go.Scatter(
-            x=[f"{int(bin_edges[target_bin_index])}-{int(bin_edges[target_bin_index+1])} 年"],
+            x=[x_labels[target_bin_index]],
             y=[hist[target_bin_index]],
             mode="markers+text",
             marker=dict(color="red", size=15, symbol="star"),
             text=["目標房屋"],
             textposition="top center",
             name="目標房屋", 
-            showlegend=True
+            showlegend=True,
+            yaxis='y'
         ))
     
-    # 設定 layout
+    # 加上建坪單價折線（使用次座標軸）
+    y_price = [avg_price_per_age.get(label, None) for label in x_labels]
+    
+    fig.add_trace(go.Scatter(
+        x=x_labels,
+        y=y_price,
+        mode='lines+markers',
+        line=dict(color='orange', width=2),
+        marker=dict(size=8, color='orange'),
+        name='平均建坪單價',
+        yaxis='y2',
+        hovertemplate='<b>%{x}</b><br>平均建坪單價: %{y:.2f} 萬/坪<extra></extra>'
+    ))
+    
+    # 設定 layout（雙 Y 軸）
     fig.update_layout(
-        title=f"{target_district} 包含「{target_type_main}」的房型 屋齡分布 (共 {len(df_filtered_age)} 筆)",
+        title=f"{target_district} 包含「{target_type_main}」的房型 屋齡分布與單價趨勢 (共 {len(df_filtered_age)} 筆)",
         xaxis_title="屋齡範圍 (年)",
-        yaxis_title="房屋數量",
+        yaxis=dict(
+            title="房屋數量",
+            side='left',
+            showgrid=True,
+            gridcolor='whitesmoke'
+        ),
+        yaxis2=dict(
+            title="平均建坪單價 (萬/坪)",
+            overlaying='y',
+            side='right',
+            showgrid=False
+        ),
         bargap=0.3,
         template="plotly_white",
         width=600,
-        height=500
+        height=500,
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
     )
     
     st.plotly_chart(fig, use_container_width=True)
+    
 
 def plot_price_scatter(target_row, df):
     """
