@@ -696,11 +696,11 @@ def tab1_module():
                     
                     # 確保數值欄位
                     compare_df['總價'] = pd.to_numeric(compare_df['總價(萬)'], errors='coerce')
-                    compare_df['實際坪數'] = pd.to_numeric(compare_df['主+陽'], errors='coerce')
-                    compare_df = compare_df.dropna(subset=['總價', '實際坪數'])
+                    compare_df['建坪數'] = pd.to_numeric(compare_df['建坪'], errors='coerce')
+                    compare_df = compare_df.dropna(subset=['總價', '建坪數'])
                     
                     target_price = float(selected_row['總價(萬)'])
-                    target_area = float(selected_row['主+陽'])
+                    target_area = float(selected_row['建坪'])
                     price_per_ping = round(target_price / target_area, 2)
                     
                     # 價格百分位
@@ -732,7 +732,7 @@ def tab1_module():
                     
                         "目標房屋": {
                             "總價(萬)": target_price,
-                            "實際坪數": target_area,
+                            "建坪": target_area,
                             "單價(萬/坪)": price_per_ping
                         },
                     
@@ -980,10 +980,10 @@ def tab1_module():
                 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    # price_response = model.generate_content(price_prompt)
+                    price_response = model.generate_content(price_prompt)
                     # space_response = model.generate_content(space_prompt)
-                    #age_response = model.generate_content(age_prompt)
-                    price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    # age_response = model.generate_content(age_prompt)
+                    # price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
