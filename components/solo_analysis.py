@@ -477,8 +477,8 @@ def plot_space_efficiency_scatter(target_row, df):
         template='plotly_white',
         width=500,
         height=500,
-        xaxis=dict(range=[0, target_area*buffer], showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke'),
-        yaxis=dict(range=[0, target_area*buffer], showline=True, linewidth=1, linecolor='lightgrey', gridcolor='whitesmoke', scaleanchor="x", scaleratio=1),
+        xaxis=dict(range=[0, target_area*buffer], showline=True, linewidth=1, linecolor='white', mirror=True, gridcolor='whitesmoke'),
+        yaxis=dict(range=[0, target_area*buffer], showline=True, linewidth=1, linecolor='white', mirror=True, gridcolor='whitesmoke', scaleanchor="x", scaleratio=1),
         showlegend=True
     )
     
