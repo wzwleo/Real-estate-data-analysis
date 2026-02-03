@@ -820,54 +820,155 @@ def tab1_module():
                     # 移除 NaN 值
                     df_filtered_age = compare_df.dropna(subset=['屋齡數值'])
                     
-                    median_age = df_filtered_age['屋齡數值'].median()
-                    mean_age = df_filtered_age['屋齡數值'].mean()
-                    min_age = df_filtered_age['屋齡數值'].min()
-                    max_age = df_filtered_age['屋齡數值'].max()
-                    age_percentile = (df_filtered_age['屋齡數值'] < target_age).sum() / len(df_filtered_age) * 100
-                    
-                    # 依屋齡年數分類
-                    if target_age < 5:
-                        age_category = "新成屋"
-                    elif target_age <= 20:
-                        age_category = "中古屋"
-                    else:
-                        age_category = "老屋"
-                    
-                    age_analysis_payload = {
-                        "區域": target_district,
-                        "房屋類型": target_type,
-                        "比較樣本數": len(df_filtered_age),
+                    if len(df_filtered_age) > 0 and not pd.isna(target_age):
+                        # 基本統計
+                        median_age = df_filtered_age['屋齡數值'].median()
+                        mean_age = df_filtered_age['屋齡數值'].mean()
+                        min_age = df_filtered_age['屋齡數值'].min()
+                        max_age = df_filtered_age['屋齡數值'].max()
+                        age_percentile = (df_filtered_age['屋齡數值'] < target_age).sum() / len(df_filtered_age) * 100
                         
-                        "目標房屋": {
-                            "屋齡(年)": round(target_age, 1)
-                        },
+                        # 簡單分類
+                        if age_percentile <= 33:
+                            age_category = "偏新"
+                        elif age_percentile <= 66:
+                            age_category = "主流"
+                        else:
+                            age_category = "偏舊"
                         
-                        "屋齡分布": {
-                            "屋齡百分位": round(age_percentile, 1),
-                            "屋齡評估": age_category,
-                            "新於物件比例(%)": round(100 - age_percentile, 1),
-                            "同區平均屋齡(年)": round(mean_age, 1),
-                            "同區中位數屋齡(年)": round(median_age, 1),
-                            "屋齡範圍": f"{min_age:.1f} ~ {max_age:.1f} 年",
-                            "與中位數差距(年)": round(target_age - median_age, 1)
+                        # ========== 定義屋齡區間（bins） ==========
+                        bin_width = 5  # 每個區間 5 年
+                        bins = np.arange(0, max_age + bin_width, bin_width)
+                        
+                        # 為資料添加屋齡區間
+                        df_filtered_age['屋齡區間'] = pd.cut(
+                            df_filtered_age['屋齡數值'], 
+                            bins=bins, 
+                            include_lowest=True
+                        )
+                        
+                        # 確保有總價和建坪欄位
+                        if '總價(萬)' in df_filtered_age.columns:
+                            df_filtered_age['總價'] = pd.to_numeric(df_filtered_age['總價(萬)'], errors='coerce')
+                        elif '總價' in df_filtered_age.columns:
+                            df_filtered_age['總價'] = pd.to_numeric(df_filtered_age['總價'], errors='coerce')
+                        else:
+                            df_filtered_age['總價'] = 0
+                        
+                        if '建坪' in df_filtered_age.columns:
+                            df_filtered_age['建坪數值'] = pd.to_numeric(df_filtered_age['建坪'], errors='coerce')
+                        elif '建物面積' in df_filtered_age.columns:
+                            df_filtered_age['建坪數值'] = pd.to_numeric(df_filtered_age['建物面積'], errors='coerce')
+                        else:
+                            df_filtered_age['建坪數值'] = 0
+                        
+                        # 計算建坪單價
+                        df_valid_price = df_filtered_age[(df_filtered_age['總價'] > 0) & (df_filtered_age['建坪數值'] > 0)].copy()
+                        df_valid_price['建坪單價'] = df_valid_price['總價'] / df_filtered_age['建坪數值']
+                        
+                        # 目標房屋的建坪單價
+                        target_building_area = pd.to_numeric(selected_row.get('建坪', selected_row.get('建物面積', 0)), errors='coerce')
+                        target_building_price_per_ping = target_price / target_building_area if target_building_area > 0 else 0
+                        
+                        # 同屋齡區間的平均建坪單價
+                        avg_price_per_age_group = df_valid_price.groupby('屋齡區間', observed=True)['建坪單價'].mean()
+                        target_age_group = pd.cut([target_age], bins=bins, include_lowest=True)[0]
+                        same_age_avg_price = avg_price_per_age_group.get(target_age_group, np.nan)
+                        
+                        # 整體市場建坪單價統計
+                        overall_avg_building_price = df_valid_price['建坪單價'].mean()
+                        overall_median_building_price = df_valid_price['建坪單價'].median()
+                        
+                        # 單價隨屋齡的變化率（線性回歸斜率）
+                        from scipy import stats
+                        if len(df_valid_price) > 1:
+                            slope, intercept, r_value, p_value, std_err = stats.linregress(
+                                df_valid_price['屋齡數值'], 
+                                df_valid_price['建坪單價']
+                            )
+                            price_decline_per_year = slope  # 每增加1年屋齡，單價變化（通常為負值）
+                            correlation = r_value  # 相關係數
+                        else:
+                            price_decline_per_year = 0
+                            correlation = 0
+                        
+                        # 找出最高價和最低價的屋齡區間
+                        if len(avg_price_per_age_group) > 0:
+                            highest_price_age_group = avg_price_per_age_group.idxmax()
+                            lowest_price_age_group = avg_price_per_age_group.idxmin()
+                            highest_price_value = avg_price_per_age_group.max()
+                            lowest_price_value = avg_price_per_age_group.min()
+                            price_range_by_age = highest_price_value - lowest_price_value
+                        else:
+                            highest_price_age_group = None
+                            lowest_price_age_group = None
+                            highest_price_value = 0
+                            lowest_price_value = 0
+                            price_range_by_age = 0
+                        
+                        # 目標房屋在同屋齡區間的單價排名
+                        if not pd.isna(same_age_avg_price) and same_age_avg_price > 0:
+                            price_vs_same_age = target_building_price_per_ping - same_age_avg_price
+                            price_vs_same_age_pct = (price_vs_same_age / same_age_avg_price) * 100
+                        else:
+                            price_vs_same_age = 0
+                            price_vs_same_age_pct = 0
+                        
+                        # 建立 age_analysis_payload
+                        age_analysis_payload = {
+                            "區域": target_district,
+                            "房屋類型": target_type,
+                            "比較樣本數": len(df_filtered_age),
+                            
+                            "目標房屋": {
+                                "屋齡(年)": round(target_age, 1),
+                                "建坪單價(萬/坪)": round(target_building_price_per_ping, 2)
+                            },
+                            
+                            "屋齡分布": {
+                                "屋齡百分位": round(age_percentile, 1),
+                                "屋齡評估": age_category,
+                                "新於物件比例(%)": round(100 - age_percentile, 1),
+                                "同區平均屋齡(年)": round(mean_age, 1),
+                                "同區中位數屋齡(年)": round(median_age, 1),
+                                "屋齡範圍": f"{min_age:.1f} ~ {max_age:.1f} 年",
+                                "與中位數差距(年)": round(target_age - median_age, 1)
+                            },
+                            
+                            "建坪單價分析": {
+                                "同區平均建坪單價(萬/坪)": round(overall_avg_building_price, 2),
+                                "同區中位數建坪單價(萬/坪)": round(overall_median_building_price, 2),
+                                "同屋齡區間平均建坪單價(萬/坪)": round(same_age_avg_price, 2) if not pd.isna(same_age_avg_price) else "無資料",
+                                "與同屋齡區間差距(萬/坪)": round(price_vs_same_age, 2),
+                                "與同屋齡區間差距比例(%)": round(price_vs_same_age_pct, 1)
+                            },
+                            
+                            "單價與屋齡關聯": {
+                                "單價隨屋齡變化率(萬/坪/年)": round(price_decline_per_year, 3),
+                                "相關係數": round(correlation, 3),
+                                "最高單價屋齡區間": str(highest_price_age_group) if highest_price_age_group else "無資料",
+                                "最高單價(萬/坪)": round(highest_price_value, 2),
+                                "最低單價屋齡區間": str(lowest_price_age_group) if lowest_price_age_group else "無資料",
+                                "最低單價(萬/坪)": round(lowest_price_value, 2),
+                                "單價波動範圍(萬/坪)": round(price_range_by_age, 2)
+                            }
                         }
-                    }
-                    age_prompt = f"""
-                    以下是「已經計算完成」的屋齡分析數據（JSON），
-                    請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
-                    
-                    請用繁體中文完成三件事：
-                    1️⃣ 評價該房屋的屋齡狀態（{age_analysis_payload['屋齡分布']['屋齡評估']}）
-                    2️⃣ 說明屋齡對房屋價值和維護成本的影響
-                    3️⃣ 提供屋齡方面的購屋建議（是否適合、需注意事項）
-                    
-                    限制：
-                    - 這三件事每件不要超過50字 
-                    
-                    屋齡分析數據如下：
-                    {json.dumps(age_analysis_payload, ensure_ascii=False, indent=2)}
-                    """
+                        
+                        # ========== 優化的 Prompt ==========
+                        age_prompt = f"""
+                        以下是「已經計算完成」的屋齡分析數據（JSON），
+                        請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                        請用繁體中文完成以下分析（每項不超過 50 字）：
+                        1️⃣ **屋齡評估**：評價該房屋的屋齡狀態（{age_analysis_payload['屋齡分布']['屋齡評估']}）及在市場中的位置
+                        2️⃣ **價值分析**：
+                           - 說明該房屋建坪單價與同屋齡區間平均的比較
+                           - 解釋單價隨屋齡變化的趨勢（每年約變化 {price_decline_per_year:.2f} 萬/坪）
+                        3️⃣ **購屋建議**：
+                           - 屋齡帶來的維護成本考量
+                           - 是否適合購買及需注意事項
+                        屋齡分析數據如下：
+                        {json.dumps(age_analysis_payload, ensure_ascii=False, indent=2)}
+                        """
 
 
                 
@@ -875,10 +976,10 @@ def tab1_module():
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
                     # price_response = model.generate_content(price_prompt)
                     # space_response = model.generate_content(space_prompt)
-                    #age_response = model.generate_content(age_prompt)
+                    age_response = model.generate_content(age_prompt)
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    # age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
