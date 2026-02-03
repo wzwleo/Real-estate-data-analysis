@@ -1,6 +1,6 @@
 # components/market_trend_complete.py - 完整功能版（針對您資料結構優化）
 import streamlit as st
-imort pandas as pd
+import pandas as pd
 import numpy as np
 import os
 import sys
