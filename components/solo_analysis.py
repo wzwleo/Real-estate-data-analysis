@@ -768,6 +768,9 @@ def tab1_module():
                     # ===============================
                     # 坪數分析
                     # ===============================
+                    compare_df['實際坪數'] = pd.to_numeric(compare_df.get('主+陽', 0), errors='coerce')
+                    compare_df['建坪'] = pd.to_numeric(compare_df.get('建坪', 0), errors='coerce')
+                    
                     compare_df['空間使用率'] = compare_df['實際坪數'] / compare_df['建坪']
                     target_usage_rate = target_area / float(selected_row['建坪']) if selected_row['建坪'] > 0 else 0
                     usage_percentile = (compare_df['空間使用率'] < target_usage_rate).sum() / total_count * 100
