@@ -200,7 +200,7 @@ def plot_age_distribution(target_row, df):
 
 def plot_price_scatter(target_row, df):
     """
-    繪製同區同類型房價 vs 實際坪數散佈圖
+    繪製同區同類型房價 vs 建坪散佈圖
     
     Parameters:
     -----------
@@ -250,18 +250,24 @@ def plot_price_scatter(target_row, df):
         else:
             return f"{int(x)} 萬"
     
-    # hover info 統一函式
+    # hover info 統一函式（簡化版：只顯示名稱、建坪、總價、單價）
     def make_hover(df_input):
         hover_text = []
         for i, row in df_input.iterrows():
+            building_area = row.get('建坪', 0)
+            total_price = row.get('總價', 0)
+            
+            # 計算單坪價
+            if building_area > 0 and total_price > 0:
+                price_per_ping = total_price / building_area
+            else:
+                price_per_ping = 0
+            
             hover_text.append(
                 f"<b>{row.get('標題', '未知')}</b><br>"
-                f"地址：{row.get('地址', '未知')}<br>"
-                f"類型：{row.get('類型', '未知')}<br>"
-                f"樓層：{row.get('樓層', '未知')}<br>"
-                f"屋齡：{row.get('屋齡', '未知')} 年<br>"
-                f"實際坪數：{row.get('實際坪數', '未知')} 坪<br>"
-                f"總價：{format_price(row.get('總價', None))}"
+                f"建坪：{building_area:.2f} 坪<br>"
+                f"總價：{format_price(total_price)}<br>"
+                f"單坪價：{price_per_ping:.2f} 萬/坪"
             )
         return hover_text
     
@@ -271,32 +277,32 @@ def plot_price_scatter(target_row, df):
     
     # 欄位重新命名
     for df_temp in [target_df, others_df]:
-        if '建坪' in df_temp.columns and '建物面積' not in df_temp.columns:
-            df_temp.rename(columns={'建坪': '建物面積'}, inplace=True)
         if '總價(萬)' in df_temp.columns and '總價' not in df_temp.columns:
             df_temp.rename(columns={'總價(萬)': '總價'}, inplace=True)
+        if '建物面積' in df_temp.columns and '建坪' not in df_temp.columns:
+            df_temp.rename(columns={'建物面積': '建坪'}, inplace=True)
     
-    # 轉換數值欄位
-    target_df['實際坪數'] = pd.to_numeric(target_df.get('主+陽', [0]).iloc[0] if len(target_df) > 0 else 0, errors='coerce')
-    others_df['實際坪數'] = pd.to_numeric(others_df.get('主+陽', 0), errors='coerce')
+    # 轉換數值欄位（改用建坪）
+    target_df['建坪'] = pd.to_numeric(target_df.get('建坪', [0]).iloc[0] if len(target_df) > 0 else 0, errors='coerce')
+    others_df['建坪'] = pd.to_numeric(others_df.get('建坪', 0), errors='coerce')
     target_df['總價'] = pd.to_numeric(target_df.get('總價', [0]).iloc[0] if len(target_df) > 0 else 0, errors='coerce')
     others_df['總價'] = pd.to_numeric(others_df.get('總價', 0), errors='coerce')
     
     # 移除 NaN
-    others_df = others_df.dropna(subset=['實際坪數', '總價'])
+    others_df = others_df.dropna(subset=['建坪', '總價'])
     
     if others_df.empty:
         st.info(f"ℹ️ {target_district} 包含「{target_type}」沒有足夠的比較資料")
         return
     
-    if pd.isna(target_df['實際坪數'].iloc[0]) or pd.isna(target_df['總價'].iloc[0]):
-        st.warning("⚠️ 目標房型缺少必要的坪數或價格資訊")
+    if pd.isna(target_df['建坪'].iloc[0]) or pd.isna(target_df['總價'].iloc[0]):
+        st.warning("⚠️ 目標房型缺少必要的建坪或價格資訊")
         return
     
     # 建立散點圖
     fig = px.scatter(
         others_df,
-        x='實際坪數',
+        x='建坪',
         y='總價',
         render_mode='svg',
         opacity=0.4,
@@ -313,7 +319,7 @@ def plot_price_scatter(target_row, df):
     # 加入目標房型紅星
     hover_target = make_hover(target_df)
     fig.add_scatter(
-        x=target_df['實際坪數'],
+        x=target_df['建坪'],
         y=target_df['總價'],
         mode='markers',
         marker=dict(size=25, color='red', symbol='star'),
@@ -323,15 +329,15 @@ def plot_price_scatter(target_row, df):
     )
     
     # 設定顯示範圍
-    x_center = target_df['實際坪數'].iloc[0]
+    x_center = target_df['建坪'].iloc[0]
     y_center = target_df['總價'].iloc[0]
     
     x_range = (0, x_center * 2.5)
     y_range = (0, y_center * 2.5)
     
     fig.update_layout(
-        title=f'{target_district} 包含「{target_type}」的房型 房價 vs 實際坪數 (共 {len(df_filtered)} 筆)',
-        xaxis_title='實際坪數 (坪)',
+        title=f'{target_district} 包含「{target_type}」的房型 房價 vs 建坪 (共 {len(df_filtered)} 筆)',
+        xaxis_title='建坪 (坪)',
         yaxis_title='總價 (萬)',
         template='plotly_white',
         width=500,
@@ -976,10 +982,10 @@ def tab1_module():
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
                     # price_response = model.generate_content(price_prompt)
                     # space_response = model.generate_content(space_prompt)
-                    age_response = model.generate_content(age_prompt)
+                    #age_response = model.generate_content(age_prompt)
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    # age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
