@@ -688,20 +688,19 @@ def tab1_module():
             try:
                 with st.spinner("📊 正在計算市場價格指標..."):
                     # ===============================
-                    # 價格分析
+                    # 價格分析（使用建坪）
                     # ===============================
-                    
                     # 比較母體（同區同類型）
                     compare_df = df_filtered.copy()
                     
-                    # 確保數值欄位
+                    # 確保數值欄位 - 改用建坪
                     compare_df['總價'] = pd.to_numeric(compare_df['總價(萬)'], errors='coerce')
-                    compare_df['建坪數'] = pd.to_numeric(compare_df['建坪'], errors='coerce')
-                    compare_df = compare_df.dropna(subset=['總價', '建坪數'])
+                    compare_df['建坪數'] = pd.to_numeric(compare_df['建坪'], errors='coerce')  # ✅ 改用建坪
+                    compare_df = compare_df.dropna(subset=['總價', '建坪數'])  # ✅ 改用建坪數
                     
                     target_price = float(selected_row['總價(萬)'])
-                    target_area = float(selected_row['建坪'])
-                    price_per_ping = round(target_price / target_area, 2)
+                    target_area = float(selected_row['建坪'])  # ✅ 改用建坪
+                    price_per_ping = round(target_price / target_area, 2)  # ✅ 建坪單價
                     
                     # 價格百分位
                     price_percentile = (
@@ -732,8 +731,8 @@ def tab1_module():
                     
                         "目標房屋": {
                             "總價(萬)": target_price,
-                            "建坪": target_area,
-                            "單價(萬/坪)": price_per_ping
+                            "建坪": target_area,  # ✅ 改為建坪
+                            "建坪單價(萬/坪)": price_per_ping  # ✅ 明確標示為建坪單價
                         },
                     
                         "價格分布": {
@@ -748,6 +747,7 @@ def tab1_module():
                             "主流價格帶占比(%)": round(dense_ratio * 100, 1)
                         }
                     }
+                    
                     price_prompt = f"""
                     你是一位台灣房市分析顧問。
                     
@@ -758,6 +758,8 @@ def tab1_module():
                     1️⃣ 解讀該房屋價格在市場中的位置（偏低 / 主流 / 偏高）
                     2️⃣ 說明是否落在市場主流交易區間
                     3️⃣ 提供一段理性、保守、不誇大的購屋建議
+                    
+                    **注意：此分析使用建坪計算單價，非實際坪數。**
                     
                     分析數據如下：
                     {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
