@@ -129,8 +129,8 @@ def plot_age_distribution(target_row, df):
         yaxis_title="房屋數量",
         bargap=0.3,
         template="plotly_white",
-        width=650,
-        height=650
+        width=500,
+        height=500
     )
     
     st.plotly_chart(fig, use_container_width=True)
