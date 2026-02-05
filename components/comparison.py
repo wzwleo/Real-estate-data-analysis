@@ -19,7 +19,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE, ENGLISH_TO_CATEGORY
+    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -899,19 +899,57 @@ class ComparisonAnalyzer:
         return results, category_coverage
     
     def _determine_actual_category(self, place_name, place_type):
-        """根據子類別判斷實際分類 - 簡化版"""
-        # 直接從映射表中查找（place_type 應該是英文的，如 "supermarket"）
-        if place_type in ENGLISH_TO_CATEGORY:
-            category = ENGLISH_TO_CATEGORY[place_type]
-            chinese_subtype = ENGLISH_TO_CHINESE.get(place_type, place_type)
-            return category, chinese_subtype
+        """根據設施名稱判斷實際分類"""
+        place_name_lower = place_name.lower()
         
-        # 如果是額外關鍵字查詢的
-        if place_type == "extra_keyword" or place_type.startswith("關鍵字"):
-            return "關鍵字", place_type
+        # 幼兒園相關關鍵字
+        preschool_keywords = [
+            "幼兒園", "幼稚園", "托兒所", "幼兒", 
+            "附設幼兒園", "附設幼稚園",
+            "preschool", "kindergarten", "daycare", "nursery"
+        ]
         
-        # 如果還是找不到，嘗試從名稱判斷
-        return "生活服務", place_type
+        # 小學相關關鍵字
+        elementary_keywords = [
+            "小學", "國民小學", "國小", "小學校",
+            "elementary", "primary", "elementary_school", "primary_school"
+        ]
+        
+        # 中學相關關鍵字
+        middle_school_keywords = [
+            "中學", "國中", "初中", "國民中學", 
+            "middle_school", "junior_high", "secondary_school"
+        ]
+        
+        # 高中相關關鍵字
+        high_school_keywords = [
+            "高中", "高級中學", "高職", "職業學校",
+            "high_school", "senior_high", "vocational"
+        ]
+        
+        # 大學相關關鍵字
+        university_keywords = [
+            "大學", "學院", "科大", "技術學院",
+            "university", "college", "institute"
+        ]
+        
+        # 檢查名稱中的關鍵字
+        keywords_priority = [
+            (preschool_keywords, "教育", "preschool"),
+            (elementary_keywords, "教育", "elementary_school"),
+            (middle_school_keywords, "教育", "middle_school"),
+            (high_school_keywords, "教育", "high_school"),
+            (university_keywords, "教育", "university")
+        ]
+        
+        for keyword_list, category, subtype in keywords_priority:
+            for keyword in keyword_list:
+                if keyword.lower() in place_name_lower:
+                    return category, subtype
+        
+        # 如果無法從名稱判斷，使用原本的分類
+        chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
+        return "教育", place_type
     
     def _display_analysis_results(self, results):
         """顯示分析結果"""
@@ -1981,7 +2019,7 @@ class ComparisonAnalyzer:
         return results
     
     def _search_nearby_places_by_type(self, lat, lng, api_key, place_type, radius=500):
-        """使用 Nearby Search 和 Type Filter 查詢地點 - 已修正"""
+        """使用 Nearby Search 和 Type Filter 查詢地點"""
         url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
         params = {
             "location": f"{lat},{lng}",
@@ -2008,10 +2046,10 @@ class ComparisonAnalyzer:
             loc = p["geometry"]["location"]
             dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             
-            # 直接傳遞英文類型，不要轉換為中文
+            chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
             results.append((
                 "類型搜尋",
-                place_type,  # 直接傳英文類型
+                chinese_type,
                 p.get("name", "未命名"),
                 loc["lat"],
                 loc["lng"],
