@@ -736,7 +736,7 @@ class ComparisonAnalyzer:
             
             progress_bar.progress(25)
             
-            # 步驟2: 查詢周邊設施
+            # 步驟2: 查詢周邊設施 - 使用文字搜尋方法
             status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
             places_data = {}
             category_coverage = {}  # 新增：記錄類別覆蓋
@@ -745,8 +745,8 @@ class ComparisonAnalyzer:
             for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
                 lat, lng = house_info["lat"], house_info["lng"]
                 
-                # 查詢設施並記錄覆蓋情況
-                places, house_coverage = self._query_google_places_with_coverage(
+                # 查詢設施並記錄覆蓋情況 - 改用文字搜尋
+                places, house_coverage = self._query_google_places_with_coverage_via_text_search(
                     lat, lng, settings["server_key"], 
                     settings["selected_categories"], settings["selected_subtypes"],
                     settings["radius"], extra_keyword=settings["keyword"]
@@ -805,8 +805,11 @@ class ComparisonAnalyzer:
             st.error(f"❌ 分析執行失敗: {str(e)}")
             st.session_state.analysis_in_progress = False
     
-    def _query_google_places_with_coverage(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """查詢Google Places並記錄類別覆蓋情況"""
+    def _query_google_places_with_coverage_via_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+        """
+        使用文字搜尋查詢Google Places並記錄類別覆蓋情況
+        所有設施都使用 textsearch 方法查詢，跟關鍵字搜尋一樣
+        """
         results, seen = [], set()
         
         # 初始化覆蓋記錄 - 確保格式正確
@@ -836,6 +839,7 @@ class ComparisonAnalyzer:
             progress.progress(min(completed / total_tasks, 1.0))
             progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
+        # 處理所有子類別的搜尋 - 全部改用文字搜尋
         for cat in selected_categories:
             if cat not in selected_subtypes:
                 continue
@@ -844,7 +848,9 @@ class ComparisonAnalyzer:
                 update_progress(f"查詢 {cat}-{place_type}")
                 
                 try:
-                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
+                    # 使用文字搜尋而不是類型搜尋
+                    chinese_name = ENGLISH_TO_CHINESE.get(place_type, place_type)
+                    places = self._search_text_google_places(lat, lng, api_key, chinese_name, radius)
                     
                     # 更新覆蓋記錄
                     if places:
@@ -858,14 +864,15 @@ class ComparisonAnalyzer:
                             continue
                         seen.add(pid)
                         
-                        # 不再判斷實際分類，直接使用子類別
+                        # 使用子類別作為搜尋關鍵字
                         results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
 
-                    time.sleep(0.3)
+                    time.sleep(0.3)  # 避免 API 限制
                     
                 except Exception as e:
                     continue
 
+        # 處理額外關鍵字搜尋
         if extra_keyword:
             update_progress(f"額外關鍵字: {extra_keyword}")
             try:
@@ -885,6 +892,8 @@ class ComparisonAnalyzer:
 
         progress.progress(1.0)
         progress_text.text("✅ 查詢完成！")
+        
+        # 按距離排序
         results.sort(key=lambda x: x[5])
         
         return results, category_coverage
