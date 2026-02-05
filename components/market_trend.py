@@ -91,7 +91,7 @@ class CompleteMarketTrendAnalyzer:
             [
                 "🏠 購房決策助手",
                 "📈 價格趨勢分析",
-                "📊 區域比較分析",
+                "📊 區域比TTT較分析",
                 "🎯 市場預測模型",
                 "📋 原始資料檢視"
             ]
