@@ -838,6 +838,14 @@ def tab1_module():
         
         st.write("\n")
         analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
+        # 篩選出選中的房子
+        selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
+        
+        # ⭐ 新增：取得房產編號並生成連結
+        property_id = selected_row.get('編號', '')
+        if property_id:
+            property_url = f"https://www.sinyi.com.tw/buy/house/{property_id}?breadcrumb=list"
+            st.link_button("🏠 查看房產詳情", property_url)
         
         if analyze_clicked:
             if not gemini_key:
