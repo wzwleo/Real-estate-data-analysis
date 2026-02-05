@@ -1,3 +1,5 @@
+#PLACE TYPE
+
 # components/comparison.py
 import streamlit as st
 import pandas as pd
@@ -19,21 +21,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES
-    
-    # 動態處理 ENGLISH_TO_CHINESE 的導入
-    try:
-        from components.place_types import ENGLISH_TO_CHINESE
-    except ImportError:
-        # 如果沒有 ENGLISH_TO_CHINESE，創建一個映射
-        ENGLISH_TO_CHINESE = {}
-        for category, items in PLACE_TYPES.items():
-            for i in range(0, len(items), 2):
-                if i+1 < len(items):
-                    chinese_name = items[i]
-                    english_name = items[i+1]
-                    ENGLISH_TO_CHINESE[english_name] = chinese_name
-    
+    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -123,6 +111,7 @@ class ComparisonAnalyzer:
             'analysis_results',
             'gemini_result',
             'current_page'
+            # 移除 category_coverage
         ]
         for key in keys_to_reset:
             if key in st.session_state:
@@ -217,7 +206,7 @@ class ComparisonAnalyzer:
             placeholder="例如：公園、健身房、銀行等"
         )
         
-        # 生活機能選擇
+        # 生活機能選擇 - 移除快速選擇，只保留自訂選擇
         st.markdown("---")
         st.subheader("🔍 選擇生活機能類別")
         
@@ -247,6 +236,7 @@ class ComparisonAnalyzer:
             'gemini_result',
             'places_data',
             'custom_prompt'
+            # 移除 category_coverage
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -347,7 +337,7 @@ class ComparisonAnalyzer:
                 st.metric("價格差距", f"{price_diff:.1f}%")
     
     def _render_category_selection(self):
-        """渲染類別選擇界面"""
+        """渲染類別選擇界面 - 移除快速選擇，只保留自訂選擇"""
         selected_categories = []
         selected_subtypes = {}
         
@@ -436,6 +426,22 @@ class ComparisonAnalyzer:
                         <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
                     </div>
                     """, unsafe_allow_html=True)
+                    
+                    # 顯示前幾個項目
+                    if count <= 5:
+                        chinese_names = []
+                        for english_kw in selected_subtypes[cat]:
+                            chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                            chinese_names.append(chinese_name)
+                        items_display = "、".join(chinese_names)
+                        st.caption(f"✓ {items_display}")
+                    else:
+                        chinese_names = []
+                        for english_kw in selected_subtypes[cat][:3]:
+                            chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                            chinese_names.append(chinese_name)
+                        items_display = "、".join(chinese_names)
+                        st.caption(f"✓ {items_display}等{count}種設施")
     
     def _render_action_buttons(self, analysis_mode, selected_houses, selected_categories, 
                               radius, keyword, selected_subtypes, fav_df):
@@ -521,6 +527,7 @@ class ComparisonAnalyzer:
             'houses_data',
             'custom_prompt',
             'used_prompt'
+            # 移除 category_coverage
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -541,6 +548,7 @@ class ComparisonAnalyzer:
             'selected_template',
             'last_template',
             'selected_houses'
+            # 移除 category_coverage
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -590,8 +598,8 @@ class ComparisonAnalyzer:
             for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
                 lat, lng = house_info["lat"], house_info["lng"]
                 
-                # 查詢設施
-                places = self._query_places_with_text_search(
+                # 查詢設施（簡化版，不記錄覆蓋情況）
+                places = self._query_google_places(
                     lat, lng, settings["server_key"], 
                     settings["selected_categories"], settings["selected_subtypes"],
                     settings["radius"], extra_keyword=settings["keyword"]
@@ -646,8 +654,8 @@ class ComparisonAnalyzer:
             st.error(f"❌ 分析執行失敗: {str(e)}")
             st.session_state.analysis_in_progress = False
     
-    def _query_places_with_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """使用文字搜尋方式查詢周邊設施"""
+    def _query_google_places(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+        """查詢Google Places（簡化版，不記錄覆蓋情況）"""
         results, seen = [], set()
         
         total_tasks = 0
@@ -669,18 +677,15 @@ class ComparisonAnalyzer:
             progress.progress(min(completed / total_tasks, 1.0))
             progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
-        # 對每個設施子類型進行文字搜尋
         for cat in selected_categories:
             if cat not in selected_subtypes:
                 continue
                 
             for place_type in selected_subtypes[cat]:
-                update_progress(f"搜尋 {cat}-{place_type}")
+                update_progress(f"查詢 {cat}-{place_type}")
                 
                 try:
-                    # 將關鍵字轉換為中文進行搜尋
-                    chinese_keyword = ENGLISH_TO_CHINESE.get(place_type, place_type)
-                    places = self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius)
+                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
                     
                     for p in places:
                         if p[5] > radius:
@@ -692,12 +697,11 @@ class ComparisonAnalyzer:
                         
                         results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
 
-                    time.sleep(0.5)  # 防止API請求過快
+                    time.sleep(0.3)
                     
                 except Exception as e:
                     continue
 
-        # 額外關鍵字搜尋
         if extra_keyword:
             update_progress(f"額外關鍵字: {extra_keyword}")
             try:
@@ -711,7 +715,7 @@ class ComparisonAnalyzer:
                     seen.add(pid)
                     results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
                     
-                time.sleep(0.5)
+                time.sleep(0.3)
             except Exception as e:
                 pass
 
@@ -936,6 +940,63 @@ class ComparisonAnalyzer:
             }
             
             st_echarts(chart_data, height="300px")
+            
+            # 多房屋比較時，也顯示子類別分布
+            st.markdown("### 🏪 各房屋設施類型比較")
+            
+            # 為每個房屋計算子類別分布
+            all_subtypes = set()
+            house_subtype_data = {}
+            
+            for house_name in houses_data.keys():
+                places = results["places_data"][house_name]
+                subtype_counts = {}
+                
+                for cat, subtype, name, lat, lng, dist, pid in places:
+                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                    subtype_counts[chinese_subtype] = subtype_counts.get(chinese_subtype, 0) + 1
+                    all_subtypes.add(chinese_subtype)
+                
+                house_subtype_data[house_name] = subtype_counts
+            
+            # 轉換為比較圖表
+            if all_subtypes and num_houses <= 5:  # 避免圖表過於複雜
+                # 只取數量最多的前10個子類別
+                subtype_totals = {}
+                for subtype in all_subtypes:
+                    total = sum(house_subtype_data.get(house_name, {}).get(subtype, 0) for house_name in houses_data.keys())
+                    subtype_totals[subtype] = total
+                
+                top_subtypes = sorted(subtype_totals.items(), key=lambda x: x[1], reverse=True)[:10]
+                top_subtype_names = [item[0] for item in top_subtypes]
+                
+                # 建立比較圖表
+                series_data = []
+                for house_name in houses_data.keys():
+                    data = []
+                    for subtype in top_subtype_names:
+                        data.append(house_subtype_data.get(house_name, {}).get(subtype, 0))
+                    
+                    series_data.append({
+                        "name": house_name,
+                        "type": "bar",
+                        "data": data
+                    })
+                
+                comparison_chart = {
+                    "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+                    "legend": {"data": list(houses_data.keys())},
+                    "grid": {"left": "3%", "right": "4%", "bottom": "15%", "top": "15%", "containLabel": True},
+                    "xAxis": {
+                        "type": "category",
+                        "data": top_subtype_names,
+                        "axisLabel": {"rotate": 45}
+                    },
+                    "yAxis": {"type": "value"},
+                    "series": series_data
+                }
+                
+                st_echarts(comparison_chart, height="400px")
     
     def _display_maps(self, results):
         """顯示地圖"""
@@ -1017,7 +1078,7 @@ class ComparisonAnalyzer:
             facilities_data.append({
                 "name": name,
                 "category": cat,
-                "subtype": chinese_subtype,
+                "subtype": chinese_subtype,  # 使用中文子類別
                 "lat": p_lat,
                 "lng": p_lng,
                 "distance": dist,
@@ -1430,7 +1491,6 @@ class ComparisonAnalyzer:
                 key="download_report_btn_main"
             )
     
-    # 以下是原有的輔助方法
     def _create_facilities_table(self, houses_data, places_data):
         """建立設施表格資料"""
         all_facilities = []
@@ -1797,8 +1857,48 @@ class ComparisonAnalyzer:
             dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             
             results.append((
-                "類型搜尋",
+                "關鍵字",
                 keyword,
+                p.get("name", "未命名"),
+                loc["lat"],
+                loc["lng"],
+                dist,
+                p.get("place_id", "")
+            ))
+        return results
+    
+    def _search_nearby_places_by_type(self, lat, lng, api_key, place_type, radius=500):
+        """使用 Nearby Search 和 Type Filter 查詢地點"""
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "type": place_type,
+            "key": api_key,
+            "language": "zh-TW"
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            r = response.json()
+        except requests.exceptions.Timeout:
+            return []
+        except Exception as e:
+            return []
+
+        results = []
+        if r.get("status") != "OK":
+            return []
+
+        for p in r.get("results", []):
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+            
+            chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
+            results.append((
+                "類型搜尋",
+                chinese_type,
                 p.get("name", "未命名"),
                 loc["lat"],
                 loc["lng"],
@@ -1811,3 +1911,4 @@ class ComparisonAnalyzer:
 def get_comparison_analyzer():
     """取得比較分析器實例"""
     return ComparisonAnalyzer()
+
