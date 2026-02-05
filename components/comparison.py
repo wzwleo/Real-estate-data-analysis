@@ -1,3 +1,5 @@
+#CHINESE
+# components/comparison.py
 import streamlit as st
 import pandas as pd
 import time
@@ -18,12 +20,20 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import (
-        PLACE_TYPES, 
-        CHINESE_TO_CATEGORY, 
-        CHINESE_TO_GOOGLE_TYPE,
-        GOOGLE_TYPE_TO_CHINESE_SIMPLE
-    )
+    from components.place_types import PLACE_TYPES
+    
+    # 動態處理 ENGLISH_TO_CHINESE 的導入
+    try:
+        from components.place_types import ENGLISH_TO_CHINESE
+    except ImportError:
+        # 如果沒有 ENGLISH_TO_CHINESE，創建一個映射
+        ENGLISH_TO_CHINESE = {}
+        for category, items in PLACE_TYPES.items():
+            for i in range(0, len(items), 2):
+                if i+1 < len(items):
+                    chinese_name = items[i]
+                    english_name = items[i+1]
+                    ENGLISH_TO_CHINESE[english_name] = chinese_name
     
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
@@ -49,6 +59,7 @@ class ComparisonAnalyzer:
             'last_gemini_call': 0,
             'template_selector_key': 'default',
             'prompt_editor_key': 'default_prompt'
+            # 移除 category_coverage
         }
         
         for key, value in defaults.items():
@@ -375,8 +386,7 @@ class ComparisonAnalyzer:
                     
                     if select_all:
                         items = PLACE_TYPES[cat]
-                        # 只取得中文關鍵字（奇數索引）
-                        selected_subtypes[cat] = [items[i] for i in range(0, len(items), 2)]
+                        selected_subtypes[cat] = items[1::2]
                         selected_categories.append(cat)
                         st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
                     else:
@@ -389,15 +399,16 @@ class ComparisonAnalyzer:
                             cols = st.columns(num_columns)
                             for col_idx in range(num_columns):
                                 item_idx = row + col_idx * items_per_row
-                                if item_idx * 2 < len(items):
+                                if item_idx * 2 + 1 < len(items):
                                     chinese_name = items[item_idx * 2]
+                                    english_keyword = items[item_idx * 2 + 1]
                                     
                                     with cols[col_idx]:
-                                        checkbox_key = f"subcat_{cat}_{chinese_name}_{row}_{col_idx}"
+                                        checkbox_key = f"subcat_{cat}_{english_keyword}_{row}_{col_idx}"
                                         if st.checkbox(chinese_name, key=checkbox_key):
                                             if cat not in selected_subtypes:
                                                 selected_subtypes[cat] = []
-                                            selected_subtypes[cat].append(chinese_name)
+                                            selected_subtypes[cat].append(english_keyword)
                         
                         if cat in selected_subtypes and selected_subtypes[cat]:
                             selected_categories.append(cat)
@@ -572,15 +583,15 @@ class ComparisonAnalyzer:
             
             progress_bar.progress(25)
             
-            # 步驟2: 查詢周邊設施（使用 Nearby Search API）
-            status_text.text("🔍 步驟 2/4: 使用 Nearby Search API 查詢周邊設施...")
+            # 步驟2: 查詢周邊設施
+            status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
             places_data = {}
             
             total_houses = len(houses_data)
             for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
                 lat, lng = house_info["lat"], house_info["lng"]
                 
-                # 查詢設施（現在使用 Nearby Search）
+                # 查詢設施
                 places = self._query_places_with_text_search(
                     lat, lng, settings["server_key"], 
                     settings["selected_categories"], settings["selected_subtypes"],
@@ -636,244 +647,42 @@ class ComparisonAnalyzer:
             st.error(f"❌ 分析執行失敗: {str(e)}")
             st.session_state.analysis_in_progress = False
     
-    def _search_nearby_places(self, lat, lng, api_key, chinese_keyword, radius=2000, max_results=60):
-        """使用 Nearby Search API 搜尋特定類型的地點"""
-        results = []
-        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-        
-        # 從 place_types.py 取得 Google Places API 類型
-        google_place_type = CHINESE_TO_GOOGLE_TYPE.get(chinese_keyword)
-        
-        if not google_place_type:
-            # 如果沒有對應的類型，使用文字搜尋
-            print(f"⚠️ {chinese_keyword} 沒有對應的 Google Places API 類型，使用文字搜尋")
-            return self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius, max_results)
-        
-        params = {
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "type": google_place_type,  # 使用標準的 Google Places API 類型
-            "key": api_key,
-            "language": "zh-TW"
-        }
-        
-        try:
-            # 第一頁搜尋
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            r = response.json()
-            
-            # 檢查 API 回應狀態
-            status = r.get("status")
-            if status != "OK":
-                print(f"⚠️ Nearby Search API 回應: {status}")
-                if status == "ZERO_RESULTS":
-                    print(f"  半徑 {radius} 公尺內沒有找到 {chinese_keyword}")
-                    return []
-                # 如果 API 失敗，回退到文字搜尋
-                return self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius, max_results)
-            
-            # 處理第一頁結果
-            for p in r.get("results", []):
-                loc = p["geometry"]["location"]
-                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-                
-                results.append((
-                    "Nearby Search",
-                    chinese_keyword,
-                    p.get("name", "未命名"),
-                    loc["lat"],
-                    loc["lng"],
-                    dist,
-                    p.get("place_id", "")
-                ))
-            
-            # 處理分頁（最多3頁）
-            next_page_token = r.get("next_page_token")
-            page_count = 1
-            
-            while next_page_token and page_count < 3 and len(results) < max_results:
-                time.sleep(2)  # Google 要求等待
-                
-                next_params = {
-                    "pagetoken": next_page_token,
-                    "key": api_key
-                }
-                
-                try:
-                    next_response = requests.get(url, params=next_params, timeout=10)
-                    next_response.raise_for_status()
-                    next_r = next_response.json()
-                    
-                    for p in next_r.get("results", []):
-                        loc = p["geometry"]["location"]
-                        dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-                        
-                        if len(results) < max_results:
-                            results.append((
-                                "Nearby Search",
-                                chinese_keyword,
-                                p.get("name", "未命名"),
-                                loc["lat"],
-                                loc["lng"],
-                                dist,
-                                p.get("place_id", "")
-                            ))
-                    
-                    next_page_token = next_r.get("next_page_token")
-                    page_count += 1
-                    
-                except Exception as e:
-                    print(f"獲取下一頁失敗: {e}")
-                    break
-                    
-        except Exception as e:
-            print(f"Nearby Search 失敗: {e}")
-            # 失敗時回退到文字搜尋
-            return self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius, max_results)
-        
-        # 按距離排序
-        results.sort(key=lambda x: x[5])
-        
-        print(f"✅ 使用 Nearby Search 找到 {len(results)} 個 {chinese_keyword} ({google_place_type})")
-        return results
-    
-    def _search_text_google_places(self, lat, lng, api_key, keyword, max_distance=2000, max_results=60):
-        """搜尋Google Places（使用文字搜尋）- 按距離排序，處理分頁"""
-        results = []
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        
-        # 第一頁搜尋
-        params = {
-            "query": keyword,
-            "location": f"{lat},{lng}",
-            "rankby": "distance",  # 按距離排序
-            "key": api_key,
-            "language": "zh-TW"
-        }
-        
-        try:
-            # 獲取第一頁結果
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            r = response.json()
-            
-            # 處理第一頁結果
-            for p in r.get("results", []):
-                loc = p["geometry"]["location"]
-                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-                
-                # 只添加在最大距離內的結果
-                if dist <= max_distance:
-                    results.append((
-                        "文字搜尋",
-                        keyword,
-                        p.get("name", "未命名"),
-                        loc["lat"],
-                        loc["lng"],
-                        dist,
-                        p.get("place_id", "")
-                    ))
-            
-            # 檢查是否有下一頁 (最多取3頁，避免太多請求)
-            next_page_token = r.get("next_page_token")
-            page_count = 1
-            
-            # 嘗試獲取後續頁面 (最多2個額外頁面)
-            while next_page_token and page_count < 3 and len(results) < max_results:
-                time.sleep(2)  # Google要求等待幾秒才能取下一頁
-                
-                # 下一頁參數
-                next_params = {
-                    "pagetoken": next_page_token,
-                    "key": api_key
-                }
-                
-                try:
-                    next_response = requests.get(url, params=next_params, timeout=10)
-                    next_response.raise_for_status()
-                    next_r = next_response.json()
-                    
-                    # 處理下一頁結果
-                    for p in next_r.get("results", []):
-                        loc = p["geometry"]["location"]
-                        dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-                        
-                        if dist <= max_distance and len(results) < max_results:
-                            results.append((
-                                "文字搜尋",
-                                keyword,
-                                p.get("name", "未命名"),
-                                loc["lat"],
-                                loc["lng"],
-                                dist,
-                                p.get("place_id", "")
-                            ))
-                    
-                    # 檢查是否還有下一頁
-                    next_page_token = next_r.get("next_page_token")
-                    page_count += 1
-                    
-                except Exception as e:
-                    print(f"獲取下一頁失敗: {e}")
-                    break
-                    
-        except Exception as e:
-            print(f"搜尋失敗: {e}")
-            return []
-        
-        # 確保按距離排序
-        results.sort(key=lambda x: x[5])
-        
-        # 限制最大結果數量
-        if len(results) > max_results:
-            results = results[:max_results]
-        
-        print(f"✅ 找到 {len(results)} 個 {keyword} 設施 (搜尋了 {page_count} 頁)")
-        return results
-    
     def _query_places_with_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """使用 Nearby Search API 查詢周邊設施 - 主要使用 Nearby Search"""
+        """使用文字搜尋方式查詢周邊設施"""
         results, seen = [], set()
         
-        # 計算總任務數
         total_tasks = 0
         for cat in selected_categories:
             if cat in selected_subtypes:
                 total_tasks += len(selected_subtypes[cat])
         total_tasks += (1 if extra_keyword else 0)
-        
+
         if total_tasks == 0:
             return results
-        
+
         progress = st.progress(0)
         progress_text = st.empty()
         completed = 0
-        
+
         def update_progress(task_desc):
             nonlocal completed
             completed += 1
             progress.progress(min(completed / total_tasks, 1.0))
             progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-        
-        # 對每個設施子類型使用 Nearby Search
+
+        # 對每個設施子類型進行文字搜尋
         for cat in selected_categories:
             if cat not in selected_subtypes:
                 continue
                 
-            for chinese_keyword in selected_subtypes[cat]:
-                update_progress(f"搜尋 {cat}-{chinese_keyword}")
+            for place_type in selected_subtypes[cat]:
+                update_progress(f"搜尋 {cat}-{place_type}")
                 
                 try:
-                    # 使用 Nearby Search API
-                    places = self._search_nearby_places(
-                        lat, lng, api_key, 
-                        chinese_keyword, 
-                        radius=radius,
-                        max_results=60
-                    )
+                    # 將關鍵字轉換為中文進行搜尋
+                    chinese_keyword = ENGLISH_TO_CHINESE.get(place_type, place_type)
+                    places = self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius)
                     
-                    # 過濾實際距離
                     for p in places:
                         if p[5] > radius:
                             continue
@@ -882,45 +691,18 @@ class ComparisonAnalyzer:
                             continue
                         seen.add(pid)
                         
-                        results.append((cat, chinese_keyword, p[2], p[3], p[4], p[5], p[6]))
-                    
-                    # 稍微休息避免 API 限制
-                    time.sleep(0.3)
+                        results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
+
+                    time.sleep(0.5)  # 防止API請求過快
                     
                 except Exception as e:
-                    print(f"搜尋 {chinese_keyword} 失敗: {e}")
-                    # 如果 Nearby Search 失敗，嘗試文字搜尋
-                    try:
-                        places = self._search_text_google_places(
-                            lat, lng, api_key, 
-                            chinese_keyword,
-                            max_distance=radius,
-                            max_results=30
-                        )
-                        
-                        for p in places:
-                            if p[5] > radius:
-                                continue
-                            pid = p[6]
-                            if pid in seen:
-                                continue
-                            seen.add(pid)
-                            results.append((cat, chinese_keyword, p[2], p[3], p[4], p[5], p[6]))
-                            
-                    except Exception as e2:
-                        print(f"文字搜尋備份也失敗: {e2}")
-                        continue
-        
-        # 額外關鍵字搜尋（使用文字搜尋）
+                    continue
+
+        # 額外關鍵字搜尋
         if extra_keyword:
             update_progress(f"額外關鍵字: {extra_keyword}")
             try:
-                places = self._search_text_google_places(
-                    lat, lng, api_key, 
-                    extra_keyword,
-                    max_distance=radius,
-                    max_results=30
-                )
+                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
                 for p in places:
                     if p[5] > radius:
                         continue
@@ -929,16 +711,13 @@ class ComparisonAnalyzer:
                         continue
                     seen.add(pid)
                     results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
-                
-                time.sleep(0.3)
+                    
+                time.sleep(0.5)
             except Exception as e:
-                print(f"搜尋額外關鍵字 {extra_keyword} 失敗: {e}")
                 pass
-        
+
         progress.progress(1.0)
-        progress_text.text(f"✅ 查詢完成！共找到 {len(results)} 個設施")
-        
-        # 按距離排序
+        progress_text.text("✅ 查詢完成！")
         results.sort(key=lambda x: x[5])
         
         return results
@@ -1047,7 +826,8 @@ class ComparisonAnalyzer:
             # 設施子類別分布
             subtype_data = {}
             for cat, subtype, name, lat, lng, dist, pid in places:
-                subtype_data[subtype] = subtype_data.get(subtype, 0) + 1
+                chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                subtype_data[chinese_subtype] = subtype_data.get(chinese_subtype, 0) + 1
             
             if subtype_data:
                 st.markdown("### 🏪 各類型設施分布")
@@ -1234,10 +1014,11 @@ class ComparisonAnalyzer:
         facilities_data = []
         for cat, subtype, name, p_lat, p_lng, dist, pid in places:
             color = CATEGORY_COLORS.get(cat, "#000000")
+            chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
             facilities_data.append({
                 "name": name,
                 "category": cat,
-                "subtype": subtype,
+                "subtype": chinese_subtype,
                 "lat": p_lat,
                 "lng": p_lng,
                 "distance": dist,
@@ -1456,6 +1237,7 @@ class ComparisonAnalyzer:
             with st.expander(f"顯示所有 {len(places)} 個設施", expanded=True):
                 for i, (cat, subtype, name, lat, lng, dist, pid) in enumerate(places, 1):
                     color = CATEGORY_COLORS.get(cat, "#000000")
+                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
                     maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
                     
                     # 距離分類
@@ -1477,7 +1259,7 @@ class ComparisonAnalyzer:
                             st.write(f"**{name}**")
                         
                         with col2:
-                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{subtype}</span>', unsafe_allow_html=True)
+                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{chinese_subtype}</span>', unsafe_allow_html=True)
                         
                         with col3:
                             st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺</span>', unsafe_allow_html=True)
@@ -1649,6 +1431,7 @@ class ComparisonAnalyzer:
                 key="download_report_btn_main"
             )
     
+    # 以下是原有的輔助方法
     def _create_facilities_table(self, houses_data, places_data):
         """建立設施表格資料"""
         all_facilities = []
@@ -1657,13 +1440,15 @@ class ComparisonAnalyzer:
             house_info = houses_data[house_name]
             
             for i, (cat, subtype, name, lat, lng, dist, pid) in enumerate(places):
+                chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                
                 facility_info = {
                     "房屋": house_name,
                     "房屋標題": house_info['title'][:50],
                     "房屋地址": house_info['address'],
                     "設施編號": i + 1,
                     "設施名稱": name,
-                    "設施子類別": subtype,
+                    "設施子類別": chinese_subtype,
                     "距離(公尺)": dist,
                     "經度": lng,
                     "緯度": lat,
@@ -1689,7 +1474,8 @@ class ComparisonAnalyzer:
             # 設施子類別統計
             subtype_stats = {}
             for cat, subtype, name, lat, lng, dist, pid in places:
-                subtype_stats[subtype] = subtype_stats.get(subtype, 0) + 1
+                chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
             
             table_summary = ""
             if not facilities_table.empty:
@@ -1760,7 +1546,8 @@ class ComparisonAnalyzer:
                 # 設施子類別統計
                 subtype_stats = {}
                 for cat, subtype, name, lat, lng, dist, pid in places:
-                    subtype_stats[subtype] = subtype_stats.get(subtype, 0) + 1
+                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                    subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
                 
                 table_summary = ""
                 if not facilities_table.empty:
@@ -1986,8 +1773,43 @@ class ComparisonAnalyzer:
     def _get_gemini_key(self):
         """取得 Gemini API Key"""
         return st.session_state.get("GEMINI_KEY", "")
+    
+    def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
+        """搜尋Google Places（使用文字搜尋）"""
+        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        params = {
+            "query": keyword,
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "key": api_key,
+            "language": "zh-TW"
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            r = response.json()
+        except Exception as e:
+            return []
+
+        results = []
+        for p in r.get("results", []):
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+            
+            results.append((
+                "類型搜尋",
+                keyword,
+                p.get("name", "未命名"),
+                loc["lat"],
+                loc["lng"],
+                dist,
+                p.get("place_id", "")
+            ))
+        return results
 
 
 def get_comparison_analyzer():
     """取得比較分析器實例"""
     return ComparisonAnalyzer()
+
