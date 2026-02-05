@@ -1,3 +1,4 @@
+# page_modules/analysis_page.py
 """
 分析頁面主模組
 整合了三個主要功能：
@@ -12,6 +13,8 @@ import streamlit as st
 import pandas as pd
 import time
 import traceback
+import plotly.express as px
+import numpy as np
 
 # 修正導入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -71,18 +74,23 @@ try:
     
     # 2. 導入比較模組
     try:
-        from components.comparison import ComparisonAnalyzer as CA
-        ComparisonAnalyzer = CA
+        from components.comparison import get_comparison_analyzer
         st.sidebar.success("✅ 比較分析模組導入成功")
+        
+        # 檢查是否有必要的類別或函數
+        def get_comparison_instance():
+            return get_comparison_analyzer()
+        
     except ImportError as e:
         st.sidebar.warning(f"⚠️ 比較分析模組導入失敗: {e}")
-        # 創建一個臨時的替代類別
-        class TempComparisonAnalyzer:
-            def render_comparison_tab(self):
-                st.header("房屋比較")
-                st.warning("比較分析模組暫時不可用")
-                st.info("這是臨時替代功能")
-        ComparisonAnalyzer = TempComparisonAnalyzer
+        # 創建一個臨時的替代函數
+        def get_comparison_instance():
+            class TempComparisonAnalyzer:
+                def render_comparison_tab(self):
+                    st.header("房屋比較")
+                    st.warning("比較分析模組暫時不可用")
+                    st.info("這是臨時替代功能")
+            return TempComparisonAnalyzer()
     
     # 3. 導入市場趨勢分析模組 - 使用多重嘗試
     st.sidebar.write("**市場趨勢模組狀態:**")
@@ -237,7 +245,7 @@ def render_analysis_page():
         with col1:
             st.metric("個別分析", "✅ 可用" if tab1_module else "⚠️ 受限")
         with col2:
-            st.metric("房屋比較", "✅ 可用" if ComparisonAnalyzer else "⚠️ 受限")
+            st.metric("房屋比較", "✅ 可用" if 'get_comparison_instance' in locals() else "⚠️ 受限")
         
         col3, col4 = st.columns(2)
         with col3:
@@ -283,11 +291,17 @@ def render_analysis_page():
     with tab2:
         st.header("🔄 房屋比較分析")
         
-        if ComparisonAnalyzer:
+        if 'get_comparison_instance' in locals():
             try:
                 with st.spinner("初始化比較分析器..."):
-                    analyzer = ComparisonAnalyzer()
-                    analyzer.render_comparison_tab()
+                    # 修正：正確獲取分析器實例並調用方法
+                    analyzer_instance = get_comparison_instance()
+                    # 檢查是否有正確的方法
+                    if hasattr(analyzer_instance, 'render_comparison_tab'):
+                        analyzer_instance.render_comparison_tab()
+                    else:
+                        st.error("比較分析器缺少 render_comparison_tab 方法")
+                        st.info(f"分析器可用方法: {[m for m in dir(analyzer_instance) if not m.startswith('_')]}")
             except Exception as e:
                 st.error(f"房屋比較模組執行錯誤: {e}")
                 st.code(traceback.format_exc())
@@ -299,22 +313,28 @@ def render_analysis_page():
     
     # Tab3: 市場趨勢分析
     with tab3:
+        st.header("📈 市場趨勢分析")
+        
         if MARKET_TREND_AVAILABLE and MarketTrendClass:
             try:
                 with st.spinner("初始化市場趨勢分析..."):
                     # 創建分析器實例
                     analyzer_instance = MarketTrendClass()
                     
-                    # 根據類別類型執行不同方法
+                    # 修正：根據類別類型執行不同方法，不直接調用實例
                     if hasattr(analyzer_instance, 'render_complete_dashboard'):
                         analyzer_instance.render_complete_dashboard()
                     elif hasattr(analyzer_instance, 'render_analysis_tab'):
                         analyzer_instance.render_analysis_tab()
                     elif hasattr(analyzer_instance, 'main'):
                         analyzer_instance.main()
+                    elif hasattr(analyzer_instance, 'render'):
+                        analyzer_instance.render()
                     else:
-                        # 嘗試調用默認方法
-                        analyzer_instance()
+                        # 不再嘗試直接調用實例，而是顯示錯誤
+                        st.error("⚠️ 市場趨勢分析器缺少標準方法")
+                        st.info(f"可用的方法: {[m for m in dir(analyzer_instance) if not m.startswith('_')]}")
+                        st.info("請在 market_trend.py 中定義 render_analysis_tab() 或類似方法")
                         
             except Exception as e:
                 st.error(f"市場趨勢分析執行錯誤: {str(e)}")
