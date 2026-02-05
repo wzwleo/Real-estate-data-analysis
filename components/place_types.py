@@ -42,7 +42,7 @@ PLACE_TYPES = {
         "倉庫商店", "warehouse_store"
     ],
     "交通運輸": [
-        "公車站", "bus_station",
+        "公車站", "bus_stop",
         "捷運站", "subway_station",
         "火車站", "train_station",
         "客運站", "bus_station",
