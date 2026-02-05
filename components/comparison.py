@@ -19,7 +19,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE
+    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE, ENGLISH_TO_CATEGORY  # 修改這裡
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -865,7 +865,7 @@ class ComparisonAnalyzer:
                             continue
                         seen.add(pid)
                         
-                        # 修正分類
+                        # 修正分類 - 這裡使用新的簡化方法
                         actual_category, actual_subtype = self._determine_actual_category(p[2], p[1])
                         
                         results.append((actual_category, actual_subtype, p[2], p[3], p[4], p[5], p[6]))
@@ -899,57 +899,15 @@ class ComparisonAnalyzer:
         return results, category_coverage
     
     def _determine_actual_category(self, place_name, place_type):
-        """根據設施名稱判斷實際分類"""
-        place_name_lower = place_name.lower()
+        """根據子類別判斷實際分類 - 簡化版"""
+        # 直接從映射表中查找
+        if place_type in ENGLISH_TO_CATEGORY:
+            category = ENGLISH_TO_CATEGORY[place_type]
+            chinese_subtype = ENGLISH_TO_CHINESE.get(place_type, place_type)
+            return category, chinese_subtype
         
-        # 幼兒園相關關鍵字
-        preschool_keywords = [
-            "幼兒園", "幼稚園", "托兒所", "幼兒", 
-            "附設幼兒園", "附設幼稚園",
-            "preschool", "kindergarten", "daycare", "nursery"
-        ]
-        
-        # 小學相關關鍵字
-        elementary_keywords = [
-            "小學", "國民小學", "國小", "小學校",
-            "elementary", "primary", "elementary_school", "primary_school"
-        ]
-        
-        # 中學相關關鍵字
-        middle_school_keywords = [
-            "中學", "國中", "初中", "國民中學", 
-            "middle_school", "junior_high", "secondary_school"
-        ]
-        
-        # 高中相關關鍵字
-        high_school_keywords = [
-            "高中", "高級中學", "高職", "職業學校",
-            "high_school", "senior_high", "vocational"
-        ]
-        
-        # 大學相關關鍵字
-        university_keywords = [
-            "大學", "學院", "科大", "技術學院",
-            "university", "college", "institute"
-        ]
-        
-        # 檢查名稱中的關鍵字
-        keywords_priority = [
-            (preschool_keywords, "教育", "preschool"),
-            (elementary_keywords, "教育", "elementary_school"),
-            (middle_school_keywords, "教育", "middle_school"),
-            (high_school_keywords, "教育", "high_school"),
-            (university_keywords, "教育", "university")
-        ]
-        
-        for keyword_list, category, subtype in keywords_priority:
-            for keyword in keyword_list:
-                if keyword.lower() in place_name_lower:
-                    return category, subtype
-        
-        # 如果無法從名稱判斷，使用原本的分類
-        chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
-        return "教育", place_type
+        # 如果是額外關鍵字查詢的
+        return "關鍵字", place_type
     
     def _display_analysis_results(self, results):
         """顯示分析結果"""
