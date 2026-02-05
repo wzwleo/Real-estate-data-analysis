@@ -1,4 +1,4 @@
-# components/market_trend.py - 完整功能版（所有功能已實現）
+# components/market_trend.py - 修正版（移除錯誤和指定功能）
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -92,8 +92,6 @@ class CompleteMarketTrendAnalyzer:
                 "🏠 購房決策助手",
                 "📈 價格趨勢分析",
                 "📊 區域比較分析",
-                "👥 人口與房價關係",
-                "💰 投資報酬率分析",
                 "🎯 市場預測模型",
                 "📋 原始資料檢視"
             ]
@@ -106,10 +104,6 @@ class CompleteMarketTrendAnalyzer:
             self._render_price_trend_analysis()
         elif analysis_option == "📊 區域比較分析":
             self._render_region_comparison()
-        elif analysis_option == "👥 人口與房價關係":
-            self._render_population_housing_relationship()
-        elif analysis_option == "💰 投資報酬率分析":
-            self._render_investment_return_analysis()
         elif analysis_option == "🎯 市場預測模型":
             self._render_market_prediction()
         elif analysis_option == "📋 原始資料檢視":
@@ -135,9 +129,6 @@ class CompleteMarketTrendAnalyzer:
             if self.combined_df is None or self.combined_df.empty:
                 st.error("無法載入不動產資料")
                 return False
-            
-            # 載入人口資料
-            self.population_df = self._load_population_data()
             
             # 清理和預處理資料
             self._clean_and_preprocess_data()
@@ -212,70 +203,6 @@ class CompleteMarketTrendAnalyzer:
                 
         except Exception as e:
             return pd.DataFrame()
-    
-    def _load_population_data(self):
-        """載入人口資料"""
-        try:
-            data_dir = PAGE_MODULES_FOLDER
-            possible_files = ["NEWWWW.csv", "population.csv", "人口資料.csv", "人口統計.csv"]
-            
-            file_path = None
-            for file in possible_files:
-                test_path = os.path.join(data_dir, file)
-                if os.path.exists(test_path):
-                    file_path = test_path
-                    break
-            
-            if not file_path:
-                all_files = os.listdir(data_dir)
-                pop_files = [f for f in all_files if "人口" in f or "Population" in f.lower()]
-                if pop_files:
-                    file_path = os.path.join(data_dir, pop_files[0])
-            
-            if not file_path:
-                return self._create_mock_population_data()
-            
-            df = None
-            for encoding in ["utf-8", "big5", "cp950", "latin1"]:
-                try:
-                    df = pd.read_csv(file_path, encoding=encoding, low_memory=False)
-                    break
-                except:
-                    continue
-            
-            if df is None:
-                return self._create_mock_population_data()
-            
-            df.columns = [str(col).strip().replace("　", "").replace(" ", "").replace("\n", "") for col in df.columns]
-            
-            return df
-            
-        except Exception as e:
-            return self._create_mock_population_data()
-    
-    def _create_mock_population_data(self):
-        """創建模擬人口資料"""
-        if self.combined_df is not None and not self.combined_df.empty:
-            cities = self.combined_df['縣市'].unique()[:10]
-            districts = []
-            for city in cities:
-                city_districts = self.combined_df[self.combined_df['縣市'] == city]['行政區'].unique()[:5]
-                districts.extend([(city, district) for district in city_districts])
-        else:
-            cities = ['台北市', '新北市', '桃園市', '台中市', '台南市', '高雄市']
-            districts = [(city, f"{city}區") for city in cities]
-        
-        mock_data = []
-        for city, district in districts:
-            for year in range(108, 112):
-                population = np.random.randint(50000, 300000)
-                mock_data.append({
-                    '縣市': city,
-                    '行政區': district,
-                    f'{year}年人口數': population
-                })
-        
-        return pd.DataFrame(mock_data)
     
     def _clean_and_preprocess_data(self):
         """清理和預處理資料"""
@@ -360,35 +287,6 @@ class CompleteMarketTrendAnalyzer:
                         self.combined_df[col] = self.combined_df[col].fillna("未知")
                     else:
                         self.combined_df[col] = "未知"
-            
-            # ========== 清理人口資料 ==========
-            if self.population_df is not None and not self.population_df.empty:
-                self.population_df.columns = [
-                    str(col).strip().replace("　", "").replace(" ", "").replace("\n", "").replace("\t", "")
-                    for col in self.population_df.columns
-                ]
-                
-                city_cols = [col for col in self.population_df.columns if "縣市" in col or "city" in col.lower()]
-                if city_cols:
-                    self.population_df = self.population_df.rename(columns={city_cols[0]: "縣市"})
-                elif "縣市" not in self.population_df.columns:
-                    if len(self.population_df.columns) > 0:
-                        self.population_df = self.population_df.rename(columns={self.population_df.columns[0]: "縣市"})
-                
-                district_cols = [col for col in self.population_df.columns if "行政區" in col or "區" in col or "district" in col.lower()]
-                if district_cols:
-                    self.population_df = self.population_df.rename(columns={district_cols[0]: "行政區"})
-                
-                for col in self.population_df.columns:
-                    if col in ["縣市", "行政區"]:
-                        continue
-                    try:
-                        self.population_df[col] = pd.to_numeric(
-                            self.population_df[col].astype(str).str.replace(",", "").str.replace(" ", ""),
-                            errors='coerce'
-                        )
-                    except:
-                        pass
         
         except Exception as e:
             pass
@@ -1163,18 +1061,17 @@ class CompleteMarketTrendAnalyzer:
             rating_df = pd.DataFrame(rating_data)
             rating_df = rating_df.sort_values('綜合評分', ascending=False)
             
-            # 顯示評分表
+            # 顯示評分表（移除 background_gradient 以避免錯誤）
+            formatted_df = rating_df.style.format({
+                '平均價格': '{:,.0f}',
+                '價格穩定性': '{:.1f}%',
+                '交易活躍度': '{:,.0f}',
+                '年化成長率': '{:.2f}%',
+                '綜合評分': '{:.1f}'
+            })
+            
             st.dataframe(
-                rating_df.style.format({
-                    '平均價格': '{:,.0f}',
-                    '價格穩定性': '{:.1f}%',
-                    '交易活躍度': '{:,.0f}',
-                    '年化成長率': '{:.2f}%',
-                    '綜合評分': '{:.1f}'
-                }).background_gradient(
-                    subset=['綜合評分'], 
-                    cmap='RdYlGn'
-                ),
+                formatted_df,
                 use_container_width=True
             )
             
@@ -1206,300 +1103,6 @@ class CompleteMarketTrendAnalyzer:
             )
             
             st.plotly_chart(fig, use_container_width=True)
-    
-    # ========== 人口與房價關係分析功能 ==========
-    def _render_population_housing_relationship(self):
-        """渲染人口與房價關係分析"""
-        st.header("👥 人口與房價關係分析")
-        
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        if self.population_df is None or self.population_df.empty:
-            st.warning("無人口資料可用")
-            return
-        
-        # 分析選項
-        analysis_type = st.selectbox(
-            "選擇分析類型",
-            ["人口變化 vs 房價變化", "人口密度 vs 房價", "人口結構分析"]
-        )
-        
-        if analysis_type == "人口變化 vs 房價變化":
-            self._analyze_population_price_relationship()
-        elif analysis_type == "人口密度 vs 房價":
-            self._analyze_population_density_price()
-        elif analysis_type == "人口結構分析":
-            self._analyze_population_structure()
-    
-    def _analyze_population_price_relationship(self):
-        """分析人口變化與房價關係"""
-        st.subheader("📈 人口變化與房價關係")
-        
-        # 準備資料
-        try:
-            # 不動產資料按年度平均
-            if '民國年' in self.combined_df.columns and '平均單價元每坪' in self.combined_df.columns:
-                real_estate_yearly = self.combined_df.groupby('民國年')['平均單價元每坪'].mean().reset_index()
-                real_estate_yearly = real_estate_yearly.rename(columns={'民國年': '年度', '平均單價元每坪': '平均房價'})
-            
-            # 人口資料處理
-            pop_long = self._prepare_population_long_format()
-            
-            if not pop_long.empty and 'real_estate_yearly' in locals():
-                # 合併資料
-                merged_df = pd.merge(
-                    real_estate_yearly,
-                    pop_long.groupby('年度')['人口數'].mean().reset_index(),
-                    on='年度',
-                    how='inner'
-                )
-                
-                if not merged_df.empty:
-                    # 計算變化率
-                    merged_df['房價變化率'] = merged_df['平均房價'].pct_change() * 100
-                    merged_df['人口變化率'] = merged_df['人口數'].pct_change() * 100
-                    
-                    # 繪製雙軸圖
-                    fig = make_subplots(specs=[[{"secondary_y": True}]])
-                    
-                    fig.add_trace(
-                        go.Scatter(
-                            x=merged_df['年度'],
-                            y=merged_df['平均房價'],
-                            name='平均房價',
-                            mode='lines+markers',
-                            line=dict(color='blue', width=2)
-                        ),
-                        secondary_y=False
-                    )
-                    
-                    fig.add_trace(
-                        go.Scatter(
-                            x=merged_df['年度'],
-                            y=merged_df['人口數'],
-                            name='人口數',
-                            mode='lines+markers',
-                            line=dict(color='green', width=2)
-                        ),
-                        secondary_y=True
-                    )
-                    
-                    fig.update_layout(
-                        title='房價與人口趨勢',
-                        xaxis_title='年份',
-                        hovermode='x unified',
-                        height=500
-                    )
-                    
-                    fig.update_yaxes(title_text="平均房價（元/坪）", secondary_y=False)
-                    fig.update_yaxes(title_text="人口數", secondary_y=True)
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # 相關性分析
-                    valid_data = merged_df[['房價變化率', '人口變化率']].dropna()
-                    
-                    if len(valid_data) >= 2:
-                        correlation = valid_data['房價變化率'].corr(valid_data['人口變化率'])
-                        
-                        st.metric(
-                            "相關係數",
-                            f"{correlation:.3f}",
-                            delta="正相關" if correlation > 0 else "負相關"
-                        )
-                        
-                        # 散點圖
-                        fig2 = px.scatter(
-                            valid_data,
-                            x='人口變化率',
-                            y='房價變化率',
-                            title='人口變化率 vs 房價變化率',
-                            trendline="ols"
-                        )
-                        
-                        fig2.update_layout(
-                            xaxis_title="人口變化率 (%)",
-                            yaxis_title="房價變化率 (%)",
-                            height=500
-                        )
-                        
-                        st.plotly_chart(fig2, use_container_width=True)
-        
-        except Exception as e:
-            st.error(f"分析時發生錯誤: {str(e)}")
-    
-    def _prepare_population_long_format(self):
-        """準備人口資料（長格式）"""
-        try:
-            if self.population_df is None or self.population_df.empty:
-                return pd.DataFrame()
-            
-            # 找出包含年份的欄位
-            year_columns = []
-            for col in self.population_df.columns:
-                if any(str(year) in str(col) for year in range(100, 115)):
-                    year_columns.append(col)
-                elif "年" in str(col):
-                    year_columns.append(col)
-            
-            if not year_columns:
-                return pd.DataFrame()
-            
-            # 轉換為長格式
-            id_vars = ["縣市", "行政區"] if "行政區" in self.population_df.columns else ["縣市"]
-            pop_long = self.population_df.melt(
-                id_vars=id_vars,
-                value_vars=year_columns,
-                var_name="年度",
-                value_name="人口數"
-            )
-            
-            # 清理人口數
-            pop_long["人口數"] = pd.to_numeric(
-                pop_long["人口數"].astype(str).str.replace(",", "").str.replace(" ", ""),
-                errors='coerce'
-            )
-            
-            # 提取年份
-            pop_long["年度"] = pop_long["年度"].astype(str).str.extract(r'(\d+)').astype(int)
-            
-            return pop_long
-            
-        except Exception as e:
-            return pd.DataFrame()
-    
-    def _analyze_population_density_price(self):
-        """分析人口密度與房價關係"""
-        st.subheader("🏙️ 人口密度與房價關係")
-        
-        # 這裡可以實現人口密度分析
-        st.info("人口密度分析功能開發中...")
-        st.write("此功能將分析各區域人口密度與房價的相關性")
-    
-    def _analyze_population_structure(self):
-        """分析人口結構"""
-        st.subheader("👨‍👩‍👧‍👦 人口結構分析")
-        
-        # 這裡可以實現人口結構分析
-        st.info("人口結構分析功能開發中...")
-        st.write("此功能將分析人口年齡結構、家庭組成等對房市的影響")
-    
-    # ========== 投資報酬率分析功能 ==========
-    def _render_investment_return_analysis(self):
-        """渲染投資報酬率分析"""
-        st.header("💰 投資報酬率分析")
-        
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 投資參數設定
-        st.subheader("📝 投資參數設定")
-        
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            investment_amount = st.number_input(
-                "投資金額（萬元）",
-                min_value=100,
-                max_value=10000,
-                value=1000,
-                step=100
-            )
-        
-        with col2:
-            investment_years = st.slider(
-                "投資年限",
-                min_value=1,
-                max_value=30,
-                value=10
-            )
-        
-        with col3:
-            region_type = st.selectbox(
-                "投資區域類型",
-                ["熱門區域", "成長區域", "價值區域"]
-            )
-        
-        # 分析標籤頁
-        tab1, tab2, tab3 = st.tabs(["ROI分析", "風險評估", "投資建議"])
-        
-        with tab1:
-            self._analyze_roi(investment_amount, investment_years, region_type)
-        
-        with tab2:
-            self._analyze_investment_risk()
-        
-        with tab3:
-            self._generate_investment_recommendations()
-    
-    def _analyze_roi(self, investment_amount, investment_years, region_type):
-        """分析投資報酬率"""
-        st.subheader("📈 投資報酬率分析")
-        
-        # 這裡實現ROI計算邏輯
-        st.info("投資報酬率分析功能...")
-        
-        # 示例數據
-        roi_data = pd.DataFrame({
-            '年份': list(range(1, investment_years + 1)),
-            '預期報酬率': np.random.normal(5, 2, investment_years).cumsum(),
-            '保守估計': np.random.normal(3, 1, investment_years).cumsum(),
-            '樂觀估計': np.random.normal(7, 3, investment_years).cumsum()
-        })
-        
-        fig = px.line(
-            roi_data,
-            x='年份',
-            y=['預期報酬率', '保守估計', '樂觀估計'],
-            title='投資報酬率預測',
-            markers=True
-        )
-        
-        fig.update_layout(
-            xaxis_title="投資年限",
-            yaxis_title="累積報酬率 (%)",
-            hovermode="x unified",
-            height=500
-        )
-        
-        st.plotly_chart(fig, use_container_width=True)
-    
-    def _analyze_investment_risk(self):
-        """分析投資風險"""
-        st.subheader("⚠️ 風險評估")
-        
-        # 風險指標
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("市場風險", "中", delta="穩定")
-        
-        with col2:
-            st.metric("流動性風險", "低", delta="良好")
-        
-        with col3:
-            st.metric("政策風險", "中", delta="關注")
-        
-        # 風險分布圖
-        st.info("風險評估功能開發中...")
-    
-    def _generate_investment_recommendations(self):
-        """生成投資建議"""
-        st.subheader("🎯 投資建議")
-        
-        recommendations = [
-            "✅ **分散投資**：考慮在不同區域進行投資",
-            "✅ **長期持有**：不動產適合長期投資策略",
-            "✅ **關注政策**：密切注意政府房市政策變化",
-            "⚠️ **風險控制**：設定適當的停損點",
-            "📊 **定期檢視**：每季檢視投資組合表現"
-        ]
-        
-        for rec in recommendations:
-            st.markdown(rec)
     
     # ========== 市場預測模型功能 ==========
     def _render_market_prediction(self):
@@ -1678,22 +1281,15 @@ class CompleteMarketTrendAnalyzer:
         # 資料選擇
         data_type = st.radio(
             "選擇資料類型",
-            ["不動產資料", "人口資料"],
+            ["不動產資料"],
             horizontal=True
         )
         
-        if data_type == "不動產資料":
-            df = self.combined_df
-            if df is None or df.empty:
-                st.warning("無不動產資料可用")
-                return
-            st.info(f"不動產資料：共 {len(df)} 筆記錄")
-        else:
-            df = self.population_df
-            if df is None or df.empty:
-                st.warning("無人口資料可用")
-                return
-            st.info(f"人口資料：共 {len(df)} 筆記錄")
+        df = self.combined_df
+        if df is None or df.empty:
+            st.warning("無不動產資料可用")
+            return
+        st.info(f"不動產資料：共 {len(df)} 筆記錄")
         
         # 篩選選項
         with st.expander("🔍 篩選選項", expanded=False):
@@ -1783,7 +1379,7 @@ class CompleteMarketTrendAnalyzer:
             )
     
     # ========== 其他輔助方法 ==========
-    def _calculate_home_buying_metrics(self, df, budget, expected_size):
+    def _calculate_home_buying_metrics(self, df, budget, size):
         """計算購房關鍵指標"""
         metrics = {}
         
