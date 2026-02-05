@@ -1774,40 +1774,60 @@ class ComparisonAnalyzer:
         return st.session_state.get("GEMINI_KEY", "")
     
     def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
-        """搜尋Google Places（使用文字搜尋）"""
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        params = {
-            "query": keyword,
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "key": api_key,
-            "language": "zh-TW"
+        """搜尋Google Places（使用文字搜尋）並確保按距離排序"""
+        url = "https://places.googleapis.com/v1/places:searchNearby"
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": api_key,
+            "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.id,places.types"
         }
-
+        body = {
+            "includedTypes": [keyword],
+            "maxResultCount": 20,
+            "locationRestriction": {
+                "circle": {
+                    "center": {"latitude": lat, "longitude": lng},
+                    "radius": radius
+                }
+            },
+            "rankPreference": "DISTANCE"  # 關鍵：強制按距離排序
+        }
+    
         try:
-            response = requests.get(url, params=params, timeout=10)
+            response = requests.post(url, headers=headers, json=body, timeout=10)
             response.raise_for_status()
             r = response.json()
         except Exception as e:
+            # print(f"API請求錯誤: {e}") # 除錯用
             return []
-
+    
         results = []
-        for p in r.get("results", []):
-            loc = p["geometry"]["location"]
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+        for place in r.get("places", []):
+            p_lat = place["location"]["latitude"]
+            p_lng = place["location"]["longitude"]
+            dist = int(haversine(lat, lng, p_lat, p_lng))
+            
+            # 獲取地點名稱
+            if "displayName" in place and "text" in place["displayName"]:
+                name = place["displayName"]["text"]
+            else:
+                name = "未命名"
+            
+            # 獲取地點ID
+            place_id = place.get("id", "")
             
             results.append((
                 "類型搜尋",
                 keyword,
-                p.get("name", "未命名"),
-                loc["lat"],
-                loc["lng"],
+                name,
+                p_lat,
+                p_lng,
                 dist,
-                p.get("place_id", "")
+                place_id
             ))
         return results
-
-
-def get_comparison_analyzer():
-    """取得比較分析器實例"""
-    return ComparisonAnalyzer()
+    
+    
+    def get_comparison_analyzer():
+        """取得比較分析器實例"""
+        return ComparisonAnalyzer()
