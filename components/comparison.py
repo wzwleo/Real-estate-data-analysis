@@ -493,10 +493,10 @@ class ComparisonAnalyzer:
         
         st.info("🔍 分析完成後，此處將顯示各類別設施的查詢結果（找到/未找到）")
     
+    # 修改 _display_category_coverage 方法
     def _display_category_coverage(self, selected_categories, selected_subtypes):
-        """顯示類別覆蓋情況"""
-        st.markdown("### 📊 各類別設施查詢結果")
-        st.markdown("以下是您選擇的設施類別在搜尋半徑內的查詢結果：")
+        """顯示類別覆蓋情況 - 簡化版，只顯示選擇的類別"""
+        st.markdown("### 📋 已選擇的設施類別")
         
         category_coverage = st.session_state.get("category_coverage", {})
         
@@ -504,7 +504,7 @@ class ComparisonAnalyzer:
             st.info("尚未進行分析，請先執行分析")
             return
         
-        # 為每個房屋顯示覆蓋情況
+        # 為每個房屋顯示類別情況
         if "analysis_results" in st.session_state:
             results = st.session_state.analysis_results
             houses_data = results.get("houses_data", {})
@@ -516,57 +516,50 @@ class ComparisonAnalyzer:
             # 單一房屋或多房屋
             if results["num_houses"] == 1 or results["analysis_mode"] == "單一房屋分析":
                 house_name = list(houses_data.keys())[0]
-                self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+                self._display_single_house_categories(house_name, selected_categories, selected_subtypes)
             else:
                 # 多房屋比較 - 使用選項卡
-                coverage_tabs = st.tabs([f"{house_name} 覆蓋情況" for house_name in houses_data.keys()])
+                coverage_tabs = st.tabs([f"{house_name}" for house_name in houses_data.keys()])
                 
                 for idx, house_name in enumerate(houses_data.keys()):
                     with coverage_tabs[idx]:
-                        self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+                        self._display_single_house_categories(house_name, selected_categories, selected_subtypes)
         else:
             st.warning("⚠️ 沒有分析結果可用")
     
-    def _display_single_house_coverage(self, house_name, selected_categories, selected_subtypes, category_coverage):
-        """顯示單一房屋的類別覆蓋情況"""
+    def _display_single_house_categories(self, house_name, selected_categories, selected_subtypes):
+        """顯示單一房屋的選擇類別 - 簡化版"""
         st.markdown(f"### 🏠 {house_name}")
         
-        if house_name not in category_coverage:
-            st.info("該房屋尚未進行類別覆蓋分析")
-            return
-        
-        house_coverage = category_coverage[house_name]
-        
-        # 計算總體覆蓋率
-        total_selected = 0
-        total_found = 0
-        
+        # 顯示各類別詳細情況
         for cat in selected_categories:
-            if cat in selected_subtypes and cat in house_coverage:
-                cat_selected = len(selected_subtypes[cat])
-                cat_found = 0
+            if cat not in selected_subtypes:
+                continue
+            
+            color = CATEGORY_COLORS.get(cat, "#000000")
+            subtype_count = len(selected_subtypes[cat])
+            
+            # 使用容器顯示類別資訊
+            with st.container():
+                # 標題和統計
+                st.markdown(f"<h4 style='color:{color};'>{cat} ({subtype_count}種設施)</h4>", unsafe_allow_html=True)
                 
-                # 計算該類別找到的設施數量
-                for subtype in selected_subtypes[cat]:
-                    if subtype in house_coverage[cat]:
-                        if house_coverage[cat][subtype]:
-                            cat_found += 1
+                # 顯示該類別下的所有設施子類別
+                cols_per_row = 3
+                items = selected_subtypes[cat]
                 
-                total_selected += cat_selected
-                total_found += cat_found
-        
-        overall_coverage = (total_found / total_selected * 100) if total_selected > 0 else 0
-        
-        # 顯示總體統計
-        stat_col1, stat_col2, stat_col3 = st.columns(3)
-        with stat_col1:
-            st.metric("選擇設施數", total_selected)
-        with stat_col2:
-            st.metric("找到設施數", total_found)
-        with stat_col3:
-            st.metric("覆蓋率", f"{overall_coverage:.1f}%")
-        
-        st.markdown("---")
+                for i in range(0, len(items), cols_per_row):
+                    row_items = items[i:i + cols_per_row]
+                    cols = st.columns(cols_per_row)
+                    
+                    for col_idx, english_kw in enumerate(row_items):
+                        if col_idx < len(cols):
+                            with cols[col_idx]:
+                                # 顯示中文名稱
+                                chinese_name = english_kw  # 因為現在已經是中文
+                                st.markdown(f"• {chinese_name}")
+                
+                st.markdown("---")
         
         # 顯示各類別詳細情況
         for cat in selected_categories:
