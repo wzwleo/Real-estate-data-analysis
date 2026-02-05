@@ -403,200 +403,12 @@ class ComparisonAnalyzer:
         return selected_categories, selected_subtypes
     
     def _render_selection_summary(self, selected_categories, selected_subtypes):
-        """渲染選擇摘要 - 新增類別覆蓋檢查"""
+        """渲染選擇摘要 - 簡化版本，移除有問題的覆蓋檢查"""
         st.markdown("---")
         st.subheader("📋 已選擇的設施摘要")
         
-        # 檢查是否有分析結果可以顯示覆蓋情況
-        if ("analysis_results" in st.session_state and 
-            "category_coverage" in st.session_state and 
-            st.session_state.category_coverage):
-            
-            # 檢查選取的房屋是否在覆蓋記錄中
-            if "selected_houses" in st.session_state and st.session_state.selected_houses:
-                # 取得分析結果
-                results = st.session_state.analysis_results
-                houses_data = results.get("houses_data", {})
-                
-                if houses_data:
-                    # 取得第一個房屋名稱
-                    house_name = list(houses_data.keys())[0]
-                    
-                    # 檢查該房屋是否有覆蓋記錄
-                    if house_name in st.session_state.category_coverage:
-                        # 這裡直接調用 _display_category_coverage 方法
-                        self._display_category_coverage(selected_categories, selected_subtypes)
-                        return  # 重要：顯示覆蓋情況後返回，不顯示基本摘要
-        
-        # 如果沒有分析結果或覆蓋情況，顯示基本的選擇摘要
+        # 直接顯示基本的選擇摘要，不進行複雜的覆蓋檢查
         self._display_basic_selection_summary(selected_categories, selected_subtypes)
-    
-    
-    def _display_category_coverage(self, selected_categories, selected_subtypes):
-        """顯示類別覆蓋情況"""
-        st.markdown("### 📊 各類別設施查詢結果")
-        st.markdown("以下是您選擇的設施類別在搜尋半徑內的查詢結果：")
-        
-        category_coverage = st.session_state.get("category_coverage", {})
-        
-        if not category_coverage:
-            st.info("尚未進行分析，請先執行分析")
-            return
-        
-        # 顯示調試信息 - 幫助診斷問題
-        with st.expander("🔍 調試信息（點擊查看詳細數據）"):
-            st.write("category_coverage 數據結構:", category_coverage)
-            st.write("selected_categories:", selected_categories)
-            st.write("selected_subtypes:", selected_subtypes)
-            
-            # 檢查是否有分析結果
-            if "analysis_results" in st.session_state:
-                results = st.session_state.analysis_results
-                st.write("分析結果中的 houses_data:", results.get("houses_data", {}))
-            else:
-                st.write("⚠️ 沒有分析結果")
-        
-        # 為每個房屋顯示覆蓋情況
-        if "analysis_results" in st.session_state:
-            results = st.session_state.analysis_results
-            houses_data = results.get("houses_data", {})
-            
-            if not houses_data:
-                st.warning("⚠️ 沒有房屋資料")
-                return
-            
-            # 單一房屋或多房屋
-            if results["num_houses"] == 1 or results["analysis_mode"] == "單一房屋分析":
-                house_name = list(houses_data.keys())[0]
-                self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
-            else:
-                # 多房屋比較 - 使用選項卡
-                coverage_tabs = st.tabs([f"{house_name} 覆蓋情況" for house_name in houses_data.keys()])
-                
-                for idx, house_name in enumerate(houses_data.keys()):
-                    with coverage_tabs[idx]:
-                        self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
-        else:
-            st.warning("⚠️ 沒有分析結果可用")
-    
-    
-    def _display_single_house_coverage(self, house_name, selected_categories, selected_subtypes, category_coverage):
-        """顯示單一房屋的類別覆蓋情況"""
-        st.markdown(f"### 🏠 {house_name}")
-        
-        if house_name not in category_coverage:
-            st.info("該房屋尚未進行類別覆蓋分析")
-            return
-        
-        house_coverage = category_coverage[house_name]
-        
-        # 顯示覆蓋數據結構（用於調試）
-        with st.expander("🔍 查看詳細覆蓋數據"):
-            st.write("房屋名稱:", house_name)
-            st.write("類別覆蓋數據結構:", house_coverage)
-            st.write("選擇的子類別:", selected_subtypes)
-            
-            for cat in selected_categories:
-                if cat in selected_subtypes and cat in house_coverage:
-                    st.markdown(f"**{cat}**")
-                    for subtype in selected_subtypes[cat]:
-                        if subtype in house_coverage[cat]:
-                            found = house_coverage[cat][subtype]
-                            chinese_name = ENGLISH_TO_CHINESE.get(subtype, subtype)
-                            st.write(f"- {chinese_name}: {found} (類型: {type(found).__name__})")
-        
-        # 計算總體覆蓋率
-        total_selected = 0
-        total_found = 0
-        
-        for cat in selected_categories:
-            if cat in selected_subtypes and cat in house_coverage:
-                cat_selected = len(selected_subtypes[cat])
-                cat_found = 0
-                
-                # 計算該類別找到的設施數量
-                for subtype in selected_subtypes[cat]:
-                    if subtype in house_coverage[cat]:
-                        found_value = house_coverage[cat][subtype]
-                        # 檢查是否為真值
-                        if isinstance(found_value, bool):
-                            if found_value:
-                                cat_found += 1
-                        elif found_value:  # 如果是非布林值的真值
-                            cat_found += 1
-                
-                total_selected += cat_selected
-                total_found += cat_found
-        
-        overall_coverage = (total_found / total_selected * 100) if total_selected > 0 else 0
-        
-        # 顯示總體統計
-        stat_col1, stat_col2, stat_col3 = st.columns(3)
-        with stat_col1:
-            st.metric("選擇設施數", total_selected)
-        with stat_col2:
-            st.metric("找到設施數", total_found)
-        with stat_col3:
-            st.metric("覆蓋率", f"{overall_coverage:.1f}%")
-        
-        st.markdown("---")
-        
-        # 顯示各類別詳細情況
-        for cat in selected_categories:
-            if cat not in selected_subtypes or cat not in house_coverage:
-                continue
-            
-            color = CATEGORY_COLORS.get(cat, "#000000")
-            subtype_count = len(selected_subtypes[cat])
-            found_count = 0
-            
-            # 計算找到的設施數量
-            for subtype in selected_subtypes[cat]:
-                if subtype in house_coverage[cat]:
-                    found_value = house_coverage[cat][subtype]
-                    if isinstance(found_value, bool):
-                        if found_value:
-                            found_count += 1
-                    elif found_value:  # 如果是非布林值的真值
-                        found_count += 1
-            
-            cat_coverage = (found_count / subtype_count * 100) if subtype_count > 0 else 0
-            
-            # 使用容器顯示類別資訊
-            with st.container():
-                # 標題和統計
-                col_title, col_stats = st.columns([3, 1])
-                with col_title:
-                    st.markdown(f"<h4 style='color:{color};'>{cat}</h4>", unsafe_allow_html=True)
-                with col_stats:
-                    st.markdown(f"**{found_count}/{subtype_count}**")
-                
-                # 進度條
-                st.progress(cat_coverage / 100)
-                
-                # 顯示每個子類別的情況
-                for english_kw in selected_subtypes[cat]:
-                    chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
-                    found = False
-                    
-                    if english_kw in house_coverage[cat]:
-                        found_value = house_coverage[cat][english_kw]
-                        if isinstance(found_value, bool):
-                            found = found_value
-                        else:
-                            found = bool(found_value)
-                    
-                    col_status, col_name = st.columns([1, 5])
-                    with col_status:
-                        if found:
-                            st.success("✅")
-                        else:
-                            st.error("❌")
-                    with col_name:
-                        st.text(chinese_name)
-                
-                st.markdown("---")
-    
     
     def _display_basic_selection_summary(self, selected_categories, selected_subtypes):
         """顯示基本的選擇摘要"""
@@ -633,7 +445,7 @@ class ComparisonAnalyzer:
                         items_display = "、".join(chinese_names)
                         st.caption(f"✓ {items_display}等{count}種設施")
         
-        st.info("🔍 分析完成後，此處將顯示各類別設施的查詢結果（找到/未找到）")
+        st.info("🔍 分析完成後，將在下方顯示詳細的設施查詢結果")
     
     def _render_action_buttons(self, analysis_mode, selected_houses, selected_categories, 
                               radius, keyword, selected_subtypes, fav_df):
@@ -785,21 +597,19 @@ class ComparisonAnalyzer:
             # 步驟2: 查詢周邊設施 - 使用文字搜尋方法
             status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
             places_data = {}
-            category_coverage = {}  # 新增：記錄類別覆蓋
             
             total_houses = len(houses_data)
             for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
                 lat, lng = house_info["lat"], house_info["lng"]
                 
-                # 查詢設施並記錄覆蓋情況 - 改用文字搜尋
-                places, house_coverage = self._query_google_places_with_coverage_via_text_search(
+                # 查詢設施 - 改用文字搜尋
+                places = self._query_google_places_via_text_search(
                     lat, lng, settings["server_key"], 
                     settings["selected_categories"], settings["selected_subtypes"],
                     settings["radius"], extra_keyword=settings["keyword"]
                 )
                 
                 places_data[house_name] = places
-                category_coverage[house_name] = house_coverage
                 
                 # 更新進度
                 progress_value = 25 + int(((house_idx + 1) / total_houses) * 25)
@@ -834,9 +644,6 @@ class ComparisonAnalyzer:
                 "facilities_table": facilities_table
             }
             
-            # 儲存類別覆蓋情況
-            st.session_state.category_coverage = category_coverage
-            
             progress_bar.progress(100)
             status_text.text("✅ 分析完成！")
             
@@ -851,40 +658,32 @@ class ComparisonAnalyzer:
             st.error(f"❌ 分析執行失敗: {str(e)}")
             st.session_state.analysis_in_progress = False
     
-    def _query_google_places_with_coverage_via_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+    def _query_google_places_via_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
         """
-        使用文字搜尋查詢Google Places並記錄類別覆蓋情況
+        使用文字搜尋查詢Google Places
         所有設施都使用 textsearch 方法查詢，跟關鍵字搜尋一樣
         """
         results, seen = [], set()
-        
-        # 初始化覆蓋記錄 - 確保格式正確
-        category_coverage = {}
-        for cat in selected_categories:
-            if cat in selected_subtypes:
-                category_coverage[cat] = {}
-                for subtype in selected_subtypes[cat]:
-                    category_coverage[cat][subtype] = False
         
         total_tasks = 0
         for cat in selected_categories:
             if cat in selected_subtypes:
                 total_tasks += len(selected_subtypes[cat])
         total_tasks += (1 if extra_keyword else 0)
-    
+
         if total_tasks == 0:
-            return results, category_coverage
-    
+            return results
+
         progress = st.progress(0)
         progress_text = st.empty()
         completed = 0
-    
+
         def update_progress(task_desc):
             nonlocal completed
             completed += 1
             progress.progress(min(completed / total_tasks, 1.0))
             progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-    
+
         # 處理所有子類別的搜尋 - 全部改用文字搜尋
         for cat in selected_categories:
             if cat not in selected_subtypes:
@@ -898,19 +697,6 @@ class ComparisonAnalyzer:
                     chinese_name = ENGLISH_TO_CHINESE.get(place_type, place_type)
                     places = self._search_text_google_places(lat, lng, api_key, chinese_name, radius)
                     
-                    # 更新覆蓋記錄 - 確保有結果就設為 True
-                    if places and len(places) > 0:
-                        # 檢查是否有在搜尋半徑內的結果
-                        found_within_radius = False
-                        for p in places[:5]:  # 只檢查前5個
-                            if p[5] <= radius:  # 距離在搜尋半徑內
-                                found_within_radius = True
-                                break
-                        
-                        category_coverage[cat][place_type] = found_within_radius
-                    else:
-                        category_coverage[cat][place_type] = False
-                    
                     # 只取前5個結果避免過多
                     for p in places[:5]:  # 限制數量
                         if p[5] > radius:
@@ -922,14 +708,12 @@ class ComparisonAnalyzer:
                         
                         # 使用子類別作為搜尋關鍵字
                         results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
-    
+
                     time.sleep(0.3)  # 避免 API 限制
                     
                 except Exception as e:
-                    # 搜尋失敗時，保持 False
-                    category_coverage[cat][place_type] = False
                     continue
-    
+
         # 處理額外關鍵字搜尋
         if extra_keyword:
             update_progress(f"額外關鍵字: {extra_keyword}")
@@ -947,22 +731,14 @@ class ComparisonAnalyzer:
                 time.sleep(0.3)
             except Exception as e:
                 pass
-    
+
         progress.progress(1.0)
         progress_text.text("✅ 查詢完成！")
         
         # 按距離排序
         results.sort(key=lambda x: x[5])
         
-        # 顯示搜尋結果統計
-        st.info(f"📊 {len(results)} 個設施找到")
-        
-        return results, category_coverage
-        
-        # 按距離排序
-        results.sort(key=lambda x: x[5])
-        
-        return results, category_coverage
+        return results
     
     def _display_analysis_results(self, results):
         """顯示分析結果"""
@@ -1795,18 +1571,6 @@ class ComparisonAnalyzer:
                 - 經度、緯度：設施的GPS座標
                 """
             
-            # 加入類別覆蓋情況
-            category_coverage_info = ""
-            if "category_coverage" in st.session_state and house_name in st.session_state.category_coverage:
-                house_coverage = st.session_state.category_coverage[house_name]
-                category_coverage_info = "\n【類別設施覆蓋情況】\n"
-                for cat in selected_categories:
-                    if cat in house_coverage:
-                        total = len(house_coverage[cat])
-                        found = sum(1 for v in house_coverage[cat].values() if v)
-                        coverage_rate = (found / total * 100) if total > 0 else 0
-                        category_coverage_info += f"- {cat}: 找到 {found}/{total} 種設施 (覆蓋率: {coverage_rate:.1f}%)\n"
-            
             prompt = f"""
             你是一位專業的房地產分析師，請對以下房屋的生活機能進行詳細分析。
             
@@ -1826,8 +1590,6 @@ class ComparisonAnalyzer:
             
             【各類型設施數量】
             {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
-            
-            {category_coverage_info}
             
             {table_summary}
             
