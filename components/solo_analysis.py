@@ -15,14 +15,197 @@ name_map = {
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
+def plot_floor_distribution(target_row, df):
+    """
+    繪製同區同類型樓層分布與平均單價圖
+    """
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame([df])
+    
+    df = df.copy()
+    
+    # 統一使用 '類型' 欄位處理
+    if '類型' in df.columns:
+        df['類型'] = df['類型'].astype(str).str.strip()
+    
+    target_district = target_row.get('行政區', None)
+    target_type = target_row.get('類型', None)
+    
+    if target_type and isinstance(target_type, str):
+        target_type = target_type.strip()
+        # 處理混合類型
+        if '/' in target_type:
+            target_type_main = target_type.split('/')[0].strip()
+        else:
+            target_type_main = target_type
+    else:
+        st.warning("⚠️ 無法取得目標房型的類型資訊")
+        return
+    
+    if not target_district:
+        st.warning("⚠️ 無法取得目標房型的行政區資訊")
+        return
+    
+    # 使用模糊比對篩選
+    df_filtered = df[
+        (df['行政區'] == target_district) & 
+        (df['類型'].astype(str).str.contains(target_type_main, case=False, na=False))
+    ].copy()
+    
+    if len(df_filtered) == 0:
+        st.info(f"ℹ️ 找不到 {target_district} 包含「{target_type_main}」的房屋")
+        return
+    
+    # ========== 提取樓層數值 ==========
+    def extract_floor(floor_str):
+        """從樓層字串中提取數字"""
+        if pd.isna(floor_str):
+            return np.nan
+        try:
+            # 嘗試提取 "X樓" 中的 X
+            floor_num = str(floor_str).split('樓')[0].strip()
+            return int(floor_num)
+        except:
+            return np.nan
+    
+    df_filtered['樓層數值'] = df_filtered['樓層'].apply(extract_floor)
+    
+    # 移除樓層數值為 NaN 的資料
+    df_filtered_copy = df_filtered.dropna(subset=['樓層數值']).copy()
+    
+    if len(df_filtered_copy) == 0:
+        st.info("ℹ️ 無足夠樓層資料進行分析")
+        return
+    
+    # 確保有總價和建坪欄位
+    if '總價(萬)' in df_filtered_copy.columns:
+        df_filtered_copy['總價'] = pd.to_numeric(df_filtered_copy['總價(萬)'], errors='coerce')
+    elif '總價' in df_filtered_copy.columns:
+        df_filtered_copy['總價'] = pd.to_numeric(df_filtered_copy['總價'], errors='coerce')
+    else:
+        df_filtered_copy['總價'] = 0
+    
+    if '建坪' in df_filtered_copy.columns:
+        df_filtered_copy['建坪數值'] = pd.to_numeric(df_filtered_copy['建坪'], errors='coerce')
+    elif '建物面積' in df_filtered_copy.columns:
+        df_filtered_copy['建坪數值'] = pd.to_numeric(df_filtered_copy['建物面積'], errors='coerce')
+    else:
+        df_filtered_copy['建坪數值'] = 0
+    
+    # 計算單價
+    df_filtered_copy = df_filtered_copy[(df_filtered_copy['總價'] > 0) & (df_filtered_copy['建坪數值'] > 0)].copy()
+    
+    if len(df_filtered_copy) == 0:
+        st.info("ℹ️ 無足夠有效價格資料進行分析")
+        return
+    
+    df_filtered_copy['單價(萬/坪)'] = df_filtered_copy['總價'] / df_filtered_copy['建坪數值']
+    
+    # ========== 建立樓層區間 ==========
+    # 設定樓層區間（每 5 層一組）
+    max_floor = df_filtered_copy['樓層數值'].max()
+    bin_width = 5
+    bins = list(range(0, int(max_floor) + bin_width, bin_width))
+    
+    df_filtered_copy['樓層區間'] = pd.cut(
+        df_filtered_copy['樓層數值'],
+        bins=bins,
+        labels=[f"{bins[i]}-{bins[i+1]}樓" for i in range(len(bins)-1)],
+        include_lowest=True
+    )
+    
+    # ========== 計算統計數據 ==========
+    floor_stats = df_filtered_copy.groupby('樓層區間', observed=True).agg({
+        '單價(萬/坪)': 'mean',
+        '標題': 'count'
+    }).reset_index()
+    
+    floor_stats.columns = ['樓層區間', '平均單價', '房屋數量']
+    
+    if len(floor_stats) == 0:
+        st.info("ℹ️ 無足夠資料進行樓層分析")
+        return
+    
+    # ========== 建立圖表 ==========
+    fig = go.Figure()
+    
+    # 添加長條圖（房屋數量）
+    fig.add_trace(go.Bar(
+        x=floor_stats['樓層區間'].astype(str),
+        y=floor_stats['房屋數量'],
+        name='房屋數量',
+        marker=dict(color='lightblue', line=dict(color='black', width=1)),
+        yaxis='y'
+    ))
+    
+    # 添加折線圖（平均單價）
+    fig.add_trace(go.Scatter(
+        x=floor_stats['樓層區間'].astype(str),
+        y=floor_stats['平均單價'],
+        mode='lines+markers',
+        name='平均單價',
+        line=dict(color='orange', width=2),
+        marker=dict(size=8, color='orange'),
+        yaxis='y2',
+        hovertemplate='<b>%{x}</b><br>平均單價: %{y:.2f} 萬/坪<extra></extra>'
+    ))
+    
+    # 標記目標房屋所在樓層區間
+    target_floor = extract_floor(target_row.get('樓層', None))
+    if not pd.isna(target_floor):
+        target_floor_group = pd.cut([target_floor], bins=bins, include_lowest=True)[0]
+        target_floor_label = str(target_floor_group)
+        
+        # 找到目標樓層區間在圖表中的位置
+        if target_floor_label in floor_stats['樓層區間'].astype(str).values:
+            target_floor_data = floor_stats[floor_stats['樓層區間'].astype(str) == target_floor_label].iloc[0]
+            
+            fig.add_trace(go.Scatter(
+                x=[target_floor_label],
+                y=[target_floor_data['房屋數量']],
+                mode="markers+text",
+                marker=dict(color="red", size=15, symbol="star"),
+                text=["目標房屋"],
+                textposition="top center",
+                name="目標房屋",
+                showlegend=True,
+                yaxis='y'
+            ))
+    
+    # 設定雙 Y 軸 layout
+    fig.update_layout(
+        title=f"{target_district} 包含「{target_type_main}」的房型 樓層分布與平均單價 (共 {len(df_filtered_copy)} 筆)",
+        xaxis_title='樓層區間',
+        yaxis=dict(
+            title='房屋數量',
+            side='left',
+            showgrid=True,
+            gridcolor='whitesmoke'
+        ),
+        yaxis2=dict(
+            title='平均單價 (萬/坪)',
+            overlaying='y',
+            side='right',
+            showgrid=False
+        ),
+        template='plotly_white',
+        width=650,
+        height=650,
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        bargap=0.3
+    )
+
 def plot_age_distribution(target_row, df):
     """
     繪製同區同類型屋齡分布直方圖（含建坪單價趨勢線）
     """
-    import re
-    import numpy as np
-    import plotly.graph_objects as go
-    
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
     
@@ -1059,6 +1242,18 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("樓層 🏢")
+                # 取得比較資料
+                compare_base_df = pd.DataFrame()
+                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+                    compare_base_df = st.session_state.all_properties_df
+                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+                    compare_base_df = st.session_state.filtered_df
+                st.markdown("### 📌 樓層分析結論")
+                st.write(age_response.text)
+                if not compare_base_df.empty:
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
                 
                 st.subheader("格局 🛋")
