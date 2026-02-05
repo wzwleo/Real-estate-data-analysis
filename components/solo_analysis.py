@@ -17,141 +17,137 @@ reverse_name_map = {v: k for k, v in name_map.items()}
 
 def plot_floor_distribution(target_row, df):
     """
-    繪製同區同類型樓層分布與平均單價圖
-    
-    Parameters:
-    -----------
-    target_row : pd.Series
-        目標房型的資料列
-    df : pd.DataFrame
-        包含所有房產資料的 DataFrame
+    繪製同區同類型樓層分布直方圖（含平均單價趨勢線）
+    與 plot_age_distribution 架構完全一致
     """
+
+    import numpy as np
+    import pandas as pd
+    import plotly.graph_objects as go
+    import streamlit as st
+
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
-    
+
     df = df.copy()
-    
-    # 統一使用 '類型' 欄位處理
-    if '類型' in df.columns:
-        df['類型'] = df['類型'].astype(str).str.strip()
-    
-    target_district = target_row.get('行政區', None)
-    target_type = target_row.get('類型', None)
-    
-    if target_type and isinstance(target_type, str):
-        target_type = target_type.strip()
-        # 處理混合類型
-        if '/' in target_type:
-            target_type_main = target_type.split('/')[0].strip()
-        else:
-            target_type_main = target_type
-    else:
-        st.warning("⚠️ 無法取得目標房型的類型資訊")
-        return
-    
-    if not target_district:
-        st.warning("⚠️ 無法取得目標房型的行政區資訊")
-        return
-    
-    # 使用模糊比對篩選
-    df_filtered = df[
-        (df['行政區'] == target_district) & 
-        (df['類型'].astype(str).str.contains(target_type_main, case=False, na=False))
-    ].copy()
-    
-    if len(df_filtered) == 0:
-        st.info(f"ℹ️ 找不到 {target_district} 包含「{target_type_main}」的房屋")
-        return
-    
-    # ========== 提取樓層數值 ==========
-    def extract_floor(floor_str):
-        """從樓層字串中提取數字"""
-        if pd.isna(floor_str):
+
+    # ========= 樓層字串 → 數字 =========
+    def parse_floor(x):
+        if pd.isna(x):
             return np.nan
         try:
-            # 嘗試提取 "X樓" 中的 X
-            floor_num = str(floor_str).split('樓')[0].strip()
-            return int(floor_num)
+            return int(str(x).split('樓')[0])
         except:
             return np.nan
-    
-    df_filtered['樓層數值'] = df_filtered['樓層'].apply(extract_floor)
-    
-    # 取得目標樓層（在移除 NaN 之前）
-    target_floor = extract_floor(target_row.get('樓層', None))
-    
-    # 移除樓層數值為 NaN 的資料
-    df_filtered_copy = df_filtered.dropna(subset=['樓層數值']).copy()
-    
-    if len(df_filtered_copy) == 0:
-        st.info("ℹ️ 無足夠樓層資料進行分析")
+
+    df['樓層數值'] = df['樓層'].apply(parse_floor)
+
+    # ========= 類型清理 =========
+    if '類型' in df.columns:
+        df['類型'] = df['類型'].astype(str).str.strip()
+
+    target_district = target_row.get('行政區')
+    target_type = target_row.get('類型')
+
+    if not target_district or not target_type:
+        st.warning("⚠️ 缺少行政區或類型資訊")
         return
-    
-    # 確保有總價和建坪欄位
-    if '總價(萬)' in df_filtered_copy.columns:
-        df_filtered_copy['總價'] = pd.to_numeric(df_filtered_copy['總價(萬)'], errors='coerce')
-    elif '總價' in df_filtered_copy.columns:
-        df_filtered_copy['總價'] = pd.to_numeric(df_filtered_copy['總價'], errors='coerce')
-    else:
-        df_filtered_copy['總價'] = 0
-    
-    if '建坪' in df_filtered_copy.columns:
-        df_filtered_copy['建坪數值'] = pd.to_numeric(df_filtered_copy['建坪'], errors='coerce')
-    elif '建物面積' in df_filtered_copy.columns:
-        df_filtered_copy['建坪數值'] = pd.to_numeric(df_filtered_copy['建物面積'], errors='coerce')
-    else:
-        df_filtered_copy['建坪數值'] = 0
-    
-    # 計算單價
-    df_filtered_copy = df_filtered_copy[(df_filtered_copy['總價'] > 0) & (df_filtered_copy['建坪數值'] > 0)].copy()
-    
-    if len(df_filtered_copy) == 0:
-        st.info("ℹ️ 無足夠有效價格資料進行分析")
+
+    target_type_main = target_type.split('/')[0].strip()
+
+    # ========= 篩選同區同類型 =========
+    df_filtered = df[
+        (df['行政區'] == target_district) &
+        (df['類型'].str.contains(target_type_main, case=False, na=False))
+    ].copy()
+
+    if len(df_filtered) == 0:
+        st.info("ℹ️ 無符合條件資料")
         return
-    
-    df_filtered_copy['單價(萬/坪)'] = df_filtered_copy['總價'] / df_filtered_copy['建坪數值']
-    
-    # ========== 建立樓層區間 ==========
-    # 設定樓層區間（每 5 層一組）
-    max_floor = df_filtered_copy['樓層數值'].max()
+
+    # ========= 目標樓層 =========
+    target_floor = parse_floor(target_row.get('樓層'))
+    if pd.isna(target_floor):
+        st.warning("⚠️ 目標房屋缺少樓層資訊")
+        return
+
+    # ========= 有效樓層 =========
+    floors = df_filtered['樓層數值'].dropna().values
+    if len(floors) == 0:
+        st.info("ℹ️ 無足夠樓層資料")
+        return
+
+    # ========= 分箱（每 5 樓） =========
     bin_width = 5
-    bins = list(range(0, int(max_floor) + bin_width, bin_width))
-    
-    df_filtered_copy['樓層區間'] = pd.cut(
-        df_filtered_copy['樓層數值'],
+    bins = np.arange(0, floors.max() + bin_width, bin_width)
+
+    hist, bin_edges = np.histogram(floors, bins=bins)
+
+    x_labels = [
+        f"{int(bin_edges[i])}-{int(bin_edges[i+1])} 樓"
+        for i in range(len(hist))
+    ]
+
+    # ========= 計算平均單價 =========
+    if '總價(萬)' in df_filtered.columns:
+        df_filtered['總價'] = pd.to_numeric(df_filtered['總價(萬)'], errors='coerce')
+    else:
+        df_filtered['總價'] = pd.to_numeric(df_filtered.get('總價', 0), errors='coerce')
+
+    if '建坪' in df_filtered.columns:
+        df_filtered['建坪數值'] = pd.to_numeric(df_filtered['建坪'], errors='coerce')
+    else:
+        df_filtered['建坪數值'] = pd.to_numeric(df_filtered.get('建物面積', 0), errors='coerce')
+
+    df_valid = df_filtered[
+        (df_filtered['總價'] > 0) &
+        (df_filtered['建坪數值'] > 0)
+    ].copy()
+
+    df_valid['單價'] = df_valid['總價'] / df_valid['建坪數值']
+
+    df_valid['樓層區間'] = pd.cut(
+        df_valid['樓層數值'],
         bins=bins,
-        labels=[f"{bins[i]}-{bins[i+1]}樓" for i in range(len(bins)-1)],
+        labels=x_labels,
         include_lowest=True
     )
-    
-    # ========== 計算統計數據 ==========
-    floor_stats = df_filtered_copy.groupby('樓層區間', observed=True).agg({
-        '單價(萬/坪)': 'mean',
-        '標題': 'count'
-    }).reset_index()
-    
-    floor_stats.columns = ['樓層區間', '平均單價', '房屋數量']
-    
-    if len(floor_stats) == 0:
-        st.info("ℹ️ 無足夠資料進行樓層分析")
-        return
-    
-    # ========== 建立圖表 ==========
+
+    avg_price = df_valid.groupby('樓層區間', observed=True)['單價'].mean()
+
+    y_price = [avg_price.get(label, None) for label in x_labels]
+
+    # ========= 建圖 =========
     fig = go.Figure()
-    
-    # 添加長條圖（房屋數量）
+
+    # 柱狀圖：數量
     fig.add_trace(go.Bar(
-        x=floor_stats['樓層區間'].astype(str),
-        y=floor_stats['房屋數量'],
-        name='房屋數量',
+        x=x_labels,
+        y=hist,
+        name="房屋數量",
         marker=dict(color='lightblue', line=dict(color='black', width=1)),
         yaxis='y'
     ))
-    
-    # 添加折線圖（平均單價）
+
+    # 🔴 目標樓層紅星（關鍵）
+    target_bin_index = np.digitize(target_floor, bins) - 1
+
+    if 0 <= target_bin_index < len(hist):
+        fig.add_trace(go.Scatter(
+            x=[x_labels[target_bin_index]],
+            y=[hist[target_bin_index]],
+            mode="markers+text",
+            marker=dict(symbol="star", size=16, color="red"),
+            text=["目標房屋"],
+            textposition="top center",
+            name="目標房屋",
+            yaxis='y'
+        ))
+
+    # 折線：平均單價
     fig.add_trace(go.Scatter(
-        x=floor_stats['樓層區間'].astype(str),
-        y=floor_stats['平均單價'],
+        x=x_labels,
+        y=y_price,
         mode='lines+markers',
         name='平均單價',
         line=dict(color='orange', width=2),
@@ -159,59 +155,28 @@ def plot_floor_distribution(target_row, df):
         yaxis='y2',
         hovertemplate='<b>%{x}</b><br>平均單價: %{y:.2f} 萬/坪<extra></extra>'
     ))
-    
-    # ========== 標記目標房屋所在樓層區間 ==========
-    if not pd.isna(target_floor):
-        target_floor_group = pd.cut([target_floor], bins=bins, include_lowest=True)[0]
-        target_floor_label = str(target_floor_group)
-        
-        # 找到目標樓層區間在圖表中的位置
-        if target_floor_label in floor_stats['樓層區間'].astype(str).values:
-            target_bin_index = np.digitize(target_floor, bins) - 1
-            
-            if 0 <= target_bin_index < len(floor_stats):
-                fig.add_trace(go.Scatter(
-                    x=[floor_stats.iloc[target_bin_index]['樓層區間']],
-                    y=[floor_stats.iloc[target_bin_index]['房屋數量']],
-                    mode="markers+text",
-                    marker=dict(color="red", size=15, symbol="star"),
-                    text=["目標房屋"],
-                    textposition="top center",
-                    name="目標房屋",
-                    yaxis='y'
-                ))
-    
-    # 設定雙 Y 軸 layout
+
+    # ========= Layout =========
     fig.update_layout(
-        title=f"{target_district} 包含「{target_type_main}」的房型 樓層分布與平均單價 (共 {len(df_filtered_copy)} 筆)",
-        xaxis_title='樓層區間',
-        yaxis=dict(
-            title='房屋數量',
-            side='left',
-            showgrid=True,
-            gridcolor='whitesmoke'
-        ),
-        yaxis2=dict(
-            title='平均單價 (萬/坪)',
-            overlaying='y',
-            side='right',
-            showgrid=False
-        ),
-        template='plotly_white',
+        title=f"{target_district}「{target_type_main}」樓層分布與單價趨勢",
+        xaxis_title="樓層區間",
+        yaxis=dict(title="房屋數量", showgrid=True),
+        yaxis2=dict(title="平均單價 (萬/坪)", overlaying='y', side='right'),
+        template="plotly_white",
+        hovermode="x unified",
         width=600,
         height=500,
-        hovermode='x unified',
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
             x=1
-        ),
-        bargap=0.3
+        )
     )
-    
+
     st.plotly_chart(fig, use_container_width=True)
+
 def plot_age_distribution(target_row, df):
     """
     繪製同區同類型屋齡分布直方圖（含建坪單價趨勢線）
