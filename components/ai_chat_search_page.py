@@ -374,45 +374,45 @@ def render_ai_chat_search():
                         # ============================
                         
                         # ====== 格局篩選（使用解析後的欄位）======
-                        # 房間數篩選
+                        # 房間數篩選（精確比對）
                         if filters.get('rooms', 0) > 0 and '房間數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['房間數'].notna()) & 
-                                (filtered_df['房間數'] >= filters['rooms'])
+                                (filtered_df['房間數'] == filters['rooms'])  # 改成 ==
                             ]
                             after_count = len(filtered_df)
-                            filter_steps.append(f"房間數>={filters['rooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"房間數={filters['rooms']}: {before_count} → {after_count}")
                         
-                        # 廳數篩選
+                        # 廳數篩選（精確比對）
                         if filters.get('living_rooms', 0) > 0 and '廳數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['廳數'].notna()) & 
-                                (filtered_df['廳數'] >= filters['living_rooms'])
+                                (filtered_df['廳數'] == filters['living_rooms'])  # 改成 ==
                             ]
                             after_count = len(filtered_df)
-                            filter_steps.append(f"廳數>={filters['living_rooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"廳數={filters['living_rooms']}: {before_count} → {after_count}")
                         
-                        # 衛數篩選
+                        # 衛數篩選（精確比對）
                         if filters.get('bathrooms', 0) > 0 and '衛數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['衛數'].notna()) & 
-                                (filtered_df['衛數'] >= filters['bathrooms'])
+                                (filtered_df['衛數'] == filters['bathrooms'])  # 改成 ==
                             ]
                             after_count = len(filtered_df)
-                            filter_steps.append(f"衛數>={filters['bathrooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"衛數={filters['bathrooms']}: {before_count} → {after_count}")
                         
-                        # 室數篩選（書房/儲藏室 - 選用）
+                        # 室數篩選（精確比對）
                         if filters.get('study_rooms', 0) > 0 and '室數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['室數'].notna()) & 
-                                (filtered_df['室數'] >= filters['study_rooms'])
+                                (filtered_df['室數'] == filters['study_rooms'])  # 改成 ==
                             ]
                             after_count = len(filtered_df)
-                            filter_steps.append(f"室數>={filters['study_rooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"室數={filters['study_rooms']}: {before_count} → {after_count}")
                         # =========================================
                         
                         # 車位篩選
