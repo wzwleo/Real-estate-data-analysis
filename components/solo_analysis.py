@@ -18,6 +18,13 @@ reverse_name_map = {v: k for k, v in name_map.items()}
 def plot_floor_distribution(target_row, df):
     """
     繪製同區同類型樓層分布與平均單價圖
+    
+    Parameters:
+    -----------
+    target_row : pd.Series
+        目標房型的資料列
+    df : pd.DataFrame
+        包含所有房產資料的 DataFrame
     """
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
@@ -69,6 +76,9 @@ def plot_floor_distribution(target_row, df):
             return np.nan
     
     df_filtered['樓層數值'] = df_filtered['樓層'].apply(extract_floor)
+    
+    # 取得目標樓層（在移除 NaN 之前）
+    target_floor = extract_floor(target_row.get('樓層', None))
     
     # 移除樓層數值為 NaN 的資料
     df_filtered_copy = df_filtered.dropna(subset=['樓層數值']).copy()
@@ -150,8 +160,7 @@ def plot_floor_distribution(target_row, df):
         hovertemplate='<b>%{x}</b><br>平均單價: %{y:.2f} 萬/坪<extra></extra>'
     ))
     
-    # 標記目標房屋所在樓層區間
-    target_floor = extract_floor(target_row.get('樓層', None))
+    # ========== 標記目標房屋所在樓層區間 ==========
     if not pd.isna(target_floor):
         target_floor_group = pd.cut([target_floor], bins=bins, include_lowest=True)[0]
         target_floor_label = str(target_floor_group)
@@ -160,6 +169,7 @@ def plot_floor_distribution(target_row, df):
         if target_floor_label in floor_stats['樓層區間'].astype(str).values:
             target_floor_data = floor_stats[floor_stats['樓層區間'].astype(str) == target_floor_label].iloc[0]
             
+            # 🔴 添加紅星標記
             fig.add_trace(go.Scatter(
                 x=[target_floor_label],
                 y=[target_floor_data['房屋數量']],
@@ -189,8 +199,8 @@ def plot_floor_distribution(target_row, df):
             showgrid=False
         ),
         template='plotly_white',
-        width=650,
-        height=650,
+        width=600,
+        height=500,
         hovermode='x unified',
         legend=dict(
             orientation="h",
@@ -201,6 +211,7 @@ def plot_floor_distribution(target_row, df):
         ),
         bargap=0.3
     )
+    
     st.plotly_chart(fig, use_container_width=True)
 def plot_age_distribution(target_row, df):
     """
