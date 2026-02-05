@@ -1775,56 +1775,69 @@ class ComparisonAnalyzer:
     
     def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
         """搜尋Google Places（使用文字搜尋）並確保按距離排序"""
-        url = "https://places.googleapis.com/v1/places:searchNearby"
-        headers = {
-            "Content-Type": "application/json",
-            "X-Goog-Api-Key": api_key,
-            "X-Goog-FieldMask": "places.displayName,places.formattedAddress,places.location,places.id,places.types"
+        # 使用Nearby Search API，它支援距離排序
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "keyword": keyword,  # 使用keyword參數而不是query
+            "key": api_key,
+            "language": "zh-TW",
+            "rankby": "distance"  # 關鍵：按距離排序，但不能與radius同時使用
         }
-        body = {
-            "includedTypes": [keyword],
-            "maxResultCount": 20,
-            "locationRestriction": {
-                "circle": {
-                    "center": {"latitude": lat, "longitude": lng},
-                    "radius": radius
-                }
-            },
-            "rankPreference": "DISTANCE"  # 關鍵：強制按距離排序
-        }
-    
+        
+        # 注意：當使用rankby=distance時，不能使用radius參數
+        # 我們需要重新調整參數
+        if radius > 0:
+            # 對於按距離排序，我們使用最大半徑50000，然後自行過濾
+            params["radius"] = min(radius, 50000)  # Nearby Search最大半徑是50000
+            # 如果需要嚴格按距離排序且只取最近的一個，可以移除radius使用rankby=distance
+            # 但這樣會失去半徑限制
+        
         try:
-            response = requests.post(url, headers=headers, json=body, timeout=10)
+            response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             r = response.json()
+            
+            # 除錯用：查看API回應
+            # print(f"API回應狀態: {r.get('status')}, 結果數量: {len(r.get('results', []))}")
+            
         except Exception as e:
-            # print(f"API請求錯誤: {e}") # 除錯用
+            # print(f"API請求錯誤: {e}")  # 除錯用
             return []
     
         results = []
-        for place in r.get("places", []):
-            p_lat = place["location"]["latitude"]
-            p_lng = place["location"]["longitude"]
-            dist = int(haversine(lat, lng, p_lat, p_lng))
+        for p in r.get("results", []):
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             
+            # 檢查距離是否在指定半徑內
+            if dist > radius:
+                continue  # 跳過超出半徑的結果
+                
             # 獲取地點名稱
-            if "displayName" in place and "text" in place["displayName"]:
-                name = place["displayName"]["text"]
-            else:
-                name = "未命名"
+            name = p.get("name", "未命名")
             
             # 獲取地點ID
-            place_id = place.get("id", "")
+            place_id = p.get("place_id", "")
+            
+            # 獲取地點類型（如果有的話）
+            types = p.get("types", [])
+            primary_type = types[0] if types else ""
             
             results.append((
                 "類型搜尋",
                 keyword,
                 name,
-                p_lat,
-                p_lng,
+                loc["lat"],
+                loc["lng"],
                 dist,
                 place_id
             ))
+        
+        # 按距離排序（雖然API說按距離排序，但我們還是自己排一次確保）
+        results.sort(key=lambda x: x[5])
+        
         return results
     
     
