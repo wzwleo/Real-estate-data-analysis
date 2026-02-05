@@ -1,4 +1,4 @@
-# components/market_trend.py - 簡化版（移除無效功能）
+# components/market_trend.py - 移除優先考慮選項
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -291,7 +291,7 @@ class CompleteMarketTrendAnalyzer:
             pass
     
     def _render_home_buying_assistant(self):
-        """渲染購房決策助手"""
+        """渲染購房決策助手 - 移除優先考慮選項"""
         st.header("🏠 智慧購房決策助手")
         
         if self.combined_df is None or self.combined_df.empty:
@@ -326,7 +326,7 @@ class CompleteMarketTrendAnalyzer:
                     step=5
                 )
             
-            col4, col5, col6 = st.columns(3)
+            col4, col5 = st.columns(2)
             
             with col4:
                 holding_years = st.slider(
@@ -343,12 +343,6 @@ class CompleteMarketTrendAnalyzer:
                     max_value=5.0,
                     value=2.0,
                     step=0.1
-                )
-            
-            with col6:
-                priority = st.selectbox(
-                    "優先考慮",
-                    ["價格", "增值潛力", "生活機能", "學區", "交通便利"]
                 )
         
         # 地區選擇
@@ -395,7 +389,7 @@ class CompleteMarketTrendAnalyzer:
         # 顯示分析結果
         self._analyze_for_home_buying(
             filtered_df, purchase_purpose, budget, 
-            expected_size, holding_years, loan_rate, priority
+            expected_size, holding_years, loan_rate
         )
     
     def _filter_real_estate_data(self, county, district, year_range):
@@ -420,9 +414,8 @@ class CompleteMarketTrendAnalyzer:
         except Exception as e:
             return pd.DataFrame()
     
-    def _analyze_for_home_buying(self, df, purpose, budget, size, 
-                                 holding_years, loan_rate, priority):
-        """分析購房需求"""
+    def _analyze_for_home_buying(self, df, purpose, budget, size, holding_years, loan_rate):
+        """分析購房需求 - 移除優先考慮參數"""
         st.subheader("📊 分析結果")
         
         # 計算關鍵指標
@@ -480,7 +473,7 @@ class CompleteMarketTrendAnalyzer:
         
         with tabs[3]:
             self._generate_purchase_recommendations(
-                metrics, purpose, budget, size, holding_years, priority
+                metrics, purpose, budget, size, holding_years
             )
     
     # ========== 價格趨勢分析功能 ==========
@@ -1296,65 +1289,111 @@ class CompleteMarketTrendAnalyzer:
         except Exception as e:
             pass
     
-    def _generate_purchase_recommendations(self, metrics, purpose, budget, 
-                                         size, holding_years, priority):
-        """生成購買建議"""
-        st.subheader("🎯 綜合購買建議")
+    def _generate_purchase_recommendations(self, metrics, purpose, budget, size, holding_years):
+        """生成購買建議 - 簡化版"""
+        st.subheader("🎯 購買建議")
         
         recommendations = []
         
         # 根據購房目的
         if purpose == "自住":
-            recommendations.append("✅ **優先考慮生活機能和學區**")
-            recommendations.append("✅ **選擇交通便利的地點**")
-            recommendations.append("✅ **注意房屋維護狀況**")
+            recommendations.append("✅ **自住購屋重點：**")
+            recommendations.append("   - 優先考慮生活機能和學區")
+            recommendations.append("   - 選擇交通便利的地點")
+            recommendations.append("   - 注意房屋維護狀況和屋齡")
             
         elif purpose == "投資":
-            recommendations.append("✅ **關注租金收益率**")
-            recommendations.append("✅ **選擇未來有發展潛力的區域**")
-            recommendations.append("✅ **考慮管理成本和空置率**")
+            recommendations.append("✅ **投資購屋策略：**")
+            recommendations.append("   - 關注租金收益率")
+            recommendations.append("   - 選擇未來有發展潛力的區域")
+            recommendations.append("   - 考慮管理成本和空置率")
+        
+        elif purpose == "首購":
+            recommendations.append("✅ **首購族建議：**")
+            recommendations.append("   - 善用政府首購優惠貸款")
+            recommendations.append("   - 考慮負擔能力，避免過度槓桿")
+            recommendations.append("   - 選擇未來容易轉手的區域")
         
         # 根據預算
         if 'avg_price_per_ping' in metrics and metrics['avg_price_per_ping'] > 0:
             affordable_ping = budget * 10000 / metrics['avg_price_per_ping']
             
             if affordable_ping < size:
-                recommendations.append("⚠️ **預算可能不足，考慮：**")
-                recommendations.append("   - 縮小坪數需求")
-                recommendations.append("   - 考慮周邊區域")
-                recommendations.append("   - 等待更好的進場時機")
+                recommendations.append("⚠️ **預算分析：**")
+                recommendations.append("   - 預算可能不足購買期望坪數")
+                recommendations.append("   - 可考慮縮小坪數需求或提高預算")
+                recommendations.append("   - 尋找周邊價格較低的區域")
             else:
-                recommendations.append("💰 **預算充足，可以：**")
-                recommendations.append("   - 考慮更好的地段")
-                recommendations.append("   - 選擇品質較好的建案")
-                recommendations.append("   - 預留裝修預算")
+                recommendations.append("💰 **預算狀況良好：**")
+                recommendations.append("   - 預算充足，可考慮更好的地段")
+                recommendations.append("   - 可選擇品質較好的建案")
+                recommendations.append("   - 建議預留10-15%裝修預算")
         
         # 根據價格趨勢
         if 'price_change_1y' in metrics:
             price_change = metrics['price_change_1y']
             
-            if price_change > 10:
-                recommendations.append("📈 **市場上漲中，建議：**")
-                recommendations.append("   - 盡早進場")
-                recommendations.append("   - 鎖定目標物件")
-            elif price_change < -5:
-                recommendations.append("📉 **市場調整期，建議：**")
-                recommendations.append("   - 積極看房議價")
-                recommendations.append("   - 尋找被低估的物件")
+            if price_change > 8:
+                recommendations.append("📈 **市場趨勢：房價上漲中**")
+                recommendations.append("   - 建議盡早進場")
+                recommendations.append("   - 鎖定目標物件，避免猶豫")
+                
+            elif price_change < -3:
+                recommendations.append("📉 **市場趨勢：房價調整期**")
+                recommendations.append("   - 可積極看房議價")
+                recommendations.append("   - 尋找被低估的優質物件")
+                
+            else:
+                recommendations.append("📊 **市場趨勢：房價穩定**")
+                recommendations.append("   - 可從容選擇適合的物件")
+                recommendations.append("   - 議價空間可能較小")
+        
+        # 根據交易活躍度
+        if 'transaction_score' in metrics:
+            if metrics['transaction_score'] >= 7:
+                recommendations.append("🏢 **市場熱度：交易活躍**")
+                recommendations.append("   - 物件選擇較多")
+                recommendations.append("   - 可能需快速決策")
+            elif metrics['transaction_score'] <= 3:
+                recommendations.append("🏢 **市場熱度：交易清淡**")
+                recommendations.append("   - 議價空間可能較大")
+                recommendations.append("   - 可仔細挑選適合物件")
         
         # 顯示建議
         for rec in recommendations:
             st.markdown(rec)
         
-        # AI 建議
-        if GEMINI_AVAILABLE and st.session_state.get("GEMINI_KEY"):
-            if st.button("🤖 取得 AI 專家建議", type="primary"):
-                self._get_ai_recommendation(
-                    metrics, purpose, budget, size, holding_years, priority
-                )
+        # 一般性建議
+        st.markdown("---")
+        st.subheader("💡 一般購房建議")
+        
+        general_advice = [
+            "📋 **準備工作：**",
+            "   - 確認信用狀況良好",
+            "   - 準備好財力證明文件",
+            "   - 預先取得銀行貸款估價",
+            "",
+            "🔍 **看房注意：**",
+            "   - 不同時段看房（白天、晚上、假日）",
+            "   - 檢查房屋結構和漏水問題",
+            "   - 了解社區管理和鄰居狀況",
+            "",
+            "💼 **議價技巧：**",
+            "   - 參考實價登錄成交價",
+            "   - 找出房屋缺點作為議價籌碼",
+            "   - 設定最高可接受價格",
+            "",
+            "📝 **簽約注意：**",
+            "   - 確認產權清楚無糾紛",
+            "   - 審閱契約條款細節",
+            "   - 約定交屋日期和條件"
+        ]
+        
+        for advice in general_advice:
+            st.markdown(advice)
     
-    def _get_ai_recommendation(self, metrics, purpose, budget, size, holding_years, priority):
-        """取得 AI 建議"""
+    def _get_ai_recommendation(self, metrics, purpose, budget, size, holding_years):
+        """取得 AI 建議 - 簡化參數"""
         try:
             gemini_key = st.session_state.get("GEMINI_KEY")
             if not gemini_key:
@@ -1369,7 +1408,6 @@ class CompleteMarketTrendAnalyzer:
             - 預算：{budget} 萬元
             - 期望坪數：{size} 坪
             - 持有年限：{holding_years} 年
-            - 最優先考慮：{priority}
             
             市場分析：
             - 平均單價：{metrics.get('avg_price_per_ping', 0):,.0f} 元/坪
@@ -1377,11 +1415,10 @@ class CompleteMarketTrendAnalyzer:
             - 年化成長率：{metrics.get('annual_growth', 0):.1f}%
             
             請提供：
-            1. 具體的購房策略
-            2. 議價技巧建議
+            1. 具體的購房策略建議
+            2. 財務規劃建議
             3. 風險控制措施
-            4. 未來市場展望
-            5. 行動步驟建議
+            4. 行動步驟建議
             """
             
             genai.configure(api_key=gemini_key)
