@@ -11,6 +11,32 @@ from string import Template
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
 
+
+# components/comparison.py 開頭部分
+try:
+    from config import CATEGORY_COLORS, DEFAULT_RADIUS
+    from components.place_types import PLACE_TYPES
+    
+    # 動態處理 ENGLISH_TO_CHINESE 的導入
+    try:
+        from components.place_types import ENGLISH_TO_CHINESE
+    except ImportError:
+        # 如果沒有 ENGLISH_TO_CHINESE，創建一個映射
+        # 現在中英文相同，但保留映射結構
+        ENGLISH_TO_CHINESE = {}
+        for category, items in PLACE_TYPES.items():
+            for i in range(0, len(items), 2):
+                if i+1 < len(items):
+                    chinese_name = items[i]
+                    english_name = items[i+1]
+                    # 現在中英文都相同，但保持映射關係
+                    ENGLISH_TO_CHINESE[english_name] = chinese_name
+    
+    from components.geocoding import geocode_address, haversine
+    CONFIG_LOADED = True
+except ImportError as e:
+    CONFIG_LOADED = False
+    st.warning(f"無法載入設定: {e}")
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
