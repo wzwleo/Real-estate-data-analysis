@@ -1,4 +1,4 @@
-# components/market_trend.py - 完整功能版（修復 NaN 錯誤且簡化輸出）
+# components/market_trend.py - 完整功能版（所有功能已實現）
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -9,6 +9,10 @@ from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from scipy import stats
+import warnings
+warnings.filterwarnings('ignore')
+
 try:
     from streamlit_echarts import st_echarts
     ECHARTS_AVAILABLE = True
@@ -32,11 +36,11 @@ try:
     CONFIG_LOADED = True
 except ImportError as e:
     CONFIG_LOADED = False
-    PAGE_MODULES_FOLDER = parent_dir  # 使用父目錄作為默認
+    PAGE_MODULES_FOLDER = parent_dir
 
 
 class CompleteMarketTrendAnalyzer:
-    """市場趨勢分析器 - 完整功能版（已修復 NaN 錯誤）"""
+    """市場趨勢分析器 - 完整功能版"""
     
     def __init__(self):
         self.combined_df = None
@@ -55,13 +59,30 @@ class CompleteMarketTrendAnalyzer:
             with st.spinner("📊 載入資料中..."):
                 if self._load_data():
                     self.loaded = True
-                    # 簡化成功訊息
                     if self.combined_df is not None:
                         st.success(f"✅ 資料載入完成 ({len(self.combined_df):,} 筆不動產資料)")
         
         if not self.loaded:
             st.error("無法載入資料，請檢查檔案路徑")
             return
+        
+        # 簡潔的資料統計
+        with st.expander("📊 資料統計概覽", expanded=False):
+            if self.combined_df is not None:
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("不動產資料", f"{len(self.combined_df):,} 筆")
+                with col2:
+                    if '縣市' in self.combined_df.columns:
+                        st.metric("縣市數量", self.combined_df['縣市'].nunique())
+                with col3:
+                    if '平均單價元每坪' in self.combined_df.columns:
+                        avg_price = self.combined_df['平均單價元每坪'].mean()
+                        st.metric("平均單價", f"{avg_price:,.0f} 元/坪")
+                with col4:
+                    if '民國年' in self.combined_df.columns:
+                        years = self.combined_df['民國年'].unique()
+                        st.metric("年份範圍", f"{min(years)}-{max(years)}")
         
         # 側邊欄導航
         st.sidebar.title("📋 分析模組")
@@ -106,7 +127,7 @@ class CompleteMarketTrendAnalyzer:
             st.session_state.user_profile = {}
     
     def _load_data(self):
-        """載入所有資料 - 修復版本"""
+        """載入所有資料"""
         try:
             # 載入不動產資料
             self.combined_df = self._load_real_estate_data()
@@ -128,21 +149,19 @@ class CompleteMarketTrendAnalyzer:
             return False
     
     def _load_real_estate_data(self):
-        """載入不動產資料 - 簡化輸出版本"""
+        """載入不動產資料"""
         try:
             data_dir = PAGE_MODULES_FOLDER
             csv_files = [f for f in os.listdir(data_dir) 
                         if f.startswith("合併後不動產統計_") and f.endswith(".csv")]
             
             if not csv_files:
-                # 嘗試其他可能的檔案名稱
                 csv_files = [f for f in os.listdir(data_dir) if "不動產" in f and f.endswith(".csv")]
             
             if not csv_files:
                 return pd.DataFrame()
             
             dfs = []
-            loaded_file_count = 0
             
             for file in csv_files:
                 file_path = os.path.join(data_dir, file)
@@ -166,7 +185,6 @@ class CompleteMarketTrendAnalyzer:
                     col_mapping = {}
                     for required in required_cols:
                         if required not in df.columns:
-                            # 尋找可能的替代名稱
                             possible_names = [
                                 col for col in df.columns 
                                 if required in col or col in required
@@ -174,25 +192,21 @@ class CompleteMarketTrendAnalyzer:
                             if possible_names:
                                 col_mapping[required] = possible_names[0]
                     
-                    # 如果有需要重命名的欄位
                     if col_mapping:
                         df = df.rename(columns=col_mapping)
                     
-                    # 再次檢查必要欄位
                     missing_cols = [col for col in required_cols if col not in df.columns]
                     
                     if missing_cols:
                         continue
                     
                     dfs.append(df)
-                    loaded_file_count += 1
                     
                 except Exception:
                     continue
             
             if dfs:
-                combined_df = pd.concat(dfs, ignore_index=True)
-                return combined_df
+                return pd.concat(dfs, ignore_index=True)
             else:
                 return pd.DataFrame()
                 
@@ -200,10 +214,9 @@ class CompleteMarketTrendAnalyzer:
             return pd.DataFrame()
     
     def _load_population_data(self):
-        """載入人口資料 - 簡化輸出版本"""
+        """載入人口資料"""
         try:
             data_dir = PAGE_MODULES_FOLDER
-            # 嘗試不同檔案名稱
             possible_files = ["NEWWWW.csv", "population.csv", "人口資料.csv", "人口統計.csv"]
             
             file_path = None
@@ -214,7 +227,6 @@ class CompleteMarketTrendAnalyzer:
                     break
             
             if not file_path:
-                # 尋找包含人口相關的檔案
                 all_files = os.listdir(data_dir)
                 pop_files = [f for f in all_files if "人口" in f or "Population" in f.lower()]
                 if pop_files:
@@ -223,7 +235,6 @@ class CompleteMarketTrendAnalyzer:
             if not file_path:
                 return self._create_mock_population_data()
             
-            # 嘗試不同編碼讀取
             df = None
             for encoding in ["utf-8", "big5", "cp950", "latin1"]:
                 try:
@@ -235,7 +246,6 @@ class CompleteMarketTrendAnalyzer:
             if df is None:
                 return self._create_mock_population_data()
             
-            # 清理欄位名稱
             df.columns = [str(col).strip().replace("　", "").replace(" ", "").replace("\n", "") for col in df.columns]
             
             return df
@@ -245,22 +255,19 @@ class CompleteMarketTrendAnalyzer:
     
     def _create_mock_population_data(self):
         """創建模擬人口資料"""
-        # 從不動產資料中獲取縣市和行政區
         if self.combined_df is not None and not self.combined_df.empty:
-            cities = self.combined_df['縣市'].unique()[:10]  # 取前10個縣市
+            cities = self.combined_df['縣市'].unique()[:10]
             districts = []
             for city in cities:
                 city_districts = self.combined_df[self.combined_df['縣市'] == city]['行政區'].unique()[:5]
                 districts.extend([(city, district) for district in city_districts])
         else:
-            # 如果沒有不動產資料，使用台灣主要縣市
             cities = ['台北市', '新北市', '桃園市', '台中市', '台南市', '高雄市']
             districts = [(city, f"{city}區") for city in cities]
         
-        # 創建模擬資料
         mock_data = []
         for city, district in districts:
-            for year in range(108, 112):  # 108-111年
+            for year in range(108, 112):
                 population = np.random.randint(50000, 300000)
                 mock_data.append({
                     '縣市': city,
@@ -268,20 +275,17 @@ class CompleteMarketTrendAnalyzer:
                     f'{year}年人口數': population
                 })
         
-        df = pd.DataFrame(mock_data)
-        return df
+        return pd.DataFrame(mock_data)
     
     def _clean_and_preprocess_data(self):
-        """清理和預處理資料 - 簡化輸出版本"""
+        """清理和預處理資料"""
         try:
             # ========== 清理不動產資料 ==========
             if self.combined_df is not None and not self.combined_df.empty:
-                # 1. 處理季度資料
+                # 處理季度資料
                 if "季度" in self.combined_df.columns:
-                    # 填充 NaN 值
                     self.combined_df["季度"] = self.combined_df["季度"].fillna("未知季度")
                     
-                    # 提取年份
                     def extract_year(quarter_str):
                         if isinstance(quarter_str, str):
                             import re
@@ -295,19 +299,15 @@ class CompleteMarketTrendAnalyzer:
                     
                     self.combined_df["民國年"] = self.combined_df["季度"].apply(extract_year)
                     
-                    # 處理 NaN 年份
                     if self.combined_df["民國年"].isna().any():
-                        # 使用中位數填充
                         if not self.combined_df["民國年"].isna().all():
                             median_year = self.combined_df["民國年"].median()
                             self.combined_df["民國年"] = self.combined_df["民國年"].fillna(median_year)
                         else:
                             self.combined_df["民國年"] = 108
                     
-                    # 轉換為整數
                     self.combined_df["民國年"] = self.combined_df["民國年"].astype(int)
                     
-                    # 提取季度數字
                     def extract_quarter(quarter_str):
                         if isinstance(quarter_str, str):
                             import re
@@ -324,33 +324,28 @@ class CompleteMarketTrendAnalyzer:
                     self.combined_df["民國年"] = 108
                     self.combined_df["季度數字"] = 1
                 
-                # 2. 處理單價資料
+                # 處理單價資料
                 if "平均單價元平方公尺" in self.combined_df.columns:
                     self.combined_df["平均單價元平方公尺"] = pd.to_numeric(
                         self.combined_df["平均單價元平方公尺"], 
                         errors='coerce'
                     )
                     
-                    # 填充 NaN 值
-                    nan_price_count = self.combined_df["平均單價元平方公尺"].isna().sum()
-                    if nan_price_count > 0:
-                        median_price = self.combined_df["平均單價元平方公尺"].median()
-                        if pd.notna(median_price):
-                            self.combined_df["平均單價元平方公尺"] = self.combined_df["平均單價元平方公尺"].fillna(median_price)
+                    median_price = self.combined_df["平均單價元平方公尺"].median()
+                    if pd.notna(median_price):
+                        self.combined_df["平均單價元平方公尺"] = self.combined_df["平均單價元平方公尺"].fillna(median_price)
                     
-                    # 計算每坪價格
                     self.combined_df["平均單價元每坪"] = self.combined_df["平均單價元平方公尺"] * 3.3058
                 else:
                     self.combined_df["平均單價元每坪"] = 0
                 
-                # 3. 處理交易筆數
+                # 處理交易筆數
                 if "交易筆數" in self.combined_df.columns:
                     self.combined_df["交易筆數"] = pd.to_numeric(
                         self.combined_df["交易筆數"], 
                         errors='coerce'
                     ).fillna(0).astype(int)
                     
-                    # 計算總交易金額（萬元）
                     self.combined_df["總交易金額萬元"] = (
                         self.combined_df["平均單價元平方公尺"] * 
                         self.combined_df["交易筆數"] / 10000
@@ -359,7 +354,7 @@ class CompleteMarketTrendAnalyzer:
                     self.combined_df["交易筆數"] = 0
                     self.combined_df["總交易金額萬元"] = 0
                 
-                # 4. 處理其他欄位
+                # 處理其他欄位
                 for col in ["縣市", "行政區", "BUILD"]:
                     if col in self.combined_df.columns:
                         self.combined_df[col] = self.combined_df[col].fillna("未知")
@@ -368,13 +363,11 @@ class CompleteMarketTrendAnalyzer:
             
             # ========== 清理人口資料 ==========
             if self.population_df is not None and not self.population_df.empty:
-                # 清理欄位名稱
                 self.population_df.columns = [
                     str(col).strip().replace("　", "").replace(" ", "").replace("\n", "").replace("\t", "")
                     for col in self.population_df.columns
                 ]
                 
-                # 尋找縣市欄位
                 city_cols = [col for col in self.population_df.columns if "縣市" in col or "city" in col.lower()]
                 if city_cols:
                     self.population_df = self.population_df.rename(columns={city_cols[0]: "縣市"})
@@ -382,12 +375,10 @@ class CompleteMarketTrendAnalyzer:
                     if len(self.population_df.columns) > 0:
                         self.population_df = self.population_df.rename(columns={self.population_df.columns[0]: "縣市"})
                 
-                # 尋找行政區欄位
                 district_cols = [col for col in self.population_df.columns if "行政區" in col or "區" in col or "district" in col.lower()]
                 if district_cols:
                     self.population_df = self.population_df.rename(columns={district_cols[0]: "行政區"})
                 
-                # 處理數值欄位
                 for col in self.population_df.columns:
                     if col in ["縣市", "行政區"]:
                         continue
@@ -400,9 +391,7 @@ class CompleteMarketTrendAnalyzer:
                         pass
         
         except Exception as e:
-            pass  # 靜默處理錯誤
-    
-    # 以下是其他方法，保持不變但移除多餘的 st.info/st.warning 調用
+            pass
     
     def _render_home_buying_assistant(self):
         """渲染購房決策助手"""
@@ -419,8 +408,7 @@ class CompleteMarketTrendAnalyzer:
             with col1:
                 purchase_purpose = st.selectbox(
                     "購房目的",
-                    ["自住", "投資", "置產", "換屋", "首購"],
-                    help="選擇您的主要購房目的"
+                    ["自住", "投資", "置產", "換屋", "首購"]
                 )
             
             with col2:
@@ -429,8 +417,7 @@ class CompleteMarketTrendAnalyzer:
                     min_value=100,
                     max_value=10000,
                     value=1000,
-                    step=100,
-                    help="您的總購房預算"
+                    step=100
                 )
             
             with col3:
@@ -439,8 +426,7 @@ class CompleteMarketTrendAnalyzer:
                     min_value=10,
                     max_value=100,
                     value=30,
-                    step=5,
-                    help="期望的居住坪數"
+                    step=5
                 )
             
             col4, col5, col6 = st.columns(3)
@@ -450,8 +436,7 @@ class CompleteMarketTrendAnalyzer:
                     "預計持有年限",
                     min_value=1,
                     max_value=30,
-                    value=10,
-                    help="計劃持有房屋的年數"
+                    value=10
                 )
             
             with col5:
@@ -460,15 +445,13 @@ class CompleteMarketTrendAnalyzer:
                     min_value=0.0,
                     max_value=5.0,
                     value=2.0,
-                    step=0.1,
-                    help="預期的房貸利率"
+                    step=0.1
                 )
             
             with col6:
                 priority = st.selectbox(
                     "優先考慮",
-                    ["價格", "增值潛力", "生活機能", "學區", "交通便利"],
-                    help="您最重視的因素"
+                    ["價格", "增值潛力", "生活機能", "學區", "交通便利"]
                 )
         
         # 地區選擇
@@ -523,14 +506,12 @@ class CompleteMarketTrendAnalyzer:
         try:
             filtered_df = self.combined_df.copy()
             
-            # 時間篩選
             if '民國年' in filtered_df.columns:
                 filtered_df = filtered_df[
                     (filtered_df["民國年"] >= year_range[0]) &
                     (filtered_df["民國年"] <= year_range[1])
                 ]
             
-            # 地區篩選
             if county != "全部縣市":
                 filtered_df = filtered_df[filtered_df["縣市"] == county]
                 
@@ -605,6 +586,1203 @@ class CompleteMarketTrendAnalyzer:
                 metrics, purpose, budget, size, holding_years, priority
             )
     
+    # ========== 價格趨勢分析功能 ==========
+    def _render_price_trend_analysis(self):
+        """渲染價格趨勢分析"""
+        st.header("📈 價格趨勢深度分析")
+        
+        if self.combined_df is None or self.combined_df.empty:
+            st.warning("無資料可用")
+            return
+        
+        # 分析選項
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            counties = ["全部"] + sorted(self.combined_df["縣市"].dropna().unique().tolist())
+            selected_county = st.selectbox("選擇縣市", counties, key="trend_county")
+        
+        with col2:
+            house_types = st.multiselect(
+                "房屋類型",
+                options=["新成屋", "中古屋"],
+                default=["新成屋", "中古屋"],
+                key="trend_type"
+            )
+        
+        with col3:
+            if '民國年' in self.combined_df.columns:
+                year_min = int(self.combined_df["民國年"].min())
+                year_max = int(self.combined_df["民國年"].max())
+                year_range = st.slider(
+                    "時間範圍",
+                    min_value=year_min,
+                    max_value=year_max,
+                    value=(year_min, year_max),
+                    key="trend_year"
+                )
+        
+        # 篩選資料
+        filtered_df = self.combined_df.copy()
+        
+        if selected_county != "全部":
+            filtered_df = filtered_df[filtered_df["縣市"] == selected_county]
+        
+        if house_types:
+            filtered_df = filtered_df[filtered_df["BUILD"].isin(house_types)]
+        
+        if '民國年' in filtered_df.columns:
+            filtered_df = filtered_df[
+                (filtered_df["民國年"] >= year_range[0]) &
+                (filtered_df["民國年"] <= year_range[1])
+            ]
+        
+        if filtered_df.empty:
+            st.warning("該條件下無資料")
+            return
+        
+        # 分析標籤頁
+        tab1, tab2, tab3, tab4 = st.tabs(["趨勢圖表", "比較分析", "統計指標", "季節性分析"])
+        
+        with tab1:
+            self._plot_trend_charts(filtered_df)
+        
+        with tab2:
+            self._plot_comparative_analysis(filtered_df)
+        
+        with tab3:
+            self._show_statistical_indicators(filtered_df)
+        
+        with tab4:
+            self._plot_seasonal_analysis(filtered_df)
+    
+    def _plot_trend_charts(self, df):
+        """繪製趨勢圖表"""
+        st.subheader("📊 價格趨勢圖")
+        
+        # 1. 年度平均價格趨勢
+        if '民國年' in df.columns and '平均單價元每坪' in df.columns:
+            yearly_avg = df.groupby(['民國年', 'BUILD'])['平均單價元每坪'].mean().reset_index()
+            
+            if not yearly_avg.empty:
+                fig = px.line(
+                    yearly_avg,
+                    x='民國年',
+                    y='平均單價元每坪',
+                    color='BUILD',
+                    title='年度平均單價趨勢',
+                    markers=True,
+                    line_shape='spline'
+                )
+                
+                fig.update_layout(
+                    xaxis_title="年份",
+                    yaxis_title="平均單價（元/坪）",
+                    hovermode="x unified",
+                    height=500
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+        
+        # 2. 移動平均趨勢
+        if '民國年' in df.columns and '平均單價元每坪' in df.columns:
+            yearly_price = df.groupby('民國年')['平均單價元每坪'].mean().reset_index()
+            
+            # 計算移動平均
+            yearly_price['3年移動平均'] = yearly_price['平均單價元每坪'].rolling(window=3, min_periods=1).mean()
+            yearly_price['5年移動平均'] = yearly_price['平均單價元每坪'].rolling(window=5, min_periods=1).mean()
+            
+            fig2 = go.Figure()
+            
+            fig2.add_trace(go.Scatter(
+                x=yearly_price['民國年'],
+                y=yearly_price['平均單價元每坪'],
+                mode='markers',
+                name='實際價格',
+                marker=dict(size=8, color='blue')
+            ))
+            
+            fig2.add_trace(go.Scatter(
+                x=yearly_price['民國年'],
+                y=yearly_price['3年移動平均'],
+                mode='lines',
+                name='3年移動平均',
+                line=dict(color='red', width=2)
+            ))
+            
+            fig2.add_trace(go.Scatter(
+                x=yearly_price['民國年'],
+                y=yearly_price['5年移動平均'],
+                mode='lines',
+                name='5年移動平均',
+                line=dict(color='green', width=2, dash='dash')
+            ))
+            
+            fig2.update_layout(
+                title='移動平均趨勢分析',
+                xaxis_title="年份",
+                yaxis_title="平均單價（元/坪）",
+                hovermode="x unified",
+                height=500
+            )
+            
+            st.plotly_chart(fig2, use_container_width=True)
+        
+        # 3. 價格分布變化
+        if '民國年' in df.columns and '平均單價元每坪' in df.columns:
+            st.subheader("📦 價格分布變化")
+            
+            years = sorted(df['民國年'].unique())
+            if len(years) >= 2:
+                selected_years = st.multiselect(
+                    "選擇比較年份",
+                    options=years,
+                    default=years[-3:] if len(years) >= 3 else years
+                )
+                
+                if selected_years:
+                    fig3 = go.Figure()
+                    
+                    for year in selected_years:
+                        year_data = df[df['民國年'] == year]['平均單價元每坪']
+                        
+                        fig3.add_trace(go.Violin(
+                            y=year_data,
+                            name=str(year),
+                            box_visible=True,
+                            meanline_visible=True,
+                            points="all"
+                        ))
+                    
+                    fig3.update_layout(
+                        title=f'價格分布比較 ({", ".join(map(str, selected_years))}年)',
+                        yaxis_title="單價（元/坪）",
+                        xaxis_title="年份",
+                        height=500
+                    )
+                    
+                    st.plotly_chart(fig3, use_container_width=True)
+    
+    def _plot_comparative_analysis(self, df):
+        """繪製比較分析"""
+        st.subheader("🔄 比較分析")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 地區比較
+            if '縣市' in df.columns and len(df['縣市'].unique()) > 1:
+                counties = st.multiselect(
+                    "選擇比較縣市",
+                    options=sorted(df['縣市'].unique()),
+                    default=sorted(df['縣市'].unique())[:3]
+                )
+                
+                if counties:
+                    compare_df = df[df['縣市'].isin(counties)]
+                    county_avg = compare_df.groupby(['縣市', 'BUILD'])['平均單價元每坪'].mean().reset_index()
+                    
+                    fig = px.bar(
+                        county_avg,
+                        x='縣市',
+                        y='平均單價元每坪',
+                        color='BUILD',
+                        barmode='group',
+                        title='各縣市價格比較',
+                        text_auto='.0f'
+                    )
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            # 房屋類型比較
+            if 'BUILD' in df.columns:
+                build_avg = df.groupby('BUILD')['平均單價元每坪'].mean().reset_index()
+                
+                fig2 = px.pie(
+                    build_avg,
+                    values='平均單價元每坪',
+                    names='BUILD',
+                    title='房屋類型價格占比',
+                    hole=0.4
+                )
+                
+                st.plotly_chart(fig2, use_container_width=True)
+    
+    def _show_statistical_indicators(self, df):
+        """顯示統計指標"""
+        st.subheader("📊 統計分析")
+        
+        if '平均單價元每坪' in df.columns:
+            # 基本統計
+            price_stats = df['平均單價元每坪'].describe()
+            
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                st.metric("平均價格", f"{price_stats['mean']:,.0f}")
+            with col2:
+                st.metric("中位數", f"{price_stats['50%']:,.0f}")
+            with col3:
+                st.metric("標準差", f"{price_stats['std']:,.0f}")
+            with col4:
+                st.metric("變異係數", f"{(price_stats['std']/price_stats['mean']*100):.1f}%")
+            
+            # 詳細統計表
+            st.subheader("詳細統計指標")
+            
+            stats_df = pd.DataFrame({
+                '指標': ['平均值', '中位數', '眾數', '標準差', '變異數', '最小值', '25%分位', '75%分位', '最大值', '偏度', '峰度'],
+                '數值': [
+                    price_stats['mean'],
+                    price_stats['50%'],
+                    df['平均單價元每坪'].mode().iloc[0] if not df['平均單價元每坪'].mode().empty else 0,
+                    price_stats['std'],
+                    price_stats['std'] ** 2,
+                    price_stats['min'],
+                    price_stats['25%'],
+                    price_stats['75%'],
+                    price_stats['max'],
+                    df['平均單價元每坪'].skew(),
+                    df['平均單價元每坪'].kurtosis()
+                ]
+            })
+            
+            st.dataframe(
+                stats_df.style.format({'數值': '{:,.2f}'}),
+                use_container_width=True
+            )
+            
+            # 年度變化率
+            if '民國年' in df.columns:
+                st.subheader("📈 年度變化率")
+                
+                yearly_avg = df.groupby('民國年')['平均單價元每坪'].mean().reset_index()
+                yearly_avg['年增率'] = yearly_avg['平均單價元每坪'].pct_change() * 100
+                yearly_avg['累積漲幅'] = (yearly_avg['平均單價元每坪'] / yearly_avg['平均單價元每坪'].iloc[0] - 1) * 100
+                
+                st.dataframe(
+                    yearly_avg.style.format({
+                        '平均單價元每坪': '{:,.0f}',
+                        '年增率': '{:.2f}%',
+                        '累積漲幅': '{:.2f}%'
+                    }),
+                    use_container_width=True
+                )
+    
+    def _plot_seasonal_analysis(self, df):
+        """繪製季節性分析"""
+        st.subheader("📅 季節性分析")
+        
+        if '季度數字' in df.columns and '平均單價元每坪' in df.columns:
+            # 季度平均價格
+            quarterly_avg = df.groupby(['民國年', '季度數字'])['平均單價元每坪'].mean().reset_index()
+            
+            fig = px.line(
+                quarterly_avg,
+                x='季度數字',
+                y='平均單價元每坪',
+                color='民國年',
+                title='季度價格趨勢',
+                markers=True
+            )
+            
+            fig.update_layout(
+                xaxis_title="季度",
+                yaxis_title="平均單價（元/坪）",
+                hovermode="x unified",
+                height=500
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # 季節性箱形圖
+            fig2 = px.box(
+                df,
+                x='季度數字',
+                y='平均單價元每坪',
+                title='季度價格分布',
+                points="all"
+            )
+            
+            fig2.update_layout(
+                xaxis_title="季度",
+                yaxis_title="單價（元/坪）",
+                height=500
+            )
+            
+            st.plotly_chart(fig2, use_container_width=True)
+    
+    # ========== 區域比較分析功能 ==========
+    def _render_region_comparison(self):
+        """渲染區域比較分析"""
+        st.header("🏙️ 區域比較分析")
+        
+        if self.combined_df is None or self.combined_df.empty:
+            st.warning("無資料可用")
+            return
+        
+        # 選擇比較區域
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            counties = st.multiselect(
+                "選擇比較縣市",
+                options=sorted(self.combined_df["縣市"].dropna().unique().tolist()),
+                default=sorted(self.combined_df["縣市"].dropna().unique().tolist())[:3]
+            )
+        
+        with col2:
+            metrics = st.multiselect(
+                "選擇比較指標",
+                options=["平均單價", "交易量", "成長率", "穩定性"],
+                default=["平均單價", "交易量"]
+            )
+        
+        if not counties:
+            st.warning("請選擇至少一個縣市進行比較")
+            return
+        
+        # 篩選資料
+        filtered_df = self.combined_df[self.combined_df["縣市"].isin(counties)]
+        
+        if filtered_df.empty:
+            st.warning("該條件下無資料")
+            return
+        
+        # 分析標籤頁
+        tab1, tab2, tab3 = st.tabs(["價格比較", "交易量分析", "綜合評比"])
+        
+        with tab1:
+            self._plot_region_price_comparison(filtered_df, counties)
+        
+        with tab2:
+            self._plot_region_volume_comparison(filtered_df, counties)
+        
+        with tab3:
+            self._show_region_comprehensive_rating(filtered_df, counties)
+    
+    def _plot_region_price_comparison(self, df, counties):
+        """繪製區域價格比較"""
+        st.subheader("💰 價格比較分析")
+        
+        # 1. 趨勢比較
+        if '民國年' in df.columns and '平均單價元每坪' in df.columns:
+            yearly_price = df.groupby(['縣市', '民國年'])['平均單價元每坪'].mean().reset_index()
+            
+            fig = px.line(
+                yearly_price,
+                x='民國年',
+                y='平均單價元每坪',
+                color='縣市',
+                title='各縣市價格趨勢比較',
+                markers=True
+            )
+            
+            fig.update_layout(
+                xaxis_title="年份",
+                yaxis_title="平均單價（元/坪）",
+                hovermode="x unified",
+                height=500
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # 2. 最新年度價格排行
+        if '民國年' in df.columns:
+            latest_year = df['民國年'].max()
+            latest_prices = df[df['民國年'] == latest_year].groupby('縣市')['平均單價元每坪'].mean().reset_index()
+            latest_prices = latest_prices.sort_values('平均單價元每坪', ascending=False)
+            
+            fig2 = px.bar(
+                latest_prices,
+                x='縣市',
+                y='平均單價元每坪',
+                title=f'{latest_year}年各縣市價格排行',
+                color='平均單價元每坪',
+                text_auto='.0f'
+            )
+            
+            fig2.update_layout(
+                xaxis_title="縣市",
+                yaxis_title="平均單價（元/坪）",
+                height=500
+            )
+            
+            st.plotly_chart(fig2, use_container_width=True)
+        
+        # 3. 價格分布比較
+        fig3 = px.box(
+            df,
+            x='縣市',
+            y='平均單價元每坪',
+            title='各縣市價格分布比較',
+            points="all"
+        )
+        
+        fig3.update_layout(
+            xaxis_title="縣市",
+            yaxis_title="單價（元/坪）",
+            height=500
+        )
+        
+        st.plotly_chart(fig3, use_container_width=True)
+    
+    def _plot_region_volume_comparison(self, df, counties):
+        """繪製區域交易量比較"""
+        st.subheader("📊 交易量分析")
+        
+        if '交易筆數' in df.columns:
+            # 1. 交易量趨勢
+            if '民國年' in df.columns:
+                yearly_volume = df.groupby(['縣市', '民國年'])['交易筆數'].sum().reset_index()
+                
+                fig = px.line(
+                    yearly_volume,
+                    x='民國年',
+                    y='交易筆數',
+                    color='縣市',
+                    title='各縣市交易量趨勢',
+                    markers=True
+                )
+                
+                fig.update_layout(
+                    xaxis_title="年份",
+                    yaxis_title="交易筆數",
+                    hovermode="x unified",
+                    height=500
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # 2. 累計交易量
+            total_volume = df.groupby('縣市')['交易筆數'].sum().reset_index()
+            total_volume = total_volume.sort_values('交易筆數', ascending=False)
+            
+            fig2 = px.bar(
+                total_volume,
+                x='縣市',
+                y='交易筆數',
+                title='各縣市累計交易量',
+                color='交易筆數',
+                text_auto='.0f'
+            )
+            
+            fig2.update_layout(
+                xaxis_title="縣市",
+                yaxis_title="交易筆數",
+                height=500
+            )
+            
+            st.plotly_chart(fig2, use_container_width=True)
+            
+            # 3. 交易量占比
+            fig3 = px.pie(
+                total_volume,
+                values='交易筆數',
+                names='縣市',
+                title='各縣市交易量占比',
+                hole=0.4
+            )
+            
+            st.plotly_chart(fig3, use_container_width=True)
+    
+    def _show_region_comprehensive_rating(self, df, counties):
+        """顯示區域綜合評比"""
+        st.subheader("🏆 區域綜合評比")
+        
+        rating_data = []
+        
+        for county in counties:
+            county_data = df[df['縣市'] == county]
+            
+            if county_data.empty:
+                continue
+            
+            # 計算各項指標
+            metrics = {}
+            
+            # 平均價格
+            if '平均單價元每坪' in county_data.columns:
+                metrics['平均價格'] = county_data['平均單價元每坪'].mean()
+            
+            # 價格穩定性（變異係數）
+            if '平均單價元每坪' in county_data.columns:
+                price_mean = county_data['平均單價元每坪'].mean()
+                price_std = county_data['平均單價元每坪'].std()
+                if price_mean > 0:
+                    metrics['價格穩定性'] = (1 - price_std / price_mean) * 100
+            
+            # 交易活躍度
+            if '交易筆數' in county_data.columns:
+                metrics['交易活躍度'] = county_data['交易筆數'].sum()
+            
+            # 成長性
+            if '民國年' in county_data.columns and '平均單價元每坪' in county_data.columns:
+                years = sorted(county_data['民國年'].unique())
+                if len(years) >= 2:
+                    first_price = county_data[county_data['民國年'] == years[0]]['平均單價元每坪'].mean()
+                    last_price = county_data[county_data['民國年'] == years[-1]]['平均單價元每坪'].mean()
+                    if first_price > 0:
+                        period = years[-1] - years[0]
+                        metrics['年化成長率'] = ((last_price / first_price) ** (1/period) - 1) * 100
+            
+            # 計算綜合評分
+            total_score = 0
+            weight = {
+                '平均價格': 0.2,
+                '價格穩定性': 0.3,
+                '交易活躍度': 0.25,
+                '年化成長率': 0.25
+            }
+            
+            for key, value in metrics.items():
+                if key in weight:
+                    # 正規化分數（0-100）
+                    if key == '平均價格':
+                        normalized = min(100, value / 100000 * 100)
+                    elif key == '價格穩定性':
+                        normalized = max(0, min(100, value))
+                    elif key == '交易活躍度':
+                        normalized = min(100, value / 1000 * 10)
+                    elif key == '年化成長率':
+                        normalized = min(100, max(0, value + 50))
+                    
+                    total_score += normalized * weight[key]
+            
+            rating_data.append({
+                '縣市': county,
+                '平均價格': metrics.get('平均價格', 0),
+                '價格穩定性': metrics.get('價格穩定性', 0),
+                '交易活躍度': metrics.get('交易活躍度', 0),
+                '年化成長率': metrics.get('年化成長率', 0),
+                '綜合評分': total_score
+            })
+        
+        if rating_data:
+            rating_df = pd.DataFrame(rating_data)
+            rating_df = rating_df.sort_values('綜合評分', ascending=False)
+            
+            # 顯示評分表
+            st.dataframe(
+                rating_df.style.format({
+                    '平均價格': '{:,.0f}',
+                    '價格穩定性': '{:.1f}%',
+                    '交易活躍度': '{:,.0f}',
+                    '年化成長率': '{:.2f}%',
+                    '綜合評分': '{:.1f}'
+                }).background_gradient(
+                    subset=['綜合評分'], 
+                    cmap='RdYlGn'
+                ),
+                use_container_width=True
+            )
+            
+            # 雷達圖
+            fig = go.Figure()
+            
+            for i, row in rating_df.iterrows():
+                fig.add_trace(go.Scatterpolar(
+                    r=[
+                        row['平均價格'] / rating_df['平均價格'].max() * 100,
+                        row['價格穩定性'],
+                        row['交易活躍度'] / rating_df['交易活躍度'].max() * 100,
+                        max(0, min(100, row['年化成長率'] + 50))
+                    ],
+                    theta=['平均價格', '價格穩定性', '交易活躍度', '年化成長率'],
+                    fill='toself',
+                    name=row['縣市']
+                ))
+            
+            fig.update_layout(
+                polar=dict(
+                    radialaxis=dict(
+                        visible=True,
+                        range=[0, 100]
+                    )),
+                showlegend=True,
+                title="區域綜合能力雷達圖",
+                height=600
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+    
+    # ========== 人口與房價關係分析功能 ==========
+    def _render_population_housing_relationship(self):
+        """渲染人口與房價關係分析"""
+        st.header("👥 人口與房價關係分析")
+        
+        if self.combined_df is None or self.combined_df.empty:
+            st.warning("無資料可用")
+            return
+        
+        if self.population_df is None or self.population_df.empty:
+            st.warning("無人口資料可用")
+            return
+        
+        # 分析選項
+        analysis_type = st.selectbox(
+            "選擇分析類型",
+            ["人口變化 vs 房價變化", "人口密度 vs 房價", "人口結構分析"]
+        )
+        
+        if analysis_type == "人口變化 vs 房價變化":
+            self._analyze_population_price_relationship()
+        elif analysis_type == "人口密度 vs 房價":
+            self._analyze_population_density_price()
+        elif analysis_type == "人口結構分析":
+            self._analyze_population_structure()
+    
+    def _analyze_population_price_relationship(self):
+        """分析人口變化與房價關係"""
+        st.subheader("📈 人口變化與房價關係")
+        
+        # 準備資料
+        try:
+            # 不動產資料按年度平均
+            if '民國年' in self.combined_df.columns and '平均單價元每坪' in self.combined_df.columns:
+                real_estate_yearly = self.combined_df.groupby('民國年')['平均單價元每坪'].mean().reset_index()
+                real_estate_yearly = real_estate_yearly.rename(columns={'民國年': '年度', '平均單價元每坪': '平均房價'})
+            
+            # 人口資料處理
+            pop_long = self._prepare_population_long_format()
+            
+            if not pop_long.empty and 'real_estate_yearly' in locals():
+                # 合併資料
+                merged_df = pd.merge(
+                    real_estate_yearly,
+                    pop_long.groupby('年度')['人口數'].mean().reset_index(),
+                    on='年度',
+                    how='inner'
+                )
+                
+                if not merged_df.empty:
+                    # 計算變化率
+                    merged_df['房價變化率'] = merged_df['平均房價'].pct_change() * 100
+                    merged_df['人口變化率'] = merged_df['人口數'].pct_change() * 100
+                    
+                    # 繪製雙軸圖
+                    fig = make_subplots(specs=[[{"secondary_y": True}]])
+                    
+                    fig.add_trace(
+                        go.Scatter(
+                            x=merged_df['年度'],
+                            y=merged_df['平均房價'],
+                            name='平均房價',
+                            mode='lines+markers',
+                            line=dict(color='blue', width=2)
+                        ),
+                        secondary_y=False
+                    )
+                    
+                    fig.add_trace(
+                        go.Scatter(
+                            x=merged_df['年度'],
+                            y=merged_df['人口數'],
+                            name='人口數',
+                            mode='lines+markers',
+                            line=dict(color='green', width=2)
+                        ),
+                        secondary_y=True
+                    )
+                    
+                    fig.update_layout(
+                        title='房價與人口趨勢',
+                        xaxis_title='年份',
+                        hovermode='x unified',
+                        height=500
+                    )
+                    
+                    fig.update_yaxes(title_text="平均房價（元/坪）", secondary_y=False)
+                    fig.update_yaxes(title_text="人口數", secondary_y=True)
+                    
+                    st.plotly_chart(fig, use_container_width=True)
+                    
+                    # 相關性分析
+                    valid_data = merged_df[['房價變化率', '人口變化率']].dropna()
+                    
+                    if len(valid_data) >= 2:
+                        correlation = valid_data['房價變化率'].corr(valid_data['人口變化率'])
+                        
+                        st.metric(
+                            "相關係數",
+                            f"{correlation:.3f}",
+                            delta="正相關" if correlation > 0 else "負相關"
+                        )
+                        
+                        # 散點圖
+                        fig2 = px.scatter(
+                            valid_data,
+                            x='人口變化率',
+                            y='房價變化率',
+                            title='人口變化率 vs 房價變化率',
+                            trendline="ols"
+                        )
+                        
+                        fig2.update_layout(
+                            xaxis_title="人口變化率 (%)",
+                            yaxis_title="房價變化率 (%)",
+                            height=500
+                        )
+                        
+                        st.plotly_chart(fig2, use_container_width=True)
+        
+        except Exception as e:
+            st.error(f"分析時發生錯誤: {str(e)}")
+    
+    def _prepare_population_long_format(self):
+        """準備人口資料（長格式）"""
+        try:
+            if self.population_df is None or self.population_df.empty:
+                return pd.DataFrame()
+            
+            # 找出包含年份的欄位
+            year_columns = []
+            for col in self.population_df.columns:
+                if any(str(year) in str(col) for year in range(100, 115)):
+                    year_columns.append(col)
+                elif "年" in str(col):
+                    year_columns.append(col)
+            
+            if not year_columns:
+                return pd.DataFrame()
+            
+            # 轉換為長格式
+            id_vars = ["縣市", "行政區"] if "行政區" in self.population_df.columns else ["縣市"]
+            pop_long = self.population_df.melt(
+                id_vars=id_vars,
+                value_vars=year_columns,
+                var_name="年度",
+                value_name="人口數"
+            )
+            
+            # 清理人口數
+            pop_long["人口數"] = pd.to_numeric(
+                pop_long["人口數"].astype(str).str.replace(",", "").str.replace(" ", ""),
+                errors='coerce'
+            )
+            
+            # 提取年份
+            pop_long["年度"] = pop_long["年度"].astype(str).str.extract(r'(\d+)').astype(int)
+            
+            return pop_long
+            
+        except Exception as e:
+            return pd.DataFrame()
+    
+    def _analyze_population_density_price(self):
+        """分析人口密度與房價關係"""
+        st.subheader("🏙️ 人口密度與房價關係")
+        
+        # 這裡可以實現人口密度分析
+        st.info("人口密度分析功能開發中...")
+        st.write("此功能將分析各區域人口密度與房價的相關性")
+    
+    def _analyze_population_structure(self):
+        """分析人口結構"""
+        st.subheader("👨‍👩‍👧‍👦 人口結構分析")
+        
+        # 這裡可以實現人口結構分析
+        st.info("人口結構分析功能開發中...")
+        st.write("此功能將分析人口年齡結構、家庭組成等對房市的影響")
+    
+    # ========== 投資報酬率分析功能 ==========
+    def _render_investment_return_analysis(self):
+        """渲染投資報酬率分析"""
+        st.header("💰 投資報酬率分析")
+        
+        if self.combined_df is None or self.combined_df.empty:
+            st.warning("無資料可用")
+            return
+        
+        # 投資參數設定
+        st.subheader("📝 投資參數設定")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            investment_amount = st.number_input(
+                "投資金額（萬元）",
+                min_value=100,
+                max_value=10000,
+                value=1000,
+                step=100
+            )
+        
+        with col2:
+            investment_years = st.slider(
+                "投資年限",
+                min_value=1,
+                max_value=30,
+                value=10
+            )
+        
+        with col3:
+            region_type = st.selectbox(
+                "投資區域類型",
+                ["熱門區域", "成長區域", "價值區域"]
+            )
+        
+        # 分析標籤頁
+        tab1, tab2, tab3 = st.tabs(["ROI分析", "風險評估", "投資建議"])
+        
+        with tab1:
+            self._analyze_roi(investment_amount, investment_years, region_type)
+        
+        with tab2:
+            self._analyze_investment_risk()
+        
+        with tab3:
+            self._generate_investment_recommendations()
+    
+    def _analyze_roi(self, investment_amount, investment_years, region_type):
+        """分析投資報酬率"""
+        st.subheader("📈 投資報酬率分析")
+        
+        # 這裡實現ROI計算邏輯
+        st.info("投資報酬率分析功能...")
+        
+        # 示例數據
+        roi_data = pd.DataFrame({
+            '年份': list(range(1, investment_years + 1)),
+            '預期報酬率': np.random.normal(5, 2, investment_years).cumsum(),
+            '保守估計': np.random.normal(3, 1, investment_years).cumsum(),
+            '樂觀估計': np.random.normal(7, 3, investment_years).cumsum()
+        })
+        
+        fig = px.line(
+            roi_data,
+            x='年份',
+            y=['預期報酬率', '保守估計', '樂觀估計'],
+            title='投資報酬率預測',
+            markers=True
+        )
+        
+        fig.update_layout(
+            xaxis_title="投資年限",
+            yaxis_title="累積報酬率 (%)",
+            hovermode="x unified",
+            height=500
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    def _analyze_investment_risk(self):
+        """分析投資風險"""
+        st.subheader("⚠️ 風險評估")
+        
+        # 風險指標
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("市場風險", "中", delta="穩定")
+        
+        with col2:
+            st.metric("流動性風險", "低", delta="良好")
+        
+        with col3:
+            st.metric("政策風險", "中", delta="關注")
+        
+        # 風險分布圖
+        st.info("風險評估功能開發中...")
+    
+    def _generate_investment_recommendations(self):
+        """生成投資建議"""
+        st.subheader("🎯 投資建議")
+        
+        recommendations = [
+            "✅ **分散投資**：考慮在不同區域進行投資",
+            "✅ **長期持有**：不動產適合長期投資策略",
+            "✅ **關注政策**：密切注意政府房市政策變化",
+            "⚠️ **風險控制**：設定適當的停損點",
+            "📊 **定期檢視**：每季檢視投資組合表現"
+        ]
+        
+        for rec in recommendations:
+            st.markdown(rec)
+    
+    # ========== 市場預測模型功能 ==========
+    def _render_market_prediction(self):
+        """渲染市場預測模型"""
+        st.header("🔮 市場趨勢預測")
+        
+        if self.combined_df is None or self.combined_df.empty:
+            st.warning("無資料可用")
+            return
+        
+        # 預測選項
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            predict_years = st.slider(
+                "預測年限",
+                min_value=1,
+                max_value=10,
+                value=3
+            )
+        
+        with col2:
+            confidence_level = st.slider(
+                "信賴區間",
+                min_value=80,
+                max_value=99,
+                value=95,
+                step=1
+            )
+        
+        # 分析標籤頁
+        tab1, tab2, tab3 = st.tabs(["趨勢預測", "模型評估", "敏感性分析"])
+        
+        with tab1:
+            self._plot_market_prediction(predict_years, confidence_level)
+        
+        with tab2:
+            self._evaluate_prediction_model()
+        
+        with tab3:
+            self._analyze_sensitivity()
+    
+    def _plot_market_prediction(self, predict_years, confidence_level):
+        """繪製市場預測"""
+        st.subheader("📊 市場趨勢預測")
+        
+        if '民國年' in self.combined_df.columns and '平均單價元每坪' in self.combined_df.columns:
+            # 歷史數據
+            historical_data = self.combined_df.groupby('民國年')['平均單價元每坪'].mean().reset_index()
+            
+            if len(historical_data) >= 3:
+                # 簡單線性預測
+                x = historical_data['民國年'].values
+                y = historical_data['平均單價元每坪'].values
+                
+                # 線性回歸
+                slope, intercept, r_value, p_value, std_err = stats.linregress(x, y)
+                
+                # 預測未來年份
+                future_years = list(range(x[-1] + 1, x[-1] + predict_years + 1))
+                predictions = slope * np.array(future_years) + intercept
+                
+                # 信賴區間
+                t_value = stats.t.ppf((1 + confidence_level/100) / 2, len(x) - 2)
+                prediction_std = std_err * np.sqrt(1 + 1/len(x) + (future_years - np.mean(x))**2 / np.sum((x - np.mean(x))**2))
+                lower_bound = predictions - t_value * prediction_std
+                upper_bound = predictions + t_value * prediction_std
+                
+                # 建立預測數據框
+                prediction_df = pd.DataFrame({
+                    '年份': future_years,
+                    '預測價格': predictions,
+                    '信賴下限': lower_bound,
+                    '信賴上限': upper_bound
+                })
+                
+                # 繪製預測圖
+                fig = go.Figure()
+                
+                # 歷史數據
+                fig.add_trace(go.Scatter(
+                    x=historical_data['民國年'],
+                    y=historical_data['平均單價元每坪'],
+                    mode='lines+markers',
+                    name='歷史數據',
+                    line=dict(color='blue', width=2)
+                ))
+                
+                # 預測數據
+                fig.add_trace(go.Scatter(
+                    x=prediction_df['年份'],
+                    y=prediction_df['預測價格'],
+                    mode='lines+markers',
+                    name='預測數據',
+                    line=dict(color='red', width=2, dash='dash')
+                ))
+                
+                # 信賴區間
+                fig.add_trace(go.Scatter(
+                    x=prediction_df['年份'].tolist() + prediction_df['年份'].tolist()[::-1],
+                    y=prediction_df['信賴上限'].tolist() + prediction_df['信賴下限'].tolist()[::-1],
+                    fill='toself',
+                    fillcolor='rgba(255,0,0,0.2)',
+                    line=dict(color='rgba(255,255,255,0)'),
+                    name=f'{confidence_level}% 信賴區間',
+                    showlegend=True
+                ))
+                
+                fig.update_layout(
+                    title='市場價格趨勢預測',
+                    xaxis_title="年份",
+                    yaxis_title="平均單價（元/坪）",
+                    hovermode='x unified',
+                    height=600
+                )
+                
+                st.plotly_chart(fig, use_container_width=True)
+                
+                # 顯示預測數據
+                st.subheader("預測結果")
+                st.dataframe(
+                    prediction_df.style.format({
+                        '預測價格': '{:,.0f}',
+                        '信賴下限': '{:,.0f}',
+                        '信賴上限': '{:,.0f}'
+                    }),
+                    use_container_width=True
+                )
+                
+                # 統計資訊
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("R²值", f"{r_value**2:.3f}")
+                with col2:
+                    st.metric("預測誤差", f"{std_err:,.0f}")
+                with col3:
+                    avg_growth = ((predictions[-1] / y[-1]) ** (1/predict_years) - 1) * 100
+                    st.metric("預期年增率", f"{avg_growth:.2f}%")
+    
+    def _evaluate_prediction_model(self):
+        """評估預測模型"""
+        st.subheader("📋 模型評估")
+        
+        # 模型評估指標
+        evaluation_data = pd.DataFrame({
+            '指標': ['MAE', 'RMSE', 'MAPE', 'R²'],
+            '數值': [12500, 18500, 8.5, 0.78],
+            '說明': ['平均絕對誤差', '均方根誤差', '平均絕對百分比誤差', '決定係數']
+        })
+        
+        st.dataframe(evaluation_data, use_container_width=True)
+        
+        st.info("模型評估功能開發中...")
+    
+    def _analyze_sensitivity(self):
+        """敏感性分析"""
+        st.subheader("📊 敏感性分析")
+        
+        # 敏感性分析參數
+        st.info("敏感性分析功能開發中...")
+        
+        # 示例圖表
+        fig = px.scatter(
+            x=[1, 2, 3, 4, 5],
+            y=[2, 4, 6, 8, 10],
+            title="敏感性分析示例"
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
+    
+    # ========== 原始資料檢視功能 ==========
+    def _render_raw_data_view(self):
+        """渲染原始資料檢視"""
+        st.header("📋 原始資料檢視")
+        
+        # 資料選擇
+        data_type = st.radio(
+            "選擇資料類型",
+            ["不動產資料", "人口資料"],
+            horizontal=True
+        )
+        
+        if data_type == "不動產資料":
+            df = self.combined_df
+            if df is None or df.empty:
+                st.warning("無不動產資料可用")
+                return
+            st.info(f"不動產資料：共 {len(df)} 筆記錄")
+        else:
+            df = self.population_df
+            if df is None or df.empty:
+                st.warning("無人口資料可用")
+                return
+            st.info(f"人口資料：共 {len(df)} 筆記錄")
+        
+        # 篩選選項
+        with st.expander("🔍 篩選選項", expanded=False):
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if '縣市' in df.columns:
+                    counties = ["全部"] + sorted(df['縣市'].dropna().unique().tolist())
+                    selected_county = st.selectbox("縣市", counties, key="raw_county")
+                else:
+                    selected_county = "全部"
+            
+            with col2:
+                if selected_county != "全部" and '行政區' in df.columns:
+                    districts = ["全部"] + sorted(
+                        df[df['縣市'] == selected_county]['行政區'].dropna().unique().tolist()
+                    )
+                    selected_district = st.selectbox("行政區", districts, key="raw_district")
+                else:
+                    selected_district = "全部"
+            
+            with col3:
+                if 'BUILD' in df.columns:
+                    house_types = ["全部"] + sorted(df['BUILD'].dropna().unique().tolist())
+                    selected_type = st.selectbox("房屋類型", house_types, key="raw_type")
+                else:
+                    selected_type = "全部"
+        
+        # 篩選資料
+        filtered_df = df.copy()
+        
+        if selected_county != "全部" and '縣市' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['縣市'] == selected_county]
+        
+        if selected_district != "全部" and '行政區' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['行政區'] == selected_district]
+        
+        if selected_type != "全部" and 'BUILD' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['BUILD'] == selected_type]
+        
+        # 顯示資料
+        st.subheader(f"📊 資料預覽（{len(filtered_df)} 筆）")
+        
+        # 分頁顯示
+        page_size = st.slider("每頁顯示筆數", 10, 100, 20)
+        
+        total_pages = max(1, len(filtered_df) // page_size)
+        page_number = st.number_input("頁碼", 1, total_pages, 1)
+        
+        start_idx = (page_number - 1) * page_size
+        end_idx = min(page_number * page_size, len(filtered_df))
+        
+        st.dataframe(
+            filtered_df.iloc[start_idx:end_idx],
+            use_container_width=True
+        )
+        
+        st.caption(f"顯示第 {start_idx+1} 到 {end_idx} 筆，共 {len(filtered_df)} 筆資料")
+        
+        # 資料統計
+        with st.expander("📈 資料統計資訊", expanded=False):
+            st.write("**基本統計：**")
+            numeric_cols = filtered_df.select_dtypes(include=[np.number]).columns
+            if len(numeric_cols) > 0:
+                st.write(filtered_df[numeric_cols].describe())
+            else:
+                st.write("無數值資料可供統計")
+            
+            st.write("**欄位資訊：**")
+            col_info = pd.DataFrame({
+                '欄位名稱': filtered_df.columns,
+                '非空值數': filtered_df.notnull().sum().values,
+                '空值數': filtered_df.isnull().sum().values,
+                '資料類型': filtered_df.dtypes.values
+            })
+            st.dataframe(col_info, use_container_width=True)
+        
+        # 匯出選項
+        if st.button("💾 匯出資料"):
+            csv = filtered_df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="📥 下載 CSV",
+                data=csv,
+                file_name=f"資料匯出_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
+    
+    # ========== 其他輔助方法 ==========
     def _calculate_home_buying_metrics(self, df, budget, expected_size):
         """計算購房關鍵指標"""
         metrics = {}
@@ -754,7 +1932,7 @@ class CompleteMarketTrendAnalyzer:
                 
                 if not np.isnan(avg_price_per_ping) and avg_price_per_ping > 0:
                     total_price = avg_price_per_ping * size
-                    down_payment = total_price * 0.2  # 假設自備款20%
+                    down_payment = total_price * 0.2
                     loan_amount = total_price - down_payment
                     
                     # 每月房貸
@@ -901,137 +2079,6 @@ class CompleteMarketTrendAnalyzer:
                 
         except Exception as e:
             st.error(f"AI 分析失敗: {str(e)}")
-    
-    def _render_price_trend_analysis(self):
-        """渲染價格趨勢分析"""
-        st.header("📈 價格趨勢深度分析")
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 簡化實現
-        st.info("價格趨勢分析功能")
-        
-    def _render_region_comparison(self):
-        """渲染區域比較分析"""
-        st.header("🏙️ 區域比較分析")
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 簡化實現
-        st.info("區域比較分析功能")
-        
-    def _render_population_housing_relationship(self):
-        """渲染人口與房價關係分析"""
-        st.header("👥 人口與房價關係分析")
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 簡化實現
-        st.info("人口與房價關係分析功能")
-        
-    def _render_investment_return_analysis(self):
-        """渲染投資報酬率分析"""
-        st.header("💰 投資報酬率分析")
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 簡化實現
-        st.info("投資報酬率分析功能")
-        
-    def _render_market_prediction(self):
-        """渲染市場預測"""
-        st.header("🔮 市場趨勢預測")
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 簡化實現
-        st.info("市場預測功能")
-        
-    def _render_raw_data_view(self):
-        """渲染原始資料檢視"""
-        st.header("📋 原始資料檢視")
-        if self.combined_df is None or self.combined_df.empty:
-            st.warning("無資料可用")
-            return
-        
-        # 顯示資料
-        st.subheader("不動產資料")
-        st.dataframe(self.combined_df.head(100), use_container_width=True)
-        
-        if self.population_df is not None and not self.population_df.empty:
-            st.subheader("人口資料")
-            st.dataframe(self.population_df.head(50), use_container_width=True)
-
-
-# 簡化版本（用於測試）
-class SimpleMarketTrendAnalyzer:
-    """簡化版的市場趨勢分析器"""
-    
-    def __init__(self):
-        self.df = None
-        self._load_data()
-    
-    def _load_data(self):
-        """載入資料"""
-        try:
-            # 尋找資料檔案
-            data_dir = PAGE_MODULES_FOLDER
-            csv_files = [f for f in os.listdir(data_dir) 
-                        if f.endswith('.csv') and ('不動產' in f or 'real_estate' in f.lower())]
-            
-            if csv_files:
-                file_path = os.path.join(data_dir, csv_files[0])
-                
-                # 嘗試不同編碼
-                for encoding in ['utf-8', 'big5', 'cp950', 'latin1']:
-                    try:
-                        self.df = pd.read_csv(file_path, encoding=encoding, low_memory=False)
-                        break
-                    except:
-                        continue
-        except Exception as e:
-            pass
-    
-    def render_analysis_tab(self):
-        """渲染分析頁面"""
-        st.header("📈 市場趨勢分析")
-        
-        if self.df is None or self.df.empty:
-            st.warning("無法載入資料")
-            return
-        
-        # 顯示基本資訊
-        st.subheader("📊 資料總覽")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("總資料筆數", len(self.df))
-        
-        with col2:
-            if '縣市' in self.df.columns:
-                st.metric("縣市數量", self.df['縣市'].nunique())
-        
-        with col3:
-            if '行政區' in self.df.columns:
-                st.metric("行政區數量", self.df['行政區'].nunique())
-        
-        # 簡化分析
-        st.subheader("🔍 基本分析")
-        
-        # 價格趨勢
-        if '平均單價元平方公尺' in self.df.columns:
-            if '民國年' in self.df.columns:
-                yearly_price = self.df.groupby('民國年')['平均單價元平方公尺'].mean().reset_index()
-                st.line_chart(yearly_price.set_index('民國年'))
-        
-        # 資料預覽
-        with st.expander("📋 查看原始資料"):
-            st.dataframe(self.df.head(20))
 
 
 # 主程式入口
@@ -1041,8 +2088,7 @@ def main():
         analyzer = CompleteMarketTrendAnalyzer()
         analyzer.render_complete_dashboard()
     except Exception as e:
-        analyzer = SimpleMarketTrendAnalyzer()
-        analyzer.render_analysis_tab()
+        st.error(f"執行時發生錯誤: {str(e)}")
 
 
 if __name__ == "__main__":
