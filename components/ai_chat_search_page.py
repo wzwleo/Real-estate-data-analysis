@@ -110,7 +110,7 @@ def render_ai_chat_search():
 
 請以 JSON 格式回傳，格式如下：
 {
-    "city": "台北市 或 台中市",
+    "city": "台中市",
     "district": "行政區名稱(例如: 西屯區、大安區)",
     "budget_min": 最低預算(萬),
     "budget_max": 最高預算(萬),
@@ -118,6 +118,9 @@ def render_ai_chat_search():
     "age_max": 最大屋齡,
     "area_min": 最小建坪,
     "area_max": 最大建坪,
+    "rooms": 房間數,
+    "living_rooms": 廳數,
+    "bathrooms": 衛數,
     "floor_min": 最低樓層,
     "floor_max": 最高樓層,
     "housetype": "華廈/公寓/大樓/套房/透天/店面/辦公/別墅/倉庫/廠房/土地/單售車位/其他",
@@ -140,6 +143,13 @@ def render_ai_chat_search():
   - 如果使用者說「不要1樓」或「避開1樓」，請設定 "floor_min": 2
   - 高樓層通常指5樓以上，低樓層通常指3樓以下
 - 城市只能是「台中市」
+- 只回傳 JSON，不要有其他文字
+- **格局解析：**
+  - 如果使用者說「3房」或「3房2廳」或「3房2廳2衛」，請分別提取：
+    - "rooms": 3
+    - "living_rooms": 2 (若有提到)
+    - "bathrooms": 2 (若有提到)
+  - 如果使用者說「2房以上」，請設定 "rooms": 2
 """
                 
                 full_prompt = f"{system_prompt}\n\n使用者查詢：{prompt}"
