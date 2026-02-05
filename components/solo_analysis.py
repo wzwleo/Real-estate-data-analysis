@@ -1216,7 +1216,7 @@ def tab1_module():
                     st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
                 
-                st.subheader("樓層 🏢")
+                st.subheader("1樓層 🏢")
                 # 取得比較資料
                 compare_base_df = pd.DataFrame()
                 if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
