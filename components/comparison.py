@@ -1773,65 +1773,124 @@ class ComparisonAnalyzer:
         """取得 Gemini API Key"""
         return st.session_state.get("GEMINI_KEY", "")
     
-    def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
-        """搜尋Google Places（使用文字搜尋）- 按距離排序"""
+    def _search_text_google_places(self, lat, lng, api_key, keyword, max_distance=2000, max_results=60):
+        """搜尋Google Places（使用文字搜尋）- 按距離排序，處理分頁"""
+        results = []
         url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        
+        # 第一頁搜尋
         params = {
             "query": keyword,
             "location": f"{lat},{lng}",
-            # 重要：設置按距離排序
-            "rankby": "distance",  # 新增這行，確保按距離排序
+            "rankby": "distance",  # 按距離排序
             "key": api_key,
             "language": "zh-TW"
         }
-
+        
         try:
+            # 獲取第一頁結果
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
             r = response.json()
-        except Exception as e:
-            return []
-
-        results = []
-        for p in r.get("results", []):
-            loc = p["geometry"]["location"]
-            # 使用 haversine 公式計算實際距離
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             
-            results.append((
-                "類型搜尋",
-                keyword,
-                p.get("name", "未命名"),
-                loc["lat"],
-                loc["lng"],
-                dist,
-                p.get("place_id", "")
-            ))
+            # 處理第一頁結果
+            for p in r.get("results", []):
+                loc = p["geometry"]["location"]
+                dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                
+                # 只添加在最大距離內的結果
+                if dist <= max_distance:
+                    results.append((
+                        "類型搜尋",
+                        keyword,
+                        p.get("name", "未命名"),
+                        loc["lat"],
+                        loc["lng"],
+                        dist,
+                        p.get("place_id", "")
+                    ))
+            
+            # 檢查是否有下一頁 (最多取3頁，避免太多請求)
+            next_page_token = r.get("next_page_token")
+            page_count = 1
+            
+            # 嘗試獲取後續頁面 (最多2個額外頁面)
+            while next_page_token and page_count < 3 and len(results) < max_results:
+                time.sleep(2)  # Google要求等待幾秒才能取下一頁
+                
+                # 下一頁參數
+                next_params = {
+                    "pagetoken": next_page_token,
+                    "key": api_key
+                }
+                
+                try:
+                    next_response = requests.get(url, params=next_params, timeout=10)
+                    next_response.raise_for_status()
+                    next_r = next_response.json()
+                    
+                    # 處理下一頁結果
+                    for p in next_r.get("results", []):
+                        loc = p["geometry"]["location"]
+                        dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+                        
+                        if dist <= max_distance and len(results) < max_results:
+                            results.append((
+                                "類型搜尋",
+                                keyword,
+                                p.get("name", "未命名"),
+                                loc["lat"],
+                                loc["lng"],
+                                dist,
+                                p.get("place_id", "")
+                            ))
+                    
+                    # 檢查是否還有下一頁
+                    next_page_token = next_r.get("next_page_token")
+                    page_count += 1
+                    
+                except Exception as e:
+                    print(f"獲取下一頁失敗: {e}")
+                    break
+                    
+        except Exception as e:
+            print(f"搜尋失敗: {e}")
+            return []
+        
+        # 確保按距離排序
+        results.sort(key=lambda x: x[5])
+        
+        # 限制最大結果數量
+        if len(results) > max_results:
+            results = results[:max_results]
+        
+        print(f"✅ 找到 {len(results)} 個 {keyword} 設施 (搜尋了 {page_count} 頁)")
         return results
     
     def _query_places_with_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """使用文字搜尋方式查詢周邊設施 - 已按距離排序"""
+        """使用文字搜尋方式查詢周邊設施 - 優化版"""
         results, seen = [], set()
         
+        # 計算總任務數
         total_tasks = 0
         for cat in selected_categories:
             if cat in selected_subtypes:
                 total_tasks += len(selected_subtypes[cat])
         total_tasks += (1 if extra_keyword else 0)
-
+        
         if total_tasks == 0:
             return results
-
+        
         progress = st.progress(0)
         progress_text = st.empty()
         completed = 0
-
+        
         def update_progress(task_desc):
             nonlocal completed
             completed += 1
             progress.progress(min(completed / total_tasks, 1.0))
             progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-
+        
         # 對每個設施子類型進行文字搜尋
         for cat in selected_categories:
             if cat not in selected_subtypes:
@@ -1843,8 +1902,16 @@ class ComparisonAnalyzer:
                 try:
                     # 將關鍵字轉換為中文進行搜尋
                     chinese_keyword = ENGLISH_TO_CHINESE.get(place_type, place_type)
-                    places = self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius)
                     
+                    # 設定較大的最大距離和結果數
+                    places = self._search_text_google_places(
+                        lat, lng, api_key, 
+                        chinese_keyword, 
+                        max_distance=radius * 2,  # 稍微擴大搜尋範圍
+                        max_results=60  # 每種類型最多60個結果
+                    )
+                    
+                    # 過濾實際距離
                     for p in places:
                         if p[5] > radius:
                             continue
@@ -1854,17 +1921,24 @@ class ComparisonAnalyzer:
                         seen.add(pid)
                         
                         results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
-
-                    time.sleep(0.5)  # 防止API請求過快
+                    
+                    # 稍微休息避免 API 限制
+                    time.sleep(0.3)
                     
                 except Exception as e:
+                    print(f"搜尋 {chinese_keyword} 失敗: {e}")
                     continue
-
+        
         # 額外關鍵字搜尋
         if extra_keyword:
             update_progress(f"額外關鍵字: {extra_keyword}")
             try:
-                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
+                places = self._search_text_google_places(
+                    lat, lng, api_key, 
+                    extra_keyword,
+                    max_distance=radius * 2,
+                    max_results=60
+                )
                 for p in places:
                     if p[5] > radius:
                         continue
@@ -1873,16 +1947,16 @@ class ComparisonAnalyzer:
                         continue
                     seen.add(pid)
                     results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
-                    
-                time.sleep(0.5)
+                
+                time.sleep(0.3)
             except Exception as e:
+                print(f"搜尋額外關鍵字 {extra_keyword} 失敗: {e}")
                 pass
-
-        progress.progress(1.0)
-        progress_text.text("✅ 查詢完成！")
         
-        # 由於 API 已按距離排序，這裡可以保持排序
-        # 但為了確保，還是按距離排序一次
+        progress.progress(1.0)
+        progress_text.text(f"✅ 查詢完成！共找到 {len(results)} 個設施")
+        
+        # 按距離排序
         results.sort(key=lambda x: x[5])
         
         return results
