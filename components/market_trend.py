@@ -48,7 +48,7 @@ class CompleteMarketTrendAnalyzer:
         
     def render_complete_dashboard(self):
         """渲染完整市場趨勢儀表板"""
-        st.title("🏠 不動產市場智慧分析系統")
+        st.title("🏠 不動產市場交易資料(101-114)")
         
         # 初始化狀態
         self._init_session_state()
