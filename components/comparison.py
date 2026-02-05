@@ -736,8 +736,8 @@ class ComparisonAnalyzer:
             
             progress_bar.progress(25)
             
-            # 步驟2: 查詢周邊設施
-            status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
+            # 步驟2: 查詢周邊設施 - 改用文字搜尋方式
+            status_text.text("🔍 步驟 2/4: 查詢周邊設施（文字搜尋）...")
             places_data = {}
             category_coverage = {}  # 新增：記錄類別覆蓋
             
@@ -745,8 +745,8 @@ class ComparisonAnalyzer:
             for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
                 lat, lng = house_info["lat"], house_info["lng"]
                 
-                # 查詢設施並記錄覆蓋情況
-                places, house_coverage = self._query_google_places_with_coverage(
+                # 使用文字搜尋方式查詢設施
+                places, house_coverage = self._query_places_with_text_search(
                     lat, lng, settings["server_key"], 
                     settings["selected_categories"], settings["selected_subtypes"],
                     settings["radius"], extra_keyword=settings["keyword"]
@@ -805,11 +805,11 @@ class ComparisonAnalyzer:
             st.error(f"❌ 分析執行失敗: {str(e)}")
             st.session_state.analysis_in_progress = False
     
-    def _query_google_places_with_coverage(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """查詢Google Places並記錄類別覆蓋情況"""
+    def _query_places_with_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
+        """使用文字搜尋方式查詢周邊設施"""
         results, seen = [], set()
         
-        # 初始化覆蓋記錄 - 確保格式正確
+        # 初始化覆蓋記錄
         category_coverage = {}
         for cat in selected_categories:
             if cat in selected_subtypes:
@@ -836,15 +836,18 @@ class ComparisonAnalyzer:
             progress.progress(min(completed / total_tasks, 1.0))
             progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
 
+        # 對每個設施子類型進行文字搜尋
         for cat in selected_categories:
             if cat not in selected_subtypes:
                 continue
                 
             for place_type in selected_subtypes[cat]:
-                update_progress(f"查詢 {cat}-{place_type}")
+                update_progress(f"搜尋 {cat}-{place_type}")
                 
                 try:
-                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
+                    # 將英文關鍵字轉換為中文進行搜尋
+                    chinese_keyword = ENGLISH_TO_CHINESE.get(place_type, place_type)
+                    places = self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius)
                     
                     # 更新覆蓋記錄
                     if places:
@@ -858,14 +861,14 @@ class ComparisonAnalyzer:
                             continue
                         seen.add(pid)
                         
-                        # 不再判斷實際分類，直接使用子類別
                         results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
 
-                    time.sleep(0.3)
+                    time.sleep(0.5)  # 防止API請求過快
                     
                 except Exception as e:
                     continue
 
+        # 額外關鍵字搜尋
         if extra_keyword:
             update_progress(f"額外關鍵字: {extra_keyword}")
             try:
@@ -879,7 +882,7 @@ class ComparisonAnalyzer:
                     seen.add(pid)
                     results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
                     
-                time.sleep(0.3)
+                time.sleep(0.5)
             except Exception as e:
                 pass
 
@@ -2035,49 +2038,10 @@ class ComparisonAnalyzer:
             loc = p["geometry"]["location"]
             dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             
+            # 對每個設施，我們需要返回一致的格式
             results.append((
-                "關鍵字",
-                keyword,
-                p.get("name", "未命名"),
-                loc["lat"],
-                loc["lng"],
-                dist,
-                p.get("place_id", "")
-            ))
-        return results
-    
-    def _search_nearby_places_by_type(self, lat, lng, api_key, place_type, radius=500):
-        """使用 Nearby Search 和 Type Filter 查詢地點"""
-        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-        params = {
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "type": place_type,
-            "key": api_key,
-            "language": "zh-TW"
-        }
-
-        try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            r = response.json()
-        except requests.exceptions.Timeout:
-            return []
-        except Exception as e:
-            return []
-
-        results = []
-        if r.get("status") != "OK":
-            return []
-
-        for p in r.get("results", []):
-            loc = p["geometry"]["location"]
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-            
-            chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
-            results.append((
-                "類型搜尋",
-                chinese_type,
+                "類型搜尋",  # 第一個元素：搜尋類型
+                keyword,     # 第二個元素：搜尋的關鍵字
                 p.get("name", "未命名"),
                 loc["lat"],
                 loc["lng"],
