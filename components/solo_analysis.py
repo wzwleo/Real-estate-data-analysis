@@ -201,7 +201,7 @@ def plot_floor_distribution(target_row, df):
         ),
         bargap=0.3
     )
-
+    st.plotly_chart(fig, use_container_width=True)
 def plot_age_distribution(target_row, df):
     """
     繪製同區同類型屋齡分布直方圖（含建坪單價趨勢線）
@@ -1251,7 +1251,7 @@ def tab1_module():
                 st.markdown("### 📌 樓層分析結論")
                 st.write(age_response.text)
                 if not compare_base_df.empty:
-                    st.plotly_chart(fig, use_container_width=True)
+                    plot_floor_distribution(selected_row, compare_base_df)
                 else:
                     st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
