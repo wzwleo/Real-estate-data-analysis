@@ -167,20 +167,19 @@ def plot_floor_distribution(target_row, df):
         
         # 找到目標樓層區間在圖表中的位置
         if target_floor_label in floor_stats['樓層區間'].astype(str).values:
-            target_floor_data = floor_stats[floor_stats['樓層區間'].astype(str) == target_floor_label].iloc[0]
+            target_bin_index = np.digitize(target_floor, bins) - 1
             
-            # 🔴 添加紅星標記
-            fig.add_trace(go.Scatter(
-                x=[target_floor_label],
-                y=[target_floor_data['房屋數量']],
-                mode="markers+text",
-                marker=dict(color="red", size=15, symbol="star"),
-                text=["目標房屋"],
-                textposition="top center",
-                name="目標房屋",
-                showlegend=True,
-                yaxis='y'
-            ))
+            if 0 <= target_bin_index < len(floor_stats):
+                fig.add_trace(go.Scatter(
+                    x=[floor_stats.iloc[target_bin_index]['樓層區間']],
+                    y=[floor_stats.iloc[target_bin_index]['房屋數量']],
+                    mode="markers+text",
+                    marker=dict(color="red", size=15, symbol="star"),
+                    text=["目標房屋"],
+                    textposition="top center",
+                    name="目標房屋",
+                    yaxis='y'
+                ))
     
     # 設定雙 Y 軸 layout
     fig.update_layout(
