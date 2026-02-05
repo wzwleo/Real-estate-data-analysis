@@ -1138,7 +1138,183 @@ def tab1_module():
                         屋齡分析數據如下：
                         {json.dumps(age_analysis_payload, ensure_ascii=False, indent=2)}
                         """
-
+                        # ===============================
+                        # 樓層分析
+                        # ===============================
+                        # 樓層字串 → 數字
+                        def parse_floor(x):
+                            if pd.isna(x):
+                                return np.nan
+                            try:
+                                return int(str(x).split('樓')[0])
+                            except:
+                                return np.nan
+                        
+                        compare_df['樓層數值'] = compare_df['樓層'].apply(parse_floor)
+                        
+                        # 取得目標樓層
+                        target_floor = parse_floor(selected_row['樓層'])
+                        
+                        # 移除 NaN 值
+                        df_filtered_floor = compare_df.dropna(subset=['樓層數值'])
+                        
+                        if len(df_filtered_floor) > 0 and not pd.isna(target_floor):
+                            # 基本統計
+                            median_floor = df_filtered_floor['樓層數值'].median()
+                            mean_floor = df_filtered_floor['樓層數值'].mean()
+                            min_floor = df_filtered_floor['樓層數值'].min()
+                            max_floor = df_filtered_floor['樓層數值'].max()
+                            floor_percentile = (df_filtered_floor['樓層數值'] < target_floor).sum() / len(df_filtered_floor) * 100
+                            
+                            # 簡單分類
+                            if floor_percentile <= 33:
+                                floor_category = "低樓層"
+                            elif floor_percentile <= 66:
+                                floor_category = "中樓層"
+                            else:
+                                floor_category = "高樓層"
+                            
+                            # ========== 定義樓層區間（bins） ==========
+                            bin_width = 5  # 每個區間 5 層
+                            bins = np.arange(0, max_floor + bin_width, bin_width)
+                            
+                            # 為資料添加樓層區間
+                            df_filtered_floor['樓層區間'] = pd.cut(
+                                df_filtered_floor['樓層數值'], 
+                                bins=bins, 
+                                include_lowest=True
+                            )
+                            
+                            # 確保有總價和建坪欄位
+                            if '總價(萬)' in df_filtered_floor.columns:
+                                df_filtered_floor['總價'] = pd.to_numeric(df_filtered_floor['總價(萬)'], errors='coerce')
+                            elif '總價' in df_filtered_floor.columns:
+                                df_filtered_floor['總價'] = pd.to_numeric(df_filtered_floor['總價'], errors='coerce')
+                            else:
+                                df_filtered_floor['總價'] = 0
+                            
+                            if '建坪' in df_filtered_floor.columns:
+                                df_filtered_floor['建坪數值'] = pd.to_numeric(df_filtered_floor['建坪'], errors='coerce')
+                            elif '建物面積' in df_filtered_floor.columns:
+                                df_filtered_floor['建坪數值'] = pd.to_numeric(df_filtered_floor['建物面積'], errors='coerce')
+                            else:
+                                df_filtered_floor['建坪數值'] = 0
+                            
+                            # 計算建坪單價
+                            df_valid_floor = df_filtered_floor[(df_filtered_floor['總價'] > 0) & (df_filtered_floor['建坪數值'] > 0)].copy()
+                            df_valid_floor['建坪單價'] = df_valid_floor['總價'] / df_valid_floor['建坪數值']
+                            
+                            # 目標房屋的建坪單價（使用前面計算過的）
+                            # target_building_price_per_ping 已在屋齡分析中計算
+                            
+                            # 同樓層區間的平均建坪單價
+                            avg_price_per_floor_group = df_valid_floor.groupby('樓層區間', observed=True)['建坪單價'].mean()
+                            target_floor_group = pd.cut([target_floor], bins=bins, include_lowest=True)[0]
+                            same_floor_avg_price = avg_price_per_floor_group.get(target_floor_group, np.nan)
+                            
+                            # 整體市場建坪單價統計（各樓層平均）
+                            overall_avg_floor_price = df_valid_floor['建坪單價'].mean()
+                            overall_median_floor_price = df_valid_floor['建坪單價'].median()
+                            
+                            # 單價隨樓層的變化率（線性回歸斜率）
+                            from scipy import stats
+                            if len(df_valid_floor) > 1:
+                                slope_floor, intercept_floor, r_value_floor, p_value_floor, std_err_floor = stats.linregress(
+                                    df_valid_floor['樓層數值'], 
+                                    df_valid_floor['建坪單價']
+                                )
+                                price_change_per_floor = slope_floor  # 每增加1層，單價變化
+                                correlation_floor = r_value_floor  # 相關係數
+                            else:
+                                price_change_per_floor = 0
+                                correlation_floor = 0
+                            
+                            # 找出最高價和最低價的樓層區間
+                            if len(avg_price_per_floor_group) > 0:
+                                highest_price_floor_group = avg_price_per_floor_group.idxmax()
+                                lowest_price_floor_group = avg_price_per_floor_group.idxmin()
+                                highest_floor_price_value = avg_price_per_floor_group.max()
+                                lowest_floor_price_value = avg_price_per_floor_group.min()
+                                floor_price_range = highest_floor_price_value - lowest_floor_price_value
+                            else:
+                                highest_price_floor_group = None
+                                lowest_price_floor_group = None
+                                highest_floor_price_value = 0
+                                lowest_floor_price_value = 0
+                                floor_price_range = 0
+                            
+                            # 目標房屋在同樓層區間的單價排名
+                            if not pd.isna(same_floor_avg_price) and same_floor_avg_price > 0:
+                                price_vs_same_floor = target_building_price_per_ping - same_floor_avg_price
+                                price_vs_same_floor_pct = (price_vs_same_floor / same_floor_avg_price) * 100
+                            else:
+                                price_vs_same_floor = 0
+                                price_vs_same_floor_pct = 0
+                            
+                            # 建立 floor_analysis_payload
+                            floor_analysis_payload = {
+                                "區域": target_district,
+                                "房屋類型": target_type,
+                                "比較樣本數": len(df_filtered_floor),
+                                
+                                "目標房屋": {
+                                    "樓層": int(target_floor),
+                                    "所在樓層區間": str(target_floor_group),
+                                    "建坪單價(萬/坪)": round(target_building_price_per_ping, 2)
+                                },
+                                
+                                "樓層分布": {
+                                    "樓層百分位": round(floor_percentile, 1),
+                                    "樓層評估": floor_category,
+                                    "高於物件比例(%)": round(floor_percentile, 1),
+                                    "同區平均樓層": round(mean_floor, 1),
+                                    "同區中位數樓層": round(median_floor, 1),
+                                    "樓層範圍": f"{int(min_floor)} ~ {int(max_floor)} 樓",
+                                    "與中位數差距(樓層)": round(target_floor - median_floor, 1)
+                                },
+                                
+                                "建坪單價分析": {
+                                    "同區平均建坪單價(萬/坪)": round(overall_avg_floor_price, 2),
+                                    "同區中位數建坪單價(萬/坪)": round(overall_median_floor_price, 2),
+                                    "同樓層區間平均建坪單價(萬/坪)": round(same_floor_avg_price, 2) if not pd.isna(same_floor_avg_price) else "無資料",
+                                    "與同樓層區間差距(萬/坪)": round(price_vs_same_floor, 2),
+                                    "與同樓層區間差距比例(%)": round(price_vs_same_floor_pct, 1)
+                                },
+                                
+                                "單價與樓層關聯": {
+                                    "單價隨樓層變化率(萬/坪/層)": round(price_change_per_floor, 3),
+                                    "相關係數": round(correlation_floor, 3),
+                                    "最高單價樓層區間": str(highest_price_floor_group) if highest_price_floor_group else "無資料",
+                                    "最高單價(萬/坪)": round(highest_floor_price_value, 2),
+                                    "最低單價樓層區間": str(lowest_price_floor_group) if lowest_price_floor_group else "無資料",
+                                    "最低單價(萬/坪)": round(lowest_floor_price_value, 2),
+                                    "單價波動範圍(萬/坪)": round(floor_price_range, 2)
+                                }
+                            }
+                            
+                            # ========== Prompt ==========
+                            floor_prompt = f"""
+                        
+                        ---
+                        
+                        以下是「已經計算完成」的樓層分析數據（JSON），
+                        請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                        
+                        請用繁體中文完成以下分析（每項不超過 50 字）：
+                        
+                        1️⃣ **樓層評估**：評價該房屋的樓層位置（{floor_analysis_payload['樓層分布']['樓層評估']}）及在市場中的分布
+                        
+                        2️⃣ **價值分析**：
+                           - 說明該房屋建坪單價與同樓層區間平均的比較
+                           - 解釋單價隨樓層變化的趨勢（每層約變化 {price_change_per_floor:.2f} 萬/坪）
+                        
+                        3️⃣ **購屋建議**：
+                           - 樓層帶來的優缺點（採光、噪音、景觀、逃生等）
+                           - 是否適合購買及需注意事項
+                        
+                        樓層分析數據如下：
+                        {json.dumps(floor_analysis_payload, ensure_ascii=False, indent=2)}
+                        """
 
                 
                         
@@ -1146,9 +1322,12 @@ def tab1_module():
                     # price_response = model.generate_content(price_prompt)
                     # space_response = model.generate_content(space_prompt)
                     # age_response = model.generate_content(age_prompt)
+                    floor_response = model.generate_content(floor_prompt)
+                    
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
@@ -1224,7 +1403,7 @@ def tab1_module():
                 elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
                     compare_base_df = st.session_state.filtered_df
                 st.markdown("### 📌 樓層分析結論")
-                st.write(age_response.text)
+                st.write(floor_response.text)
                 if not compare_base_df.empty:
                     plot_floor_distribution(selected_row, compare_base_df)
                 else:
