@@ -8,7 +8,6 @@ PLACE_TYPES = {
         "中學", "secondary_school",
         "大學", "university",
         "學校", "school"
-        # 刪除：補習班、托兒所 (Google Places 無對應類型)
     ],
     "購物": [
         "超市", "supermarket",
@@ -25,7 +24,6 @@ PLACE_TYPES = {
         "購物中心", "shopping_mall",
         "市場", "market",
         "批發", "wholesaler",
-        # 新增你提供的類型
         "亞洲雜貨店", "asian_grocery_store",
         "汽車零件店", "auto_parts_store",
         "腳踏車店", "bicycle_store",
@@ -50,7 +48,6 @@ PLACE_TYPES = {
         "客運站", "bus_station",
         "計程車招呼站", "taxi_stand",
         "加油站", "gas_station",
-        # 新增你提供的類型
         "機場", "airport",
         "小型機場", "airstrip",
         "渡輪碼頭", "ferry_terminal",
@@ -60,8 +57,7 @@ PLACE_TYPES = {
         "停車轉乘站", "park_and_ride",
         "貨運站", "transit_depot",
         "轉運站", "transit_station",
-        "卡車休息站", "truck_stop",
-        # 刪除：停車場、YouBike、機車行、汽車維修 (無對應類型)
+        "卡車休息站", "truck_stop"
     ],
     "健康與保健": [
         "醫院", "hospital",
@@ -73,15 +69,13 @@ PLACE_TYPES = {
         "SPA", "spa",
         "健身房", "gym",
         "瑜珈教室", "yoga_studio",
-        # 新增你提供的類型
         "整脊師", "chiropractor",
         "醫學實驗室", "medical_lab",
         "物理治療師", "physiotherapist",
         "三溫暖", "sauna",
         "皮膚護理診所", "skin_care_clinic",
         "日光浴工作室", "tanning_studio",
-        "健康中心", "wellness_center",
-        # 刪除：衛生所、中醫診所、西醫診所、小兒科診所、婦產科診所、眼科診所、皮膚科診所、復健科診所、物理治療所、養生館、運動中心
+        "健康中心", "wellness_center"
     ],
     "餐飲美食": [
         "餐廳", "restaurant",
@@ -101,7 +95,6 @@ PLACE_TYPES = {
         "自助餐", "buffet",
         "麵包店", "bakery",
         "冰淇淋店", "ice_cream_shop",
-        # 新增你提供的類型
         "巴西莓店", "acai_shop",
         "阿富汗餐廳", "afghani_restaurant",
         "非洲餐廳", "african_restaurant",
@@ -148,8 +141,7 @@ PLACE_TYPES = {
         "土耳其餐廳", "turkish_restaurant",
         "純素餐廳", "vegan_restaurant",
         "素食餐廳", "vegetarian_restaurant",
-        "葡萄酒吧", "wine_bar",
-        # 刪除：小吃店、早餐店、星巴克、路易莎咖啡、85度C、手搖飲料店、飲料店、麥當勞、肯德基、摩斯漢堡、漢堡王、達美樂披薩、拿坡里披薩、必勝客、火鍋店、鐵板燒、便當店、麵店、滷味店、鹽酥雞、雞排店、甜點店、蛋糕店、冰店、豆花店
+        "葡萄酒吧", "wine_bar"
     ],
     "生活服務": [
         "銀行", "bank",
@@ -161,7 +153,6 @@ PLACE_TYPES = {
         "教堂", "church",
         "洗車場", "car_wash",
         "洗衣店", "laundry",
-        # 新增你提供的娛樂休閒類型
         "冒險運動中心", "adventure_sports_center",
         "圓形劇場", "amphitheatre",
         "娛樂中心", "amusement_center",
@@ -209,14 +200,18 @@ PLACE_TYPES = {
         "婚禮場地", "wedding_venue",
         "野生動物園", "wildlife_park",
         "野生動物保護區", "wildlife_refuge",
-        "動物園", "zoo",
-        # 刪除：派出所、區公所、戶政事務所、運動公園、兒童公園、河濱公園、汽車美容、影印店、電信行、中華電信、台灣大哥大、遠傳電信、動物醫院
+        "動物園", "zoo"
     ]
 }
 
-# 建立反向映射
+# 建立反向映射和類別映射
 ENGLISH_TO_CHINESE = {}
+ENGLISH_TO_CATEGORY = {}  # 新增：英文關鍵字到主類別的映射
+
 for category, items in PLACE_TYPES.items():
     for i in range(0, len(items), 2):
         if i+1 < len(items):
-            ENGLISH_TO_CHINESE[items[i+1]] = items[i]
+            chinese_name = items[i]
+            english_name = items[i+1]
+            ENGLISH_TO_CHINESE[english_name] = chinese_name
+            ENGLISH_TO_CATEGORY[english_name] = category  # 建立映射
