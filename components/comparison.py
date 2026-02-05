@@ -1,4 +1,4 @@
-# components/comparison.py (修改部分)
+# components/comparison.py
 import streamlit as st
 import pandas as pd
 import time
@@ -19,7 +19,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE, ENGLISH_TO_CATEGORY
+    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -44,8 +44,8 @@ class ComparisonAnalyzer:
             'last_gemini_call': 0,
             'template_selector_key': 'default',
             'prompt_editor_key': 'default_prompt',
-            'category_coverage': {},
-            'search_method': 'text_search'  # 新增：預設搜尋方式為文字搜尋
+            'category_coverage': {},  # 新增：記錄類別覆蓋情況
+            'search_method': 'type_search'  # 新增：預設使用類別搜索
         }
         
         for key, value in defaults.items():
@@ -53,7 +53,7 @@ class ComparisonAnalyzer:
                 st.session_state[key] = value
     
     def render_comparison_tab(self):
-        """渲染分析頁面"""
+        """渲染分析頁面 - 修正版本"""
         try:
             st.subheader("🏠 房屋分析模式")
             
@@ -78,6 +78,43 @@ class ComparisonAnalyzer:
         except Exception as e:
             st.error(f"❌ 渲染分析頁面時發生錯誤: {str(e)}")
             st.button("🔄 重新整理頁面", on_click=self._reset_page)
+    
+    def _show_analysis_in_progress(self):
+        """顯示分析進行中的畫面"""
+        st.warning("🔍 分析進行中，請稍候...")
+        
+        # 顯示進度指示器
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        # 模擬進度更新
+        for i in range(100):
+            progress_bar.progress(i + 1)
+            status_text.text(f"分析中... {i+1}%")
+            time.sleep(0.01)
+        
+        # 完成後自動更新
+        st.success("✅ 分析完成！")
+        time.sleep(1)
+        
+        # 清除進度標記
+        if 'analysis_in_progress' in st.session_state:
+            st.session_state.analysis_in_progress = False
+        
+        st.rerun()
+    
+    def _reset_page(self):
+        """重設頁面狀態"""
+        keys_to_reset = [
+            'analysis_in_progress',
+            'analysis_results',
+            'gemini_result',
+            'current_page',
+            'category_coverage'
+        ]
+        for key in keys_to_reset:
+            if key in st.session_state:
+                del st.session_state[key]
     
     def _render_analysis_setup(self, fav_df):
         """渲染分析設定部分"""
@@ -155,42 +192,44 @@ class ComparisonAnalyzer:
             status = "✅" if browser_key else "❌"
             st.metric("Browser Key", status)
         
-        # 搜尋方式選擇 - 新增功能
-        st.markdown("### 🔍 搜尋方式設定")
-        search_method = st.radio(
-            "選擇設施搜尋方式",
-            ["文字搜尋 (Text Search)", "類型搜尋 (Type Search)"],
-            index=0 if st.session_state.get('search_method', 'text_search') == 'text_search' else 1,
-            horizontal=True,
-            key="search_method_radio",
-            help="""
-            **文字搜尋 (Text Search)**:
-            - 使用設施的中文名稱作為關鍵字搜尋
-            - 優點：搜尋範圍較廣，能找到更多相關設施
-            - 缺點：可能包含非精確類型的設施
-            
-            **類型搜尋 (Type Search)**:
-            - 使用 Google Places API 的類型參數進行搜尋
-            - 優點：搜尋精確，結果更符合設施類型
-            - 缺點：Google 定義的類型較少，可能找不到某些設施
-            """
-        )
-        
-        # 儲存搜尋方式到 session_state
-        st.session_state.search_method = 'text_search' if search_method == "文字搜尋 (Text Search)" else 'type_search'
-        
-        # 根據選擇的搜尋方式顯示說明
-        if st.session_state.search_method == 'text_search':
-            st.info("🔍 使用文字搜尋模式：將使用設施的中文名稱作為關鍵字進行搜尋")
-        else:
-            st.info("📍 使用類型搜尋模式：將使用 Google Places API 的類型參數進行精確搜尋")
-        
         # 搜尋設定
         radius = st.slider(
             "搜尋半徑 (公尺)", 
             100, 2000, DEFAULT_RADIUS, 100, 
             key="radius_slider_main"
         )
+        
+        # 新增搜索方法選擇
+        st.markdown("---")
+        st.subheader("🔧 選擇搜索方法")
+        
+        # 搜索方法說明
+        st.markdown("""
+        **搜索方法說明：**
+        - **🏷️ 類別型搜索 (Type Search)**：使用 Google Places API 的類別參數，精確但可能無法找到所有中文設施
+        - **🔍 關鍵字搜索 (Text Search)**：使用中文關鍵字搜索，對中文設施支持較好但可能不夠精確
+        """)
+        
+        search_method = st.radio(
+            "請選擇搜索方法",
+            ["🏷️ 類別型搜索 (Type Search)", "🔍 關鍵字搜索 (Text Search)"],
+            index=0 if st.session_state.get('search_method', 'type_search') == 'type_search' else 1,
+            key="search_method_radio"
+        )
+        
+        # 轉換搜索方法為內部格式
+        if search_method == "🏷️ 類別型搜索 (Type Search)":
+            search_method_internal = "type_search"
+        else:
+            search_method_internal = "text_search"
+        
+        st.session_state.search_method = search_method_internal
+        
+        # 根據搜索方法顯示不同說明
+        if search_method_internal == "type_search":
+            st.info("✅ 使用 **類別型搜索**：將使用 Google Places API 的類別參數進行精確搜索")
+        else:
+            st.info("✅ 使用 **關鍵字搜索**：將使用中文關鍵字進行搜索，對台灣地區設施支持較好")
         
         keyword = st.text_input(
             "額外關鍵字搜尋 (可選)", 
@@ -210,748 +249,28 @@ class ComparisonAnalyzer:
         
         # 顯示選擇摘要
         if selected_categories:
-            self._render_selection_summary(selected_categories, selected_subtypes)
+            self._render_selection_summary(selected_categories, selected_subtypes, search_method_internal)
         
         # 開始分析按鈕
         st.markdown("---")
         self._render_action_buttons(
             analysis_mode, selected_houses, selected_categories,
-            radius, keyword, selected_subtypes, fav_df
+            radius, keyword, selected_subtypes, fav_df,
+            search_method_internal
         )
     
-    def _render_category_selection(self):
-        """渲染類別選擇界面 - 保留原有功能"""
-        selected_categories = []
-        selected_subtypes = {}
-        
-        # 大類別選擇
-        st.markdown("### 選擇大類別")
-        all_categories = list(PLACE_TYPES.keys())
-        
-        category_selection = {}
-        cols = st.columns(len(all_categories))
-        
-        for i, cat in enumerate(all_categories):
-            with cols[i]:
-                color = CATEGORY_COLORS.get(cat, "#000000")
-                st.markdown(f"""
-                <div style="text-align:center; margin-bottom:5px;">
-                    <span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">
-                        {cat}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                checkbox_key = f"main_cat_{cat}"
-                category_selection[cat] = st.checkbox(f"選擇{cat}", key=checkbox_key)
-        
-        # 細分設施選擇
-        selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
-        
-        if selected_main_cats:
-            st.markdown("### 選擇細分設施")
-            
-            for cat_idx, cat in enumerate(selected_main_cats):
-                with st.expander(f"📁 {cat} 類別細選", expanded=True):
-                    select_all_key = f"select_all_{cat}"
-                    select_all = st.checkbox(f"選擇所有{cat}設施", key=select_all_key)
-                    
-                    if select_all:
-                        items = PLACE_TYPES[cat]
-                        selected_subtypes[cat] = items[1::2]
-                        selected_categories.append(cat)
-                        st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
-                    else:
-                        items = PLACE_TYPES[cat]
-                        num_columns = 3
-                        num_items = len(items) // 2
-                        items_per_row = (num_items + num_columns - 1) // num_columns
-                        
-                        for row in range(items_per_row):
-                            cols = st.columns(num_columns)
-                            for col_idx in range(num_columns):
-                                item_idx = row + col_idx * items_per_row
-                                if item_idx * 2 + 1 < len(items):
-                                    chinese_name = items[item_idx * 2]
-                                    english_keyword = items[item_idx * 2 + 1]
-                                    
-                                    with cols[col_idx]:
-                                        checkbox_key = f"subcat_{cat}_{english_keyword}_{row}_{col_idx}"
-                                        if st.checkbox(chinese_name, key=checkbox_key):
-                                            if cat not in selected_subtypes:
-                                                selected_subtypes[cat] = []
-                                            selected_subtypes[cat].append(english_keyword)
-                        
-                        if cat in selected_subtypes and selected_subtypes[cat]:
-                            selected_categories.append(cat)
-        
-        return selected_categories, selected_subtypes
-    
-    def _start_analysis_process(self, analysis_mode, selected_houses, radius, keyword,
-                               selected_categories, selected_subtypes, fav_df):
-        """開始分析流程 - 修改：包含搜尋方式"""
-        try:
-            # 儲存分析設定
-            st.session_state.analysis_settings = {
-                "analysis_mode": analysis_mode,
-                "selected_houses": selected_houses,
-                "radius": radius,
-                "keyword": keyword,
-                "selected_categories": selected_categories,
-                "selected_subtypes": selected_subtypes,
-                "server_key": self._get_server_key(),
-                "gemini_key": self._get_gemini_key(),
-                "fav_df_json": fav_df.to_json(orient='split'),
-                "search_method": st.session_state.search_method  # 新增搜尋方式
-            }
-            
-            # 清除舊結果
-            self._clear_old_results()
-            
-            # 設置分析標記
-            st.session_state.analysis_in_progress = True
-            
-            # 執行分析
-            self._execute_analysis()
-            
-        except Exception as e:
-            st.error(f"❌ 分析設定儲存失敗: {str(e)}")
-            st.session_state.analysis_in_progress = False
-    
-    def _execute_analysis(self):
-        """執行分析 - 修改：根據搜尋方式選擇查詢方法"""
-        try:
-            # 從 session state 恢復設定
-            settings = st.session_state.analysis_settings
-            fav_df = pd.read_json(settings["fav_df_json"], orient='split')
-            
-            # 顯示進度
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            # 顯示搜尋方式
-            search_method_text = "文字搜尋" if settings["search_method"] == "text_search" else "類型搜尋"
-            st.info(f"🔍 使用 {search_method_text} 模式進行設施查詢")
-            
-            # 步驟1: 取得房屋資料
-            status_text.text("🔍 步驟 1/4: 解析房屋地址...")
-            houses_data = {}
-            
-            for idx, house_option in enumerate(settings["selected_houses"]):
-                house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
-                house_name = f"房屋 {chr(65+idx)}" if len(settings["selected_houses"]) > 1 else "分析房屋"
-                
-                lat, lng = geocode_address(house_info["地址"], settings["server_key"])
-                if lat is None or lng is None:
-                    st.error(f"❌ {house_name} 地址解析失敗")
-                    st.session_state.analysis_in_progress = False
-                    return
-                
-                houses_data[house_name] = {
-                    "name": house_name,
-                    "title": house_info['標題'],
-                    "address": house_info['地址'],
-                    "lat": lat,
-                    "lng": lng,
-                    "original_name": house_info['標題']
-                }
-            
-            progress_bar.progress(25)
-            
-            # 步驟2: 查詢周邊設施 - 根據搜尋方式選擇不同方法
-            status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
-            places_data = {}
-            
-            total_houses = len(houses_data)
-            for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
-                lat, lng = house_info["lat"], house_info["lng"]
-                
-                # 根據搜尋方式選擇查詢方法
-                if settings["search_method"] == "text_search":
-                    # 使用文字搜尋
-                    places = self._query_google_places_via_text_search(
-                        lat, lng, settings["server_key"], 
-                        settings["selected_categories"], settings["selected_subtypes"],
-                        settings["radius"], extra_keyword=settings["keyword"]
-                    )
-                else:
-                    # 使用類型搜尋
-                    places = self._query_google_places_via_type_search(
-                        lat, lng, settings["server_key"], 
-                        settings["selected_categories"], settings["selected_subtypes"],
-                        settings["radius"], extra_keyword=settings["keyword"]
-                    )
-                
-                places_data[house_name] = places
-                
-                # 更新進度
-                progress_value = 25 + int(((house_idx + 1) / total_houses) * 25)
-                progress_bar.progress(progress_value)
-            
-            progress_bar.progress(50)
-            
-            # 步驟3: 計算統計
-            status_text.text("📊 步驟 3/4: 計算統計資料...")
-            facility_counts = {}
-            
-            for house_name, places in places_data.items():
-                total_count = len(places)
-                facility_counts[house_name] = total_count
-            
-            # 建立設施表格
-            facilities_table = self._create_facilities_table(houses_data, places_data)
-            
-            progress_bar.progress(75)
-            
-            # 步驟4: 儲存結果
-            status_text.text("💾 步驟 4/4: 儲存分析結果...")
-            st.session_state.analysis_results = {
-                "analysis_mode": settings["analysis_mode"],
-                "houses_data": houses_data,
-                "places_data": places_data,
-                "facility_counts": facility_counts,
-                "selected_categories": settings["selected_categories"],
-                "radius": settings["radius"],
-                "keyword": settings["keyword"],
-                "num_houses": len(houses_data),
-                "facilities_table": facilities_table,
-                "search_method": settings["search_method"]  # 新增搜尋方式到結果
-            }
-            
-            progress_bar.progress(100)
-            status_text.text("✅ 分析完成！")
-            
-            # 標記分析完成
-            st.session_state.analysis_in_progress = False
-            
-            # 重新運行以顯示結果
-            time.sleep(1)
-            st.rerun()
-            
-        except Exception as e:
-            st.error(f"❌ 分析執行失敗: {str(e)}")
-            st.session_state.analysis_in_progress = False
-    
-    def _query_google_places_via_text_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """
-        使用文字搜尋查詢Google Places
-        所有設施都使用 textsearch 方法查詢，跟關鍵字搜尋一樣
-        """
-        results, seen = [], set()
-        
-        total_tasks = 0
-        for cat in selected_categories:
-            if cat in selected_subtypes:
-                total_tasks += len(selected_subtypes[cat])
-        total_tasks += (1 if extra_keyword else 0)
-
-        if total_tasks == 0:
-            return results
-
-        progress = st.progress(0)
-        progress_text = st.empty()
-        completed = 0
-
-        def update_progress(task_desc):
-            nonlocal completed
-            completed += 1
-            progress.progress(min(completed / total_tasks, 1.0))
-            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-
-        # 處理所有子類別的搜尋 - 全部改用文字搜尋
-        for cat in selected_categories:
-            if cat not in selected_subtypes:
-                continue
-                
-            for place_type in selected_subtypes[cat]:
-                update_progress(f"查詢 {cat}-{place_type}")
-                
-                try:
-                    # 使用文字搜尋而不是類型搜尋
-                    chinese_name = ENGLISH_TO_CHINESE.get(place_type, place_type)
-                    places = self._search_text_google_places(lat, lng, api_key, chinese_name, radius)
-                    
-                    # 只取前5個結果避免過多
-                    for p in places[:5]:  # 限制數量
-                        if p[5] > radius:
-                            continue
-                        pid = p[6]
-                        if pid in seen:
-                            continue
-                        seen.add(pid)
-                        
-                        # 使用子類別作為搜尋關鍵字
-                        results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
-
-                    time.sleep(0.3)  # 避免 API 限制
-                    
-                except Exception as e:
-                    continue
-
-        # 處理額外關鍵字搜尋
-        if extra_keyword:
-            update_progress(f"額外關鍵字: {extra_keyword}")
-            try:
-                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
-                for p in places:
-                    if p[5] > radius:
-                        continue
-                    pid = p[6]
-                    if pid in seen:
-                        continue
-                    seen.add(pid)
-                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
-                    
-                time.sleep(0.3)
-            except Exception as e:
-                pass
-
-        progress.progress(1.0)
-        progress_text.text("✅ 查詢完成！")
-        
-        # 按距離排序
-        results.sort(key=lambda x: x[5])
-        
-        return results
-    
-    def _query_google_places_via_type_search(self, lat, lng, api_key, selected_categories, selected_subtypes, radius=500, extra_keyword=""):
-        """
-        使用類型搜尋查詢Google Places
-        使用 Google Places API 的 type 參數進行精確搜尋
-        """
-        results, seen = [], set()
-        
-        total_tasks = 0
-        for cat in selected_categories:
-            if cat in selected_subtypes:
-                total_tasks += len(selected_subtypes[cat])
-        total_tasks += (1 if extra_keyword else 0)
-
-        if total_tasks == 0:
-            return results
-
-        progress = st.progress(0)
-        progress_text = st.empty()
-        completed = 0
-
-        def update_progress(task_desc):
-            nonlocal completed
-            completed += 1
-            progress.progress(min(completed / total_tasks, 1.0))
-            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
-
-        # 處理所有子類別的搜尋 - 使用類型搜尋
-        for cat in selected_categories:
-            if cat not in selected_subtypes:
-                continue
-                
-            for place_type in selected_subtypes[cat]:
-                update_progress(f"查詢 {cat}-{place_type}")
-                
-                try:
-                    # 使用類型搜尋
-                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
-                    
-                    # 只取前5個結果避免過多
-                    for p in places[:5]:  # 限制數量
-                        if p[5] > radius:
-                            continue
-                        pid = p[6]
-                        if pid in seen:
-                            continue
-                        seen.add(pid)
-                        
-                        results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
-
-                    time.sleep(0.3)  # 避免 API 限制
-                    
-                except Exception as e:
-                    continue
-
-        # 處理額外關鍵字搜尋 - 使用文字搜尋
-        if extra_keyword:
-            update_progress(f"額外關鍵字: {extra_keyword}")
-            try:
-                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
-                for p in places:
-                    if p[5] > radius:
-                        continue
-                    pid = p[6]
-                    if pid in seen:
-                        continue
-                    seen.add(pid)
-                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
-                    
-                time.sleep(0.3)
-            except Exception as e:
-                pass
-
-        progress.progress(1.0)
-        progress_text.text("✅ 查詢完成！")
-        
-        # 按距離排序
-        results.sort(key=lambda x: x[5])
-        
-        return results
-    
-    def _display_analysis_results(self, results):
-        """顯示分析結果 - 修改：顯示搜尋方式"""
-        try:
-            # 確保有結果才顯示
-            if not results:
-                return
-            
-            analysis_mode = results["analysis_mode"]
-            search_method = results.get("search_method", "text_search")
-            search_method_text = "文字搜尋" if search_method == "text_search" else "類型搜尋"
-            
-            # 顯示分析標題
-            st.markdown("---")
-            if analysis_mode == "單一房屋分析":
-                st.markdown(f"## 📊 單一房屋分析結果")
-            else:
-                st.markdown(f"## 📊 比較結果 ({results['num_houses']}間房屋)")
-            
-            # 顯示搜尋方式
-            st.info(f"🔍 本次分析使用 **{search_method_text}** 模式")
-            
-            # 顯示設施表格
-            self._display_facilities_table(results)
-            
-            # 顯示統計分析
-            self._display_statistics_analysis(results)
-            
-            # 顯示地圖
-            self._display_maps(results)
-            
-            # AI 分析部分
-            self._display_ai_analysis_section(results)
-            
-        except Exception as e:
-            st.error(f"❌ 顯示分析結果時發生錯誤: {str(e)}")
-    
-    def _prepare_analysis_prompt(self, houses_data, places_data, facility_counts, 
-                                selected_categories, radius, keyword, analysis_mode, facilities_table):
-        """準備分析提示詞 - 修改：包含搜尋方式"""
-        # 取得搜尋方式
-        search_method = st.session_state.get("search_method", "text_search")
-        search_method_text = "文字搜尋" if search_method == "text_search" else "類型搜尋"
-        
-        if analysis_mode == "單一房屋分析":
-            house_name = list(houses_data.keys())[0]
-            house_info = houses_data[house_name]
-            places = places_data[house_name]
-            count = facility_counts.get(house_name, 0)
-            
-            distances = [p[5] for p in places]
-            avg_distance = sum(distances) / len(distances) if distances else 0
-            min_distance = min(distances) if distances else 0
-            
-            # 設施子類別統計
-            subtype_stats = {}
-            for cat, subtype, name, lat, lng, dist, pid in places:
-                chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
-                subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
-            
-            table_summary = ""
-            if not facilities_table.empty:
-                sample_facilities = facilities_table.head(20).to_string(index=False)
-                table_summary = f"""
-                
-                【設施表格摘要（前20筆）】
-                以下是搜尋到的設施表格資料：
-                {sample_facilities}
-                
-                【表格欄位說明】
-                - 房屋：房屋名稱
-                - 房屋標題：房屋詳細標題
-                - 房屋地址：房屋地址
-                - 設施名稱：設施名稱
-                - 設施子類別：設施的具體類型（如超市、便利商店等）
-                - 距離(公尺)：設施距離房屋的距離
-                - 經度、緯度：設施的GPS座標
-                """
-            
-            prompt = f"""
-            你是一位專業的房地產分析師，請對以下房屋的生活機能進行詳細分析。
-            
-            【房屋資訊】
-            - 標題：{house_info['title']}
-            - 地址：{house_info['address']}
-            
-            【搜尋條件】
-            - 搜尋方式：{search_method_text}
-            - 搜尋半徑：{radius} 公尺
-            - 選擇的生活機能類別：{', '.join(selected_categories)}
-            - 額外關鍵字：{keyword if keyword else '無'}
-            
-            【設施統計】
-            - 總設施數量：{count} 個
-            - 平均距離：{avg_distance:.0f} 公尺
-            - 最近設施：{min_distance} 公尺
-            
-            【各類型設施數量】
-            {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
-            
-            {table_summary}
-            
-            【請分析以下面向】
-            1. 生活便利性評估（以1-5星評分）
-            2. 設施完整性分析（哪些設施類型充足，哪些缺乏）
-            3. 適合的居住族群分析（單身、小家庭、大家庭、退休族等）
-            4. 投資潛力評估（以1-5星評分）
-            5. 優點總結（至少3點）
-            6. 缺點提醒（至少2點）
-            7. 建議改善或補充的生活機能
-            8. 綜合評價與建議
-            
-            請使用專業但易懂的語言，提供具體、實用的建議。
-            """
-        
-        else:  # 多房屋比較
-            num_houses = len(houses_data)
-            
-            if num_houses == 1:
-                house_name = list(houses_data.keys())[0]
-                house_info = houses_data[house_name]
-                places = places_data[house_name]
-                count = facility_counts.get(house_name, 0)
-                
-                distances = [p[5] for p in places]
-                avg_distance = sum(distances) / len(distances) if distances else 0
-                
-                # 設施子類別統計
-                subtype_stats = {}
-                for cat, subtype, name, lat, lng, dist, pid in places:
-                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
-                    subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
-                
-                table_summary = ""
-                if not facilities_table.empty:
-                    sample_facilities = facilities_table.head(15).to_string(index=False)
-                    table_summary = f"""
-                    
-                    【設施表格摘要（前15筆）】
-                    {sample_facilities}
-                    """
-                
-                prompt = f"""
-                你是一位專業的房地產分析師，請對以下房屋的生活機能進行綜合評估。
-                
-                【房屋資訊】
-                - 標題：{house_info['title']}
-                - 地址：{house_info['address']}
-                
-                【搜尋條件】
-                - 搜尋方式：{search_method_text}
-                - 搜尋半徑：{radius} 公尺
-                - 選擇的生活機能類別：{', '.join(selected_categories)}
-                - 額外關鍵字：{keyword if keyword else '無'}
-                
-                【設施統計】
-                - 總設施數量：{count} 個
-                - 平均距離：{avg_distance:.0f} 公尺
-                
-                【各類型設施數量】
-                {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
-                
-                {table_summary}
-                
-                【請提供深度分析】
-                1. 區域生活機能整體評價
-                2. 與類似區域的比較優勢
-                3. 未來發展潛力評估
-                4. 投資回報率預估
-                5. 風險因素分析
-                6. 最佳使用建議
-                
-                請提供專業、客觀的分析報告。
-                """
-            else:
-                # 多個房屋比較
-                stats_summary = "統計摘要：\n"
-                for house_name, count in facility_counts.items():
-                    if places_data[house_name]:
-                        nearest = min([p[5] for p in places_data[house_name]])
-                        stats_summary += f"- {house_name}：共 {count} 個設施，最近設施 {nearest} 公尺\n"
-                    else:
-                        stats_summary += f"- {house_name}：共 0 個設施\n"
-                
-                # 排名
-                ranked_houses = sorted(facility_counts.items(), key=lambda x: x[1], reverse=True)
-                ranking_text = "設施數量排名：\n"
-                for rank, (house_name, count) in enumerate(ranked_houses, 1):
-                    ranking_text += f"第{rank}名：{house_name} ({count}個設施)\n"
-                
-                # 房屋詳細資訊
-                houses_details = "房屋詳細資訊：\n"
-                for house_name, house_info in houses_data.items():
-                    houses_details += f"""
-                    {house_name}:
-                    - 標題：{house_info['title']}
-                    - 地址：{house_info['address']}
-                    """
-                
-                # 建立表格摘要
-                table_summary = ""
-                if not facilities_table.empty:
-                    table_summary = "\n\n【各房屋設施摘要】\n"
-                    for house_name in houses_data.keys():
-                        house_facilities = facilities_table[facilities_table['房屋'] == house_name].head(10)
-                        if not house_facilities.empty:
-                            table_summary += f"\n{house_name} 的前10個設施：\n"
-                            table_summary += house_facilities[['設施名稱', '設施子類別', '距離(公尺)']].to_string(index=False) + "\n"
-                
-                prompt = f"""
-                你是一位專業的房地產分析師，請對以下{num_houses}間房屋進行綜合比較分析。
-                
-                【搜尋條件】
-                - 搜尋方式：{search_method_text}
-                - 搜尋半徑：{radius} 公尺
-                - 選擇的生活機能類別：{', '.join(selected_categories)}
-                - 額外關鍵字：{keyword if keyword else '無'}
-                
-                {houses_details}
-                
-                【設施統計】
-                {stats_summary}
-                
-                {ranking_text}
-                
-                {table_summary}
-                
-                【請依序分析】
-                1. 總體設施豐富度排名與分析
-                2. 各類型設施完整性比較
-                3. 生活便利性綜合評估（為每間房屋評1-5星）
-                4. 對「自住者」的推薦排名與原因
-                5. 對「投資者」的推薦排名與原因
-                6. 各房屋的優勢特色分析
-                7. 各房屋的潛在風險提醒
-                8. 綜合性價比評估
-                9. 最終推薦與總結
-                
-                【分析要求】
-                - 提供清晰的排名和評分
-                - 每項評估都要有具體依據
-                - 考慮不同生活階段的需求
-                - 給出實用的購買建議
-                
-                請使用專業但易懂的語言，提供全面、客觀的分析。
-                """
-        
-        return prompt
-    
-    def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
-        """搜尋Google Places（使用文字搜尋）"""
-        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
-        params = {
-            "query": keyword,
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "key": api_key,
-            "language": "zh-TW"
-        }
-
-        try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            r = response.json()
-        except Exception as e:
-            return []
-
-        results = []
-        for p in r.get("results", []):
-            loc = p["geometry"]["location"]
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-            
-            results.append((
-                "關鍵字",
-                keyword,
-                p.get("name", "未命名"),
-                loc["lat"],
-                loc["lng"],
-                dist,
-                p.get("place_id", "")
-            ))
-        return results
-    
-    def _search_nearby_places_by_type(self, lat, lng, api_key, place_type, radius=500):
-        """使用 Nearby Search 和 Type Filter 查詢地點"""
-        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-        params = {
-            "location": f"{lat},{lng}",
-            "radius": radius,
-            "type": place_type,
-            "key": api_key,
-            "language": "zh-TW"
-        }
-
-        try:
-            response = requests.get(url, params=params, timeout=10)
-            response.raise_for_status()
-            r = response.json()
-        except requests.exceptions.Timeout:
-            return []
-        except Exception as e:
-            return []
-
-        results = []
-        if r.get("status") != "OK":
-            return []
-
-        for p in r.get("results", []):
-            loc = p["geometry"]["location"]
-            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
-            
-            chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
-            results.append((
-                "類型搜尋",
-                chinese_type,
-                p.get("name", "未命名"),
-                loc["lat"],
-                loc["lng"],
-                dist,
-                p.get("place_id", "")
-            ))
-        return results
-    
-    # 其他方法保持不變...
-    def _show_analysis_in_progress(self):
-        """顯示分析進行中的畫面"""
-        st.warning("🔍 分析進行中，請稍候...")
-        
-        # 顯示進度指示器
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        # 模擬進度更新
-        for i in range(100):
-            progress_bar.progress(i + 1)
-            status_text.text(f"分析中... {i+1}%")
-            time.sleep(0.01)
-        
-        # 完成後自動更新
-        st.success("✅ 分析完成！")
-        time.sleep(1)
-        
-        # 清除進度標記
-        if 'analysis_in_progress' in st.session_state:
-            st.session_state.analysis_in_progress = False
-        
-        st.rerun()
-    
-    def _reset_page(self):
-        """重設頁面狀態"""
-        keys_to_reset = [
-            'analysis_in_progress',
+    def _on_analysis_mode_change(self):
+        """當分析模式改變時的處理"""
+        # 清除舊的結果和選擇
+        keys_to_clear = [
+            'selected_houses',
             'analysis_results',
             'gemini_result',
-            'current_page',
-            'category_coverage',
-            'search_method'  # 新增搜尋方式
+            'places_data',
+            'custom_prompt',
+            'category_coverage'  # 清除覆蓋情況
         ]
-        for key in keys_to_reset:
+        for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
     
@@ -1049,12 +368,106 @@ class ComparisonAnalyzer:
             with col3:
                 st.metric("價格差距", f"{price_diff:.1f}%")
     
-    def _render_selection_summary(self, selected_categories, selected_subtypes):
-        """渲染選擇摘要 - 簡化版本"""
+    def _render_category_selection(self):
+        """渲染類別選擇界面"""
+        selected_categories = []
+        selected_subtypes = {}
+        
+        # 大類別選擇
+        st.markdown("### 選擇大類別")
+        all_categories = list(PLACE_TYPES.keys())
+        
+        category_selection = {}
+        cols = st.columns(len(all_categories))
+        
+        for i, cat in enumerate(all_categories):
+            with cols[i]:
+                color = CATEGORY_COLORS.get(cat, "#000000")
+                st.markdown(f"""
+                <div style="text-align:center; margin-bottom:5px;">
+                    <span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">
+                        {cat}
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                checkbox_key = f"main_cat_{cat}"
+                category_selection[cat] = st.checkbox(f"選擇{cat}", key=checkbox_key)
+        
+        # 細分設施選擇
+        selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
+        
+        if selected_main_cats:
+            st.markdown("### 選擇細分設施")
+            
+            for cat_idx, cat in enumerate(selected_main_cats):
+                with st.expander(f"📁 {cat} 類別細選", expanded=True):
+                    select_all_key = f"select_all_{cat}"
+                    select_all = st.checkbox(f"選擇所有{cat}設施", key=select_all_key)
+                    
+                    if select_all:
+                        items = PLACE_TYPES[cat]
+                        selected_subtypes[cat] = items[1::2]
+                        selected_categories.append(cat)
+                        st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
+                    else:
+                        items = PLACE_TYPES[cat]
+                        num_columns = 3
+                        num_items = len(items) // 2
+                        items_per_row = (num_items + num_columns - 1) // num_columns
+                        
+                        for row in range(items_per_row):
+                            cols = st.columns(num_columns)
+                            for col_idx in range(num_columns):
+                                item_idx = row + col_idx * items_per_row
+                                if item_idx * 2 + 1 < len(items):
+                                    chinese_name = items[item_idx * 2]
+                                    english_keyword = items[item_idx * 2 + 1]
+                                    
+                                    with cols[col_idx]:
+                                        checkbox_key = f"subcat_{cat}_{english_keyword}_{row}_{col_idx}"
+                                        if st.checkbox(chinese_name, key=checkbox_key):
+                                            if cat not in selected_subtypes:
+                                                selected_subtypes[cat] = []
+                                            selected_subtypes[cat].append(english_keyword)
+                        
+                        if cat in selected_subtypes and selected_subtypes[cat]:
+                            selected_categories.append(cat)
+        
+        return selected_categories, selected_subtypes
+    
+    def _render_selection_summary(self, selected_categories, selected_subtypes, search_method):
+        """渲染選擇摘要"""
         st.markdown("---")
         st.subheader("📋 已選擇的設施摘要")
         
-        # 直接顯示基本的選擇摘要，不進行複雜的覆蓋檢查
+        # 顯示搜索方法
+        if search_method == "type_search":
+            st.info("🏷️ 將使用 **類別型搜索** 方法")
+        else:
+            st.info("🔍 將使用 **關鍵字搜索** 方法")
+        
+        # 檢查是否有分析結果可以顯示覆蓋情況
+        if ("analysis_results" in st.session_state and 
+            "category_coverage" in st.session_state and 
+            st.session_state.category_coverage):
+            
+            # 檢查選取的房屋是否在覆蓋記錄中
+            if "selected_houses" in st.session_state and st.session_state.selected_houses:
+                # 取得分析結果
+                results = st.session_state.analysis_results
+                houses_data = results.get("houses_data", {})
+                
+                if houses_data:
+                    # 取得第一個房屋名稱
+                    house_name = list(houses_data.keys())[0]
+                    
+                    # 檢查該房屋是否有覆蓋記錄
+                    if house_name in st.session_state.category_coverage:
+                        self._display_category_coverage(selected_categories, selected_subtypes)
+                        return
+        
+        # 如果沒有分析結果，顯示基本的選擇摘要
         self._display_basic_selection_summary(selected_categories, selected_subtypes)
     
     def _display_basic_selection_summary(self, selected_categories, selected_subtypes):
@@ -1092,10 +505,132 @@ class ComparisonAnalyzer:
                         items_display = "、".join(chinese_names)
                         st.caption(f"✓ {items_display}等{count}種設施")
         
-        st.info("🔍 分析完成後，將在下方顯示詳細的設施查詢結果")
+        st.info("🔍 分析完成後，此處將顯示各類別設施的查詢結果（找到/未找到）")
+    
+    def _display_category_coverage(self, selected_categories, selected_subtypes):
+        """顯示類別覆蓋情況"""
+        st.markdown("### 📊 各類別設施查詢結果")
+        st.markdown("以下是您選擇的設施類別在搜尋半徑內的查詢結果：")
+        
+        category_coverage = st.session_state.get("category_coverage", {})
+        
+        if not category_coverage:
+            st.info("尚未進行分析，請先執行分析")
+            return
+        
+        # 為每個房屋顯示覆蓋情況
+        if "analysis_results" in st.session_state:
+            results = st.session_state.analysis_results
+            houses_data = results.get("houses_data", {})
+            
+            if not houses_data:
+                st.warning("⚠️ 沒有房屋資料")
+                return
+            
+            # 單一房屋或多房屋
+            if results["num_houses"] == 1 or results["analysis_mode"] == "單一房屋分析":
+                house_name = list(houses_data.keys())[0]
+                self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+            else:
+                # 多房屋比較 - 使用選項卡
+                coverage_tabs = st.tabs([f"{house_name} 覆蓋情況" for house_name in houses_data.keys()])
+                
+                for idx, house_name in enumerate(houses_data.keys()):
+                    with coverage_tabs[idx]:
+                        self._display_single_house_coverage(house_name, selected_categories, selected_subtypes, category_coverage)
+        else:
+            st.warning("⚠️ 沒有分析結果可用")
+    
+    def _display_single_house_coverage(self, house_name, selected_categories, selected_subtypes, category_coverage):
+        """顯示單一房屋的類別覆蓋情況"""
+        st.markdown(f"### 🏠 {house_name}")
+        
+        if house_name not in category_coverage:
+            st.info("該房屋尚未進行類別覆蓋分析")
+            return
+        
+        house_coverage = category_coverage[house_name]
+        
+        # 計算總體覆蓋率
+        total_selected = 0
+        total_found = 0
+        
+        for cat in selected_categories:
+            if cat in selected_subtypes and cat in house_coverage:
+                cat_selected = len(selected_subtypes[cat])
+                cat_found = 0
+                
+                # 計算該類別找到的設施數量
+                for subtype in selected_subtypes[cat]:
+                    if subtype in house_coverage[cat]:
+                        if house_coverage[cat][subtype]:
+                            cat_found += 1
+                
+                total_selected += cat_selected
+                total_found += cat_found
+        
+        overall_coverage = (total_found / total_selected * 100) if total_selected > 0 else 0
+        
+        # 顯示總體統計
+        stat_col1, stat_col2, stat_col3 = st.columns(3)
+        with stat_col1:
+            st.metric("選擇設施數", total_selected)
+        with stat_col2:
+            st.metric("找到設施數", total_found)
+        with stat_col3:
+            st.metric("覆蓋率", f"{overall_coverage:.1f}%")
+        
+        st.markdown("---")
+        
+        # 顯示各類別詳細情況
+        for cat in selected_categories:
+            if cat not in selected_subtypes or cat not in house_coverage:
+                continue
+            
+            color = CATEGORY_COLORS.get(cat, "#000000")
+            subtype_count = len(selected_subtypes[cat])
+            found_count = 0
+            
+            # 計算找到的設施數量
+            for subtype in selected_subtypes[cat]:
+                if subtype in house_coverage[cat] and house_coverage[cat][subtype]:
+                    found_count += 1
+            
+            cat_coverage = (found_count / subtype_count * 100) if subtype_count > 0 else 0
+            
+            # 使用容器顯示類別資訊
+            with st.container():
+                # 標題和統計
+                col_title, col_stats = st.columns([3, 1])
+                with col_title:
+                    st.markdown(f"<h4 style='color:{color};'>{cat}</h4>", unsafe_allow_html=True)
+                with col_stats:
+                    st.markdown(f"**{found_count}/{subtype_count}**")
+                
+                # 進度條
+                st.progress(cat_coverage / 100)
+                
+                # 顯示每個子類別的情況
+                for english_kw in selected_subtypes[cat]:
+                    chinese_name = ENGLISH_TO_CHINESE.get(english_kw, english_kw)
+                    found = False
+                    
+                    if english_kw in house_coverage[cat]:
+                        found = house_coverage[cat][english_kw]
+                    
+                    col_status, col_name = st.columns([1, 5])
+                    with col_status:
+                        if found:
+                            st.success("✅")
+                        else:
+                            st.error("❌")
+                    with col_name:
+                        st.text(chinese_name)
+                
+                st.markdown("---")
     
     def _render_action_buttons(self, analysis_mode, selected_houses, selected_categories, 
-                              radius, keyword, selected_subtypes, fav_df):
+                              radius, keyword, selected_subtypes, fav_df, search_method):
         """渲染操作按鈕"""
         col_start, col_clear = st.columns([3, 1])
         
@@ -1115,7 +650,8 @@ class ComparisonAnalyzer:
                 # 開始分析流程
                 self._start_analysis_process(
                     analysis_mode, selected_houses, radius, keyword,
-                    selected_categories, selected_subtypes, fav_df
+                    selected_categories, selected_subtypes, fav_df,
+                    search_method
                 )
         
         with col_clear:
@@ -1139,21 +675,36 @@ class ComparisonAnalyzer:
         
         return "OK"
     
-    def _on_analysis_mode_change(self):
-        """當分析模式改變時的處理"""
-        # 清除舊的結果和選擇
-        keys_to_clear = [
-            'selected_houses',
-            'analysis_results',
-            'gemini_result',
-            'places_data',
-            'custom_prompt',
-            'category_coverage',
-            'search_method'  # 新增搜尋方式
-        ]
-        for key in keys_to_clear:
-            if key in st.session_state:
-                del st.session_state[key]
+    def _start_analysis_process(self, analysis_mode, selected_houses, radius, keyword,
+                               selected_categories, selected_subtypes, fav_df, search_method):
+        """開始分析流程"""
+        try:
+            # 儲存分析設定
+            st.session_state.analysis_settings = {
+                "analysis_mode": analysis_mode,
+                "selected_houses": selected_houses,
+                "radius": radius,
+                "keyword": keyword,
+                "selected_categories": selected_categories,
+                "selected_subtypes": selected_subtypes,
+                "server_key": self._get_server_key(),
+                "gemini_key": self._get_gemini_key(),
+                "search_method": search_method,
+                "fav_df_json": fav_df.to_json(orient='split')
+            }
+            
+            # 清除舊結果
+            self._clear_old_results()
+            
+            # 設置分析標記
+            st.session_state.analysis_in_progress = True
+            
+            # 執行分析
+            self._execute_analysis()
+            
+        except Exception as e:
+            st.error(f"❌ 分析設定儲存失敗: {str(e)}")
+            st.session_state.analysis_in_progress = False
     
     def _clear_old_results(self):
         """清除舊的分析結果"""
@@ -1164,7 +715,7 @@ class ComparisonAnalyzer:
             'houses_data',
             'custom_prompt',
             'used_prompt',
-            'category_coverage'
+            'category_coverage'  # 清除覆蓋情況
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -1185,12 +736,354 @@ class ComparisonAnalyzer:
             'selected_template',
             'last_template',
             'selected_houses',
-            'category_coverage',
-            'search_method'  # 新增搜尋方式
+            'category_coverage'  # 清除覆蓋情況
         ]
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
+    
+    def _execute_analysis(self):
+        """執行分析"""
+        try:
+            # 從 session state 恢復設定
+            settings = st.session_state.analysis_settings
+            fav_df = pd.read_json(settings["fav_df_json"], orient='split')
+            
+            # 顯示進度
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            
+            # 步驟1: 取得房屋資料
+            status_text.text("🔍 步驟 1/4: 解析房屋地址...")
+            houses_data = {}
+            
+            for idx, house_option in enumerate(settings["selected_houses"]):
+                house_info = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == house_option].iloc[0]
+                house_name = f"房屋 {chr(65+idx)}" if len(settings["selected_houses"]) > 1 else "分析房屋"
+                
+                lat, lng = geocode_address(house_info["地址"], settings["server_key"])
+                if lat is None or lng is None:
+                    st.error(f"❌ {house_name} 地址解析失敗")
+                    st.session_state.analysis_in_progress = False
+                    return
+                
+                houses_data[house_name] = {
+                    "name": house_name,
+                    "title": house_info['標題'],
+                    "address": house_info['地址'],
+                    "lat": lat,
+                    "lng": lng,
+                    "original_name": house_info['標題']
+                }
+            
+            progress_bar.progress(25)
+            
+            # 步驟2: 查詢周邊設施（根據選擇的搜索方法）
+            status_text.text("🔍 步驟 2/4: 查詢周邊設施...")
+            places_data = {}
+            category_coverage = {}
+            
+            search_method = settings["search_method"]
+            total_houses = len(houses_data)
+            
+            for house_idx, (house_name, house_info) in enumerate(houses_data.items()):
+                lat, lng = house_info["lat"], house_info["lng"]
+                
+                # 根據搜索方法查詢設施
+                if search_method == "type_search":
+                    # 使用類別型搜索
+                    places, house_coverage = self._query_places_by_type(
+                        lat, lng, settings["server_key"], 
+                        settings["selected_categories"], settings["selected_subtypes"],
+                        settings["radius"], extra_keyword=settings["keyword"]
+                    )
+                else:
+                    # 使用關鍵字搜索
+                    places, house_coverage = self._query_places_by_text(
+                        lat, lng, settings["server_key"], 
+                        settings["selected_categories"], settings["selected_subtypes"],
+                        settings["radius"], extra_keyword=settings["keyword"]
+                    )
+                
+                places_data[house_name] = places
+                category_coverage[house_name] = house_coverage
+                
+                # 更新進度
+                progress_value = 25 + int(((house_idx + 1) / total_houses) * 25)
+                progress_bar.progress(progress_value)
+            
+            progress_bar.progress(50)
+            
+            # 步驟3: 計算統計
+            status_text.text("📊 步驟 3/4: 計算統計資料...")
+            facility_counts = {}
+            
+            for house_name, places in places_data.items():
+                total_count = len(places)
+                facility_counts[house_name] = total_count
+            
+            # 建立設施表格
+            facilities_table = self._create_facilities_table(houses_data, places_data)
+            
+            progress_bar.progress(75)
+            
+            # 步驟4: 儲存結果
+            status_text.text("💾 步驟 4/4: 儲存分析結果...")
+            st.session_state.analysis_results = {
+                "analysis_mode": settings["analysis_mode"],
+                "houses_data": houses_data,
+                "places_data": places_data,
+                "facility_counts": facility_counts,
+                "selected_categories": settings["selected_categories"],
+                "radius": settings["radius"],
+                "keyword": settings["keyword"],
+                "search_method": search_method,
+                "num_houses": len(houses_data),
+                "facilities_table": facilities_table
+            }
+            
+            # 儲存類別覆蓋情況
+            st.session_state.category_coverage = category_coverage
+            
+            progress_bar.progress(100)
+            status_text.text("✅ 分析完成！")
+            
+            # 標記分析完成
+            st.session_state.analysis_in_progress = False
+            
+            # 重新運行以顯示結果
+            time.sleep(1)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ 分析執行失敗: {str(e)}")
+            st.session_state.analysis_in_progress = False
+    
+    def _query_places_by_type(self, lat, lng, api_key, selected_categories, selected_subtypes, 
+                             radius=500, extra_keyword=""):
+        """
+        使用類別型搜索 (Type Search)
+        使用 Google Places API 的 Nearby Search + Type 參數
+        """
+        results, seen = [], set()
+        
+        # 初始化覆蓋記錄
+        category_coverage = {}
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                category_coverage[cat] = {}
+                for subtype in selected_subtypes[cat]:
+                    category_coverage[cat][subtype] = False
+        
+        total_tasks = 0
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                total_tasks += len(selected_subtypes[cat])
+        total_tasks += (1 if extra_keyword else 0)
+
+        if total_tasks == 0:
+            return results, category_coverage
+
+        progress = st.progress(0)
+        progress_text = st.empty()
+        completed = 0
+
+        def update_progress(task_desc):
+            nonlocal completed
+            completed += 1
+            progress.progress(min(completed / total_tasks, 1.0))
+            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
+
+        # 使用類別型搜索每個設施
+        for cat in selected_categories:
+            if cat not in selected_subtypes:
+                continue
+                
+            for place_type in selected_subtypes[cat]:
+                update_progress(f"類別搜索 {cat}-{place_type}")
+                
+                try:
+                    # 使用 Nearby Search + Type 參數
+                    places = self._search_nearby_places_by_type(lat, lng, api_key, place_type, radius)
+                    
+                    # 更新覆蓋記錄
+                    if places:
+                        category_coverage[cat][place_type] = True
+                    
+                    for p in places:
+                        if p[5] > radius:
+                            continue
+                        pid = p[6]
+                        if pid in seen:
+                            continue
+                        seen.add(pid)
+                        
+                        results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
+
+                    time.sleep(0.2)  # API 速率限制
+                    
+                except Exception as e:
+                    continue
+
+        # 額外關鍵字搜索（使用文本搜索）
+        if extra_keyword:
+            update_progress(f"額外關鍵字: {extra_keyword}")
+            try:
+                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
+                for p in places:
+                    if p[5] > radius:
+                        continue
+                    pid = p[6]
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
+                    
+                time.sleep(0.2)
+            except Exception as e:
+                pass
+
+        progress.progress(1.0)
+        progress_text.text("✅ 類別搜索完成！")
+        results.sort(key=lambda x: x[5])
+        
+        return results, category_coverage
+    
+    def _query_places_by_text(self, lat, lng, api_key, selected_categories, selected_subtypes, 
+                             radius=500, extra_keyword=""):
+        """
+        使用關鍵字搜索 (Text Search)
+        使用 Google Places API 的 Text Search
+        """
+        results, seen = [], set()
+        
+        # 初始化覆蓋記錄
+        category_coverage = {}
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                category_coverage[cat] = {}
+                for subtype in selected_subtypes[cat]:
+                    category_coverage[cat][subtype] = False
+        
+        total_tasks = 0
+        for cat in selected_categories:
+            if cat in selected_subtypes:
+                total_tasks += len(selected_subtypes[cat])
+        total_tasks += (1 if extra_keyword else 0)
+
+        if total_tasks == 0:
+            return results, category_coverage
+
+        progress = st.progress(0)
+        progress_text = st.empty()
+        completed = 0
+
+        def update_progress(task_desc):
+            nonlocal completed
+            completed += 1
+            progress.progress(min(completed / total_tasks, 1.0))
+            progress_text.text(f"進度：{completed}/{total_tasks} - {task_desc}")
+
+        # 使用關鍵字搜索每個設施
+        for cat in selected_categories:
+            if cat not in selected_subtypes:
+                continue
+                
+            for place_type in selected_subtypes[cat]:
+                update_progress(f"關鍵字搜索 {cat}-{place_type}")
+                
+                try:
+                    # 獲取中文關鍵字
+                    chinese_keyword = ENGLISH_TO_CHINESE.get(place_type, place_type)
+                    
+                    # 使用 Text Search
+                    places = self._search_text_google_places(lat, lng, api_key, chinese_keyword, radius)
+                    
+                    # 更新覆蓋記錄
+                    if places:
+                        category_coverage[cat][place_type] = True
+                    
+                    for p in places:
+                        if p[5] > radius:
+                            continue
+                        pid = p[6]
+                        if pid in seen:
+                            continue
+                        seen.add(pid)
+                        
+                        results.append((cat, place_type, p[2], p[3], p[4], p[5], p[6]))
+
+                    time.sleep(0.2)  # API 速率限制
+                    
+                except Exception as e:
+                    continue
+
+        # 額外關鍵字搜索
+        if extra_keyword:
+            update_progress(f"額外關鍵字: {extra_keyword}")
+            try:
+                places = self._search_text_google_places(lat, lng, api_key, extra_keyword, radius)
+                for p in places:
+                    if p[5] > radius:
+                        continue
+                    pid = p[6]
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    results.append(("關鍵字", extra_keyword, p[2], p[3], p[4], p[5], p[6]))
+                    
+                time.sleep(0.2)
+            except Exception as e:
+                pass
+
+        progress.progress(1.0)
+        progress_text.text("✅ 關鍵字搜索完成！")
+        results.sort(key=lambda x: x[5])
+        
+        return results, category_coverage
+    
+    def _display_analysis_results(self, results):
+        """顯示分析結果"""
+        try:
+            # 確保有結果才顯示
+            if not results:
+                return
+            
+            analysis_mode = results["analysis_mode"]
+            search_method = results.get("search_method", "type_search")
+            
+            # 顯示分析標題
+            st.markdown("---")
+            if analysis_mode == "單一房屋分析":
+                st.markdown(f"## 📊 單一房屋分析結果")
+            else:
+                st.markdown(f"## 📊 比較結果 ({results['num_houses']}間房屋)")
+            
+            # 顯示搜索方法
+            search_method_display = "🏷️ 類別型搜索 (Type Search)" if search_method == "type_search" else "🔍 關鍵字搜索 (Text Search)"
+            st.info(f"**使用的搜索方法：** {search_method_display}")
+            
+            # 顯示搜索設定
+            st.markdown(f"""
+            **搜索設定：**
+            - 搜尋半徑：{results['radius']} 公尺
+            - 額外關鍵字：{results['keyword'] if results['keyword'] else '無'}
+            """)
+            
+            # 顯示設施表格
+            self._display_facilities_table(results)
+            
+            # 顯示統計分析
+            self._display_statistics_analysis(results)
+            
+            # 顯示地圖
+            self._display_maps(results)
+            
+            # AI 分析部分
+            self._display_ai_analysis_section(results)
+            
+        except Exception as e:
+            st.error(f"❌ 顯示分析結果時發生錯誤: {str(e)}")
     
     def _display_facilities_table(self, results):
         """顯示設施表格"""
@@ -1376,63 +1269,6 @@ class ComparisonAnalyzer:
             }
             
             st_echarts(chart_data, height="300px")
-            
-            # 多房屋比較時，也顯示子類別分布
-            st.markdown("### 🏪 各房屋設施類型比較")
-            
-            # 為每個房屋計算子類別分布
-            all_subtypes = set()
-            house_subtype_data = {}
-            
-            for house_name in houses_data.keys():
-                places = results["places_data"][house_name]
-                subtype_counts = {}
-                
-                for cat, subtype, name, lat, lng, dist, pid in places:
-                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
-                    subtype_counts[chinese_subtype] = subtype_counts.get(chinese_subtype, 0) + 1
-                    all_subtypes.add(chinese_subtype)
-                
-                house_subtype_data[house_name] = subtype_counts
-            
-            # 轉換為比較圖表
-            if all_subtypes and num_houses <= 5:  # 避免圖表過於複雜
-                # 只取數量最多的前10個子類別
-                subtype_totals = {}
-                for subtype in all_subtypes:
-                    total = sum(house_subtype_data.get(house_name, {}).get(subtype, 0) for house_name in houses_data.keys())
-                    subtype_totals[subtype] = total
-                
-                top_subtypes = sorted(subtype_totals.items(), key=lambda x: x[1], reverse=True)[:10]
-                top_subtype_names = [item[0] for item in top_subtypes]
-                
-                # 建立比較圖表
-                series_data = []
-                for house_name in houses_data.keys():
-                    data = []
-                    for subtype in top_subtype_names:
-                        data.append(house_subtype_data.get(house_name, {}).get(subtype, 0))
-                    
-                    series_data.append({
-                        "name": house_name,
-                        "type": "bar",
-                        "data": data
-                    })
-                
-                comparison_chart = {
-                    "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
-                    "legend": {"data": list(houses_data.keys())},
-                    "grid": {"left": "3%", "right": "4%", "bottom": "15%", "top": "15%", "containLabel": True},
-                    "xAxis": {
-                        "type": "category",
-                        "data": top_subtype_names,
-                        "axisLabel": {"rotate": 45}
-                    },
-                    "yAxis": {"type": "value"},
-                    "series": series_data
-                }
-                
-                st_echarts(comparison_chart, height="400px")
     
     def _display_maps(self, results):
         """顯示地圖"""
@@ -1514,7 +1350,7 @@ class ComparisonAnalyzer:
             facilities_data.append({
                 "name": name,
                 "category": cat,
-                "subtype": chinese_subtype,  # 使用中文子類別
+                "subtype": chinese_subtype,
                 "lat": p_lat,
                 "lng": p_lng,
                 "distance": dist,
@@ -1953,6 +1789,201 @@ class ComparisonAnalyzer:
         
         return pd.DataFrame(all_facilities)
     
+    def _prepare_analysis_prompt(self, houses_data, places_data, facility_counts, 
+                                selected_categories, radius, keyword, analysis_mode, facilities_table):
+        """準備分析提示詞"""
+        if analysis_mode == "單一房屋分析":
+            house_name = list(houses_data.keys())[0]
+            house_info = houses_data[house_name]
+            places = places_data[house_name]
+            count = facility_counts.get(house_name, 0)
+            
+            distances = [p[5] for p in places]
+            avg_distance = sum(distances) / len(distances) if distances else 0
+            min_distance = min(distances) if distances else 0
+            
+            # 設施子類別統計
+            subtype_stats = {}
+            for cat, subtype, name, lat, lng, dist, pid in places:
+                chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
+            
+            table_summary = ""
+            if not facilities_table.empty:
+                sample_facilities = facilities_table.head(20).to_string(index=False)
+                table_summary = f"""
+                
+                【設施表格摘要（前20筆）】
+                {sample_facilities}
+                """
+            
+            prompt = f"""
+            你是一位專業的房地產分析師，請對以下房屋的生活機能進行詳細分析。
+            
+            【房屋資訊】
+            - 標題：{house_info['title']}
+            - 地址：{house_info['address']}
+            
+            【搜尋條件】
+            - 搜尋半徑：{radius} 公尺
+            - 選擇的生活機能類別：{', '.join(selected_categories)}
+            - 額外關鍵字：{keyword if keyword else '無'}
+            
+            【設施統計】
+            - 總設施數量：{count} 個
+            - 平均距離：{avg_distance:.0f} 公尺
+            - 最近設施：{min_distance} 公尺
+            
+            【各類型設施數量】
+            {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
+            
+            {table_summary}
+            
+            【請分析以下面向】
+            1. 生活便利性評估（以1-5星評分）
+            2. 設施完整性分析（哪些設施類型充足，哪些缺乏）
+            3. 適合的居住族群分析（單身、小家庭、大家庭、退休族等）
+            4. 投資潛力評估（以1-5星評分）
+            5. 優點總結（至少3點）
+            6. 缺點提醒（至少2點）
+            7. 建議改善或補充的生活機能
+            8. 綜合評價與建議
+            
+            請使用專業但易懂的語言，提供具體、實用的建議。
+            """
+        
+        else:  # 多房屋比較
+            num_houses = len(houses_data)
+            
+            if num_houses == 1:
+                house_name = list(houses_data.keys())[0]
+                house_info = houses_data[house_name]
+                places = places_data[house_name]
+                count = facility_counts.get(house_name, 0)
+                
+                distances = [p[5] for p in places]
+                avg_distance = sum(distances) / len(distances) if distances else 0
+                
+                # 設施子類別統計
+                subtype_stats = {}
+                for cat, subtype, name, lat, lng, dist, pid in places:
+                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
+                    subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
+                
+                table_summary = ""
+                if not facilities_table.empty:
+                    sample_facilities = facilities_table.head(15).to_string(index=False)
+                    table_summary = f"""
+                    
+                    【設施表格摘要（前15筆）】
+                    {sample_facilities}
+                    """
+                
+                prompt = f"""
+                你是一位專業的房地產分析師，請對以下房屋的生活機能進行綜合評估。
+                
+                【房屋資訊】
+                - 標題：{house_info['title']}
+                - 地址：{house_info['address']}
+                
+                【搜尋條件】
+                - 搜尋半徑：{radius} 公尺
+                - 選擇的生活機能類別：{', '.join(selected_categories)}
+                - 額外關鍵字：{keyword if keyword else '無'}
+                
+                【設施統計】
+                - 總設施數量：{count} 個
+                - 平均距離：{avg_distance:.0f} 公尺
+                
+                【各類型設施數量】
+                {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
+                
+                {table_summary}
+                
+                【請提供深度分析】
+                1. 區域生活機能整體評價
+                2. 與類似區域的比較優勢
+                3. 未來發展潛力評估
+                4. 投資回報率預估
+                5. 風險因素分析
+                6. 最佳使用建議
+                
+                請提供專業、客觀的分析報告。
+                """
+            else:
+                # 多個房屋比較
+                stats_summary = "統計摘要：\n"
+                for house_name, count in facility_counts.items():
+                    if places_data[house_name]:
+                        nearest = min([p[5] for p in places_data[house_name]])
+                        stats_summary += f"- {house_name}：共 {count} 個設施，最近設施 {nearest} 公尺\n"
+                    else:
+                        stats_summary += f"- {house_name}：共 0 個設施\n"
+                
+                # 排名
+                ranked_houses = sorted(facility_counts.items(), key=lambda x: x[1], reverse=True)
+                ranking_text = "設施數量排名：\n"
+                for rank, (house_name, count) in enumerate(ranked_houses, 1):
+                    ranking_text += f"第{rank}名：{house_name} ({count}個設施)\n"
+                
+                # 房屋詳細資訊
+                houses_details = "房屋詳細資訊：\n"
+                for house_name, house_info in houses_data.items():
+                    houses_details += f"""
+                    {house_name}:
+                    - 標題：{house_info['title']}
+                    - 地址：{house_info['address']}
+                    """
+                
+                # 建立表格摘要
+                table_summary = ""
+                if not facilities_table.empty:
+                    table_summary = "\n\n【各房屋設施摘要】\n"
+                    for house_name in houses_data.keys():
+                        house_facilities = facilities_table[facilities_table['房屋'] == house_name].head(10)
+                        if not house_facilities.empty:
+                            table_summary += f"\n{house_name} 的前10個設施：\n"
+                            table_summary += house_facilities[['設施名稱', '設施子類別', '距離(公尺)']].to_string(index=False) + "\n"
+                
+                prompt = f"""
+                你是一位專業的房地產分析師，請對以下{num_houses}間房屋進行綜合比較分析。
+                
+                【搜尋條件】
+                - 搜尋半徑：{radius} 公尺
+                - 選擇的生活機能類別：{', '.join(selected_categories)}
+                - 額外關鍵字：{keyword if keyword else '無'}
+                
+                {houses_details}
+                
+                【設施統計】
+                {stats_summary}
+                
+                {ranking_text}
+                
+                {table_summary}
+                
+                【請依序分析】
+                1. 總體設施豐富度排名與分析
+                2. 各類型設施完整性比較
+                3. 生活便利性綜合評估（為每間房屋評1-5星）
+                4. 對「自住者」的推薦排名與原因
+                5. 對「投資者」的推薦排名與原因
+                6. 各房屋的優勢特色分析
+                7. 各房屋的潛在風險提醒
+                8. 綜合性價比評估
+                9. 最終推薦與總結
+                
+                【分析要求】
+                - 提供清晰的排名和評分
+                - 每項評估都要有具體依據
+                - 考慮不同生活階段的需求
+                - 給出實用的購買建議
+                
+                請使用專業但易懂的語言，提供全面、客觀的分析。
+                """
+        
+        return prompt
+    
     def _get_prompt_templates(self, analysis_mode):
         """取得提示詞模板"""
         templates = {
@@ -2063,6 +2094,80 @@ class ComparisonAnalyzer:
     def _get_gemini_key(self):
         """取得 Gemini API Key"""
         return st.session_state.get("GEMINI_KEY", "")
+    
+    def _search_text_google_places(self, lat, lng, api_key, keyword, radius=500):
+        """搜尋Google Places（使用文字搜尋）"""
+        url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+        params = {
+            "query": keyword,
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "key": api_key,
+            "language": "zh-TW"
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            r = response.json()
+        except Exception as e:
+            return []
+
+        results = []
+        for p in r.get("results", []):
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+            
+            results.append((
+                "關鍵字",
+                keyword,
+                p.get("name", "未命名"),
+                loc["lat"],
+                loc["lng"],
+                dist,
+                p.get("place_id", "")
+            ))
+        return results
+    
+    def _search_nearby_places_by_type(self, lat, lng, api_key, place_type, radius=500):
+        """使用 Nearby Search 和 Type Filter 查詢地點"""
+        url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+        params = {
+            "location": f"{lat},{lng}",
+            "radius": radius,
+            "type": place_type,
+            "key": api_key,
+            "language": "zh-TW"
+        }
+
+        try:
+            response = requests.get(url, params=params, timeout=10)
+            response.raise_for_status()
+            r = response.json()
+        except requests.exceptions.Timeout:
+            return []
+        except Exception as e:
+            return []
+
+        results = []
+        if r.get("status") != "OK":
+            return []
+
+        for p in r.get("results", []):
+            loc = p["geometry"]["location"]
+            dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
+            
+            chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
+            results.append((
+                "類型搜尋",
+                chinese_type,
+                p.get("name", "未命名"),
+                loc["lat"],
+                loc["lng"],
+                dist,
+                p.get("place_id", "")
+            ))
+        return results
 
 
 def get_comparison_analyzer():
