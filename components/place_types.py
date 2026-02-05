@@ -4,7 +4,7 @@
 PLACE_TYPES = {
     "教育": [
         "圖書館", "library",
-        "幼兒園", "pre_school",
+        "幼兒園", "preschool",
         "小學", "primary_school",
         "中學", "secondary_school",
         "大學", "university",
