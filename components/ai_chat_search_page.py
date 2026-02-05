@@ -85,7 +85,7 @@ def render_ai_chat_search():
                         st.dataframe(debug_info['filtered_sample'])
     
     # ====== 使用者輸入 ======
-    if prompt := st.chat_input("請輸入查詢條件，例如：『台中市 2000 萬內 3 房 5樓以上』"):
+    if prompt := st.chat_input("請輸入查詢條件，例如：『台中市西屯區 2000 萬內 3房2廳2衛 5樓以上』"):
         # 清除之前的解析結果
         if 'ai_latest_filters' in st.session_state:
             del st.session_state.ai_latest_filters
@@ -110,7 +110,7 @@ def render_ai_chat_search():
 
 請以 JSON 格式回傳，格式如下：
 {
-    "city": "台中市",
+    "city": "台北市 或 台中市",
     "district": "行政區名稱(例如: 西屯區、大安區)",
     "budget_min": 最低預算(萬),
     "budget_max": 最高預算(萬),
@@ -118,11 +118,12 @@ def render_ai_chat_search():
     "age_max": 最大屋齡,
     "area_min": 最小建坪,
     "area_max": 最大建坪,
+    "floor_min": 最低樓層,
+    "floor_max": 最高樓層,
     "rooms": 房間數,
     "living_rooms": 廳數,
     "bathrooms": 衛數,
-    "floor_min": 最低樓層,
-    "floor_max": 最高樓層,
+    "study_rooms": 室數(書房/儲藏室),
     "housetype": "華廈/公寓/大樓/套房/透天/店面/辦公/別墅/倉庫/廠房/土地/單售車位/其他",
     "car_grip": "需要/不要/不限",
 }
@@ -136,6 +137,15 @@ def render_ai_chat_search():
 - 預算範例：若說「1800萬左右」，請回傳 "budget_min": 1750, "budget_max": 1850。
 - 如果使用者只說「1800萬以內」或「低於1800萬」，則 "budget_min" 可省略，只設 "budget_max": 1800。
 - 坪數與屋齡同理，若有「左右」字眼，請給出範圍。
+- **格局解析：**
+  - 如果使用者說「3房2廳2衛1室」，請提取：
+    - "rooms": 3
+    - "living_rooms": 2
+    - "bathrooms": 2
+    - "study_rooms": 1
+  - 如果使用者說「3房」或「3房以上」，只設定 "rooms": 3
+  - 如果使用者說「2房2廳」，請設定 "rooms": 2, "living_rooms": 2
+  - 「室」通常指書房或儲藏室，但不是必要條件
 - **樓層處理：**
   - 如果使用者說「5樓以上」或「高樓層」，請設定 "floor_min": 5
   - 如果使用者說「10樓以下」或「低樓層」，請設定 "floor_max": 10
@@ -143,13 +153,6 @@ def render_ai_chat_search():
   - 如果使用者說「不要1樓」或「避開1樓」，請設定 "floor_min": 2
   - 高樓層通常指5樓以上，低樓層通常指3樓以下
 - 城市只能是「台中市」
-- 只回傳 JSON，不要有其他文字
-- **格局解析：**
-  - 如果使用者說「3房」或「3房2廳」或「3房2廳2衛」，請分別提取：
-    - "rooms": 3
-    - "living_rooms": 2 (若有提到)
-    - "bathrooms": 2 (若有提到)
-  - 如果使用者說「2房以上」，請設定 "rooms": 2
 """
                 
                 full_prompt = f"{system_prompt}\n\n使用者查詢：{prompt}"
@@ -180,6 +183,35 @@ def render_ai_chat_search():
                     # 載入資料
                     df = pd.read_csv(f"./Data/{csv_file}")
                     
+                    # ====== 新增：格局欄位解析 ======
+                    def parse_layout(layout_str):
+                        """
+                        解析格局字串，例如：
+                        - '3房2廳2衛' -> (3, 2, 2, 0)
+                        - '3房2廳2衛1室' -> (3, 2, 2, 1)
+                        - '2房2廳1衛' -> (2, 2, 1, 0)
+                        """
+                        if pd.isna(layout_str) or not isinstance(layout_str, str):
+                            return None, None, None, None
+                        
+                        rooms = re.search(r'(\d+)房', layout_str)
+                        living = re.search(r'(\d+)廳', layout_str)
+                        bath = re.search(r'(\d+)衛', layout_str)
+                        study = re.search(r'(\d+)室', layout_str)
+                        
+                        return (
+                            int(rooms.group(1)) if rooms else None,
+                            int(living.group(1)) if living else None,
+                            int(bath.group(1)) if bath else None,
+                            int(study.group(1)) if study else None
+                        )
+                    
+                    if '格局' in df.columns:
+                        df[['房間數', '廳數', '衛數', '室數']] = df['格局'].apply(
+                            lambda x: pd.Series(parse_layout(x))
+                        )
+                    # ================================
+                    
                     # 行政區預處理
                     def quick_parse_district(addr):
                         if pd.isna(addr) or not isinstance(addr, str): return ""
@@ -191,7 +223,7 @@ def render_ai_chat_search():
                     if '地址' in df.columns:
                         df['行政區'] = df['地址'].apply(quick_parse_district)
                     
-                    # ====== 新增：樓層預處理 ======
+                    # ====== 樓層預處理 ======
                     def parse_floor(floor_str):
                         """
                         從樓層字串中提取實際樓層數字
@@ -214,6 +246,7 @@ def render_ai_chat_search():
                     
                     # 過濾資料（內嵌函式）
                     filtered_df = df.copy()
+                    
                     # ====== 強制轉型：確保數字欄位真的是數字 ======
                     num_cols = {
                         '總價(萬)': 'budget',
@@ -222,7 +255,8 @@ def render_ai_chat_search():
                         '房間數': 'rooms',
                         '廳數': 'living_rooms',
                         '衛數': 'bathrooms',
-                        '實際樓層': 'floor'  # 新增樓層欄位
+                        '室數': 'study_rooms',
+                        '實際樓層': 'floor'
                     }
                     
                     for col in num_cols.keys():
@@ -233,10 +267,11 @@ def render_ai_chat_search():
                                 errors='coerce'
                             )
                     
-                    # 順手補一個：把 NaN 的地方填入 0，避免比大小時又噴錯（樓層除外）
-                    fill_dict = {k: 0 for k in num_cols.keys() if k != '實際樓層'}
+                    # 順手補一個：把 NaN 的地方填入 0，避免比大小時又噴錯（樓層和室數除外）
+                    fill_dict = {k: 0 for k in num_cols.keys() if k not in ['實際樓層', '室數']}
                     filtered_df = filtered_df.fillna(fill_dict)
                     # ============================================
+                    
                     filter_steps = []  # 記錄每個篩選步驟
                     
                     try:
@@ -314,7 +349,7 @@ def render_ai_chat_search():
                             after_count = len(filtered_df)
                             filter_steps.append(f"建坪<={filters['area_max']}: {before_count} → {after_count}")
                         
-                        # ====== 新增：樓層篩選 ======
+                        # ====== 樓層篩選 ======
                         # 樓層下限
                         if filters.get('floor_min', 0) > 0 and '實際樓層' in filtered_df.columns:
                             before_count = len(filtered_df)
@@ -338,6 +373,48 @@ def render_ai_chat_search():
                             filter_steps.append(f"樓層<={filters['floor_max']}樓: {before_count} → {after_count}")
                         # ============================
                         
+                        # ====== 格局篩選（使用解析後的欄位）======
+                        # 房間數篩選
+                        if filters.get('rooms', 0) > 0 and '房間數' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            filtered_df = filtered_df[
+                                (filtered_df['房間數'].notna()) & 
+                                (filtered_df['房間數'] >= filters['rooms'])
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"房間數>={filters['rooms']}: {before_count} → {after_count}")
+                        
+                        # 廳數篩選
+                        if filters.get('living_rooms', 0) > 0 and '廳數' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            filtered_df = filtered_df[
+                                (filtered_df['廳數'].notna()) & 
+                                (filtered_df['廳數'] >= filters['living_rooms'])
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"廳數>={filters['living_rooms']}: {before_count} → {after_count}")
+                        
+                        # 衛數篩選
+                        if filters.get('bathrooms', 0) > 0 and '衛數' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            filtered_df = filtered_df[
+                                (filtered_df['衛數'].notna()) & 
+                                (filtered_df['衛數'] >= filters['bathrooms'])
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"衛數>={filters['bathrooms']}: {before_count} → {after_count}")
+                        
+                        # 室數篩選（書房/儲藏室 - 選用）
+                        if filters.get('study_rooms', 0) > 0 and '室數' in filtered_df.columns:
+                            before_count = len(filtered_df)
+                            filtered_df = filtered_df[
+                                (filtered_df['室數'].notna()) & 
+                                (filtered_df['室數'] >= filters['study_rooms'])
+                            ]
+                            after_count = len(filtered_df)
+                            filter_steps.append(f"室數>={filters['study_rooms']}: {before_count} → {after_count}")
+                        # =========================================
+                        
                         # 車位篩選
                         if 'car_grip' in filters and '車位' in filtered_df.columns:
                             before_count = len(filtered_df)
@@ -355,32 +432,6 @@ def render_ai_chat_search():
                                 ]
                             after_count = len(filtered_df)
                             filter_steps.append(f"車位={filters['car_grip']}: {before_count} → {after_count}")
-                        
-                        # 房間數篩選
-                        if "rooms" in filters and '房間數' in filtered_df.columns:
-                            before_count = len(filtered_df)
-                            rooms = filters["rooms"]
-                            if isinstance(rooms, dict):
-                                filtered_df = filtered_df[(filtered_df['房間數'] >= rooms.get("min", 0)) &
-                                                          (filtered_df['房間數'] <= rooms.get("max", 100))]
-                                filter_steps.append(f"房間數={rooms['min']}-{rooms['max']}: {before_count} → {len(filtered_df)}")
-                            else:
-                                filtered_df = filtered_df[filtered_df['房間數'] >= rooms]
-                                filter_steps.append(f"房間數>={rooms}: {before_count} → {len(filtered_df)}")
-                        
-                        # 廳數篩選
-                        if "living_rooms" in filters and '廳數' in filtered_df.columns:
-                            before_count = len(filtered_df)
-                            filtered_df = filtered_df[filtered_df['廳數'] >= filters["living_rooms"]]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"廳數>={filters['living_rooms']}: {before_count} → {after_count}")
-                        
-                        # 衛數篩選
-                        if "bathrooms" in filters and '衛數' in filtered_df.columns:
-                            before_count = len(filtered_df)
-                            filtered_df = filtered_df[filtered_df['衛數'] >= filters["bathrooms"]]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"衛數>={filters['bathrooms']}: {before_count} → {after_count}")
                             
                     except Exception as e:
                         result_text = f"❌ 篩選過程中發生錯誤: {e}"
