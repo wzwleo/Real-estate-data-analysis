@@ -313,8 +313,27 @@ def render_analysis_page():
                     elif hasattr(analyzer_instance, 'main'):
                         analyzer_instance.main()
                     else:
-                        # 嘗試調用默認方法
-                        analyzer_instance()
+                        # 如果都沒有找到標準方法，嘗試調用物件本身（如果它是可調用的）
+                        if callable(analyzer_instance):
+                            analyzer_instance()
+                        else:
+                            # 顯示錯誤訊息並使用緊急修復功能
+                            st.error("❌ 市場趨勢分析模組缺少標準的渲染方法")
+                            st.info("""
+                            請檢查 components/market_trend.py 檔案的類別是否有以下方法之一：
+                            1. render_complete_dashboard()
+                            2. render_analysis_tab()
+                            3. main()
+                            """)
+                            
+                            # 顯示可用的方法供調試
+                            available_methods = [method for method in dir(analyzer_instance) 
+                                               if not method.startswith('_') and callable(getattr(analyzer_instance, method))]
+                            if available_methods:
+                                st.info(f"可用的方法: {', '.join(available_methods[:10])}")
+                            
+                            # 使用緊急修復功能
+                            render_emergency_market_trend()
                         
             except Exception as e:
                 st.error(f"市場趨勢分析執行錯誤: {str(e)}")
@@ -485,13 +504,17 @@ def render_emergency_market_trend():
                                     st.metric("中位數價格", f"{median_price:,.0f}")
                                 
                                 # 價格分布圖
-                                fig = px.histogram(
-                                    df, 
-                                    x=selected_price_col,
-                                    title=f"{selected_price_col} 分布",
-                                    nbins=50
-                                )
-                                st.plotly_chart(fig, use_container_width=True)
+                                try:
+                                    import plotly.express as px
+                                    fig = px.histogram(
+                                        df, 
+                                        x=selected_price_col,
+                                        title=f"{selected_price_col} 分布",
+                                        nbins=50
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                                except:
+                                    st.info("無法顯示圖表，請確保已安裝 plotly")
                     
                     elif analysis_type == "地區分析":
                         # 尋找地區相關欄位
@@ -505,15 +528,19 @@ def render_emergency_market_trend():
                             area_stats = df[selected_area_col].value_counts().reset_index()
                             area_stats.columns = ['地區', '數量']
                             
-                            fig = px.bar(
-                                area_stats.head(20),
-                                x='地區',
-                                y='數量',
-                                title="地區分布（前20名）",
-                                color='數量'
-                            )
-                            fig.update_layout(xaxis_tickangle=45)
-                            st.plotly_chart(fig, use_container_width=True)
+                            try:
+                                import plotly.express as px
+                                fig = px.bar(
+                                    area_stats.head(20),
+                                    x='地區',
+                                    y='數量',
+                                    title="地區分布（前20名）",
+                                    color='數量'
+                                )
+                                fig.update_layout(xaxis_tickangle=45)
+                                st.plotly_chart(fig, use_container_width=True)
+                            except:
+                                st.dataframe(area_stats.head(20), use_container_width=True)
                     
                     elif analysis_type == "時間趨勢":
                         # 尋找時間相關欄位
@@ -524,21 +551,25 @@ def render_emergency_market_trend():
                             selected_time_col = st.selectbox("選擇時間欄位", time_columns)
                             
                             # 嘗試找出數值欄位來分析趨勢
-                            numeric_cols = df.select_dtypes(include=[np.number]).columns
+                            numeric_cols = df.select_dtypes(include=['number']).columns
                             if len(numeric_cols) > 0:
                                 selected_numeric_col = st.selectbox("選擇分析數值", numeric_cols)
                                 
                                 # 簡單的時間趨勢
                                 time_trend = df.groupby(selected_time_col)[selected_numeric_col].mean().reset_index()
                                 
-                                fig = px.line(
-                                    time_trend,
-                                    x=selected_time_col,
-                                    y=selected_numeric_col,
-                                    title=f"{selected_numeric_col} 時間趨勢",
-                                    markers=True
-                                )
-                                st.plotly_chart(fig, use_container_width=True)
+                                try:
+                                    import plotly.express as px
+                                    fig = px.line(
+                                        time_trend,
+                                        x=selected_time_col,
+                                        y=selected_numeric_col,
+                                        title=f"{selected_numeric_col} 時間趨勢",
+                                        markers=True
+                                    )
+                                    st.plotly_chart(fig, use_container_width=True)
+                                except:
+                                    st.dataframe(time_trend, use_container_width=True)
                     
                     # 匯出功能
                     st.subheader("💾 資料匯出")
