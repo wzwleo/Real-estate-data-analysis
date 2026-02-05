@@ -1327,7 +1327,7 @@ def tab1_module():
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
