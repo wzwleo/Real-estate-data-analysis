@@ -19,7 +19,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE, ENGLISH_TO_CATEGORY  # 修改這裡
+    from components.place_types import PLACE_TYPES, ENGLISH_TO_CHINESE, ENGLISH_TO_CATEGORY
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -865,7 +865,7 @@ class ComparisonAnalyzer:
                             continue
                         seen.add(pid)
                         
-                        # 修正分類 - 這裡使用新的簡化方法
+                        # 修正分類
                         actual_category, actual_subtype = self._determine_actual_category(p[2], p[1])
                         
                         results.append((actual_category, actual_subtype, p[2], p[3], p[4], p[5], p[6]))
@@ -900,14 +900,18 @@ class ComparisonAnalyzer:
     
     def _determine_actual_category(self, place_name, place_type):
         """根據子類別判斷實際分類 - 簡化版"""
-        # 直接從映射表中查找
+        # 直接從映射表中查找（place_type 應該是英文的，如 "supermarket"）
         if place_type in ENGLISH_TO_CATEGORY:
             category = ENGLISH_TO_CATEGORY[place_type]
             chinese_subtype = ENGLISH_TO_CHINESE.get(place_type, place_type)
             return category, chinese_subtype
         
         # 如果是額外關鍵字查詢的
-        return "關鍵字", place_type
+        if place_type == "extra_keyword" or place_type.startswith("關鍵字"):
+            return "關鍵字", place_type
+        
+        # 如果還是找不到，嘗試從名稱判斷
+        return "生活服務", place_type
     
     def _display_analysis_results(self, results):
         """顯示分析結果"""
@@ -1977,7 +1981,7 @@ class ComparisonAnalyzer:
         return results
     
     def _search_nearby_places_by_type(self, lat, lng, api_key, place_type, radius=500):
-        """使用 Nearby Search 和 Type Filter 查詢地點"""
+        """使用 Nearby Search 和 Type Filter 查詢地點 - 已修正"""
         url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
         params = {
             "location": f"{lat},{lng}",
@@ -2004,10 +2008,10 @@ class ComparisonAnalyzer:
             loc = p["geometry"]["location"]
             dist = int(haversine(lat, lng, loc["lat"], loc["lng"]))
             
-            chinese_type = ENGLISH_TO_CHINESE.get(place_type, place_type)
+            # 直接傳遞英文類型，不要轉換為中文
             results.append((
                 "類型搜尋",
-                chinese_type,
+                place_type,  # 直接傳英文類型
                 p.get("name", "未命名"),
                 loc["lat"],
                 loc["lng"],
