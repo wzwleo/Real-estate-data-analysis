@@ -1910,4 +1910,4 @@ class ComparisonAnalyzer:
 
 def get_comparison_analyzer():
     """取得比較分析器實例"""
-    return ComparisonAnalyzer()
+    return ComparisonAnalyzer()   
