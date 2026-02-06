@@ -61,9 +61,8 @@ PLACE_TYPES = {
     ],
     "健康與保健": [
         "醫院", "hospital",
-        "診所", "doctor",
+        "診所", "clinic",
         "藥局", "pharmacy",
-        "牙醫", "dentist",
         "牙醫診所", "dental_clinic",
         "按摩", "massage",
         "SPA", "spa",
