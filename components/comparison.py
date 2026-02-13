@@ -1,4 +1,3 @@
-#CHINESE
 # components/comparison.py
 import streamlit as st
 import pandas as pd
@@ -58,13 +57,156 @@ class ComparisonAnalyzer:
             'current_page': 1,
             'last_gemini_call': 0,
             'template_selector_key': 'default',
-            'prompt_editor_key': 'default_prompt'
-            # 移除 category_coverage
+            'prompt_editor_key': 'default_prompt',
+            'buyer_profile': None,  # 買家類型
+            'auto_selected_categories': []  # 自動選擇的類別
         }
         
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
+    
+    # ============= 買家類型與對應設施定義 =============
+    
+    def _get_buyer_profiles(self):
+        """定義買家類型及其對應的生活機能需求"""
+        return {
+            "首購族": {
+                "icon": "🏠",
+                "description": "年輕首購，預算有限，追求高效率生活",
+                "priority_categories": {
+                    "交通運輸": ["捷運站", "公車站", "ubike站", "火車站"],
+                    "日常購物": ["便利商店", "超市", "全聯", "傳統市場"],
+                    "餐飲": ["咖啡店", "連鎖餐廳", "早餐店", "速食店"],
+                    "金融機構": ["銀行", "郵局", "ATM"]
+                },
+                "secondary_categories": {
+                    "休閒娛樂": ["健身房", "電影院", "公園"],
+                    "醫療": ["藥局", "診所"]
+                },
+                "radius": 500,
+                "prompt_focus": [
+                    "通勤便利性",
+                    "日常採買效率",
+                    "預算內最高CP值",
+                    "夜間生活便利性"
+                ]
+            },
+            "家庭": {
+                "icon": "👨‍👩‍👧‍👦",
+                "description": "有小孩的家庭，重視教育、安全與居住品質",
+                "priority_categories": {
+                    "教育": ["小學", "國中", "高中", "幼兒園", "托嬰中心", "安親班", "才藝班", "圖書館"],
+                    "公園綠地": ["公園", "河濱公園", "兒童遊戲場"],
+                    "醫療": ["小兒科", "診所", "藥局", "地區醫院"],
+                    "日常購物": ["超市", "便利商店", "傳統市場", "全聯"]
+                },
+                "secondary_categories": {
+                    "休閒娛樂": ["親子餐廳", "親子館", "書店", "運動中心"],
+                    "交通": ["公車站", "捷運站", "停車場"],
+                    "金融": ["銀行", "郵局"]
+                },
+                "radius": 800,
+                "prompt_focus": [
+                    "學區品質與距離",
+                    "親子友善環境",
+                    "社區安全性",
+                    "假日家庭活動空間"
+                ]
+            },
+            "長輩退休族": {
+                "icon": "🧓",
+                "description": "退休長輩，重視醫療、寧靜、日常採買便利",
+                "priority_categories": {
+                    "醫療": ["醫院", "診所", "藥局", "復健科", "地區醫院", "中醫"],
+                    "公園綠地": ["公園", "河濱公園", "登山步道"],
+                    "日常購物": ["傳統市場", "超市", "便利商店"],
+                    "宗教": ["廟宇", "教堂"]
+                },
+                "secondary_categories": {
+                    "交通": ["公車站", "捷運站"],
+                    "金融": ["郵局", "銀行"],
+                    "餐飲": ["素食餐廳", "傳統小吃"]
+                },
+                "radius": 600,
+                "prompt_focus": [
+                    "醫療資源可及性",
+                    "散步運動空間",
+                    "傳統市場便利性",
+                    "安靜宜居環境",
+                    "鄰里互動可能性"
+                ]
+            },
+            "外地工作": {
+                "icon": "🚄",
+                "description": "跨縣市工作，需頻繁通勤，追求交通樞紐便利性",
+                "priority_categories": {
+                    "交通運輸": ["捷運站", "公車站", "火車站", "ubike站", "高鐵站", "客運站"],
+                    "日常購物": ["便利商店", "超市", "全聯"],
+                    "餐飲": ["咖啡店", "連鎖餐廳", "速食店"],
+                    "金融": ["ATM", "銀行", "郵局"]
+                },
+                "secondary_categories": {
+                    "休閒娛樂": ["健身房", "電影院"],
+                    "醫療": ["藥局", "診所"]
+                },
+                "radius": 400,
+                "prompt_focus": [
+                    "交通樞紐距離",
+                    "南北往來便利性",
+                    "高效率生活圈",
+                    "短暫停留期間的採買便利性"
+                ]
+            }
+        }
+    
+    def _get_suggested_categories_by_profile(self, profile_name):
+        """根據買家類型回覆建議選擇的類別與細項"""
+        profiles = self._get_buyer_profiles()
+        if profile_name not in profiles:
+            return {}, {}
+        
+        profile = profiles[profile_name]
+        
+        # 優先類別
+        priority_cats = {}
+        for cat, subtypes in profile["priority_categories"].items():
+            if cat in PLACE_TYPES:
+                priority_cats[cat] = subtypes
+        
+        # 次要類別
+        secondary_cats = {}
+        for cat, subtypes in profile["secondary_categories"].items():
+            if cat in PLACE_TYPES:
+                secondary_cats[cat] = subtypes
+        
+        return priority_cats, secondary_cats
+    
+    def _auto_select_categories(self, profile_name):
+        """根據買家類型自動選擇設施類別"""
+        priority_cats, secondary_cats = self._get_suggested_categories_by_profile(profile_name)
+        
+        # 建立自動選擇的類別清單
+        auto_categories = []
+        auto_subtypes = {}
+        
+        # 優先類別全部選取
+        for cat, subtypes in priority_cats.items():
+            auto_categories.append(cat)
+            if cat not in auto_subtypes:
+                auto_subtypes[cat] = []
+            auto_subtypes[cat].extend(subtypes)
+        
+        # 次要類別也全部選取（使用者可以手動取消）
+        for cat, subtypes in secondary_cats.items():
+            auto_categories.append(cat)
+            if cat not in auto_subtypes:
+                auto_subtypes[cat] = []
+            auto_subtypes[cat].extend(subtypes)
+        
+        return auto_categories, auto_subtypes
+    
+    # ============= 主要渲染方法 =============
     
     def render_comparison_tab(self):
         """渲染分析頁面 - 修正版本"""
@@ -123,14 +265,79 @@ class ComparisonAnalyzer:
             'analysis_in_progress',
             'analysis_results',
             'gemini_result',
-            'current_page'
+            'current_page',
+            'buyer_profile',
+            'auto_selected_categories'
         ]
         for key in keys_to_reset:
             if key in st.session_state:
                 del st.session_state[key]
     
     def _render_analysis_setup(self, fav_df):
-        """渲染分析設定部分"""
+        """渲染分析設定部分 - 新增買家類型篩選在最前面"""
+        
+        # ============= 步驟1: 買家類型選擇 =============
+        st.markdown("### 👤 步驟1：誰要住這裡？")
+        st.markdown("選擇買家類型，系統將自動推薦最適合的生活機能")
+        
+        profiles = self._get_buyer_profiles()
+        
+        # 買家類型選擇 - 使用卡片式設計
+        col_profiles = st.columns(len(profiles))
+        
+        for idx, (profile_name, profile_info) in enumerate(profiles.items()):
+            with col_profiles[idx]:
+                # 判斷是否為當前選擇
+                is_selected = st.session_state.get('buyer_profile') == profile_name
+                
+                # 卡片邊框樣式
+                border_style = "3px solid #4CAF50" if is_selected else "1px solid #ddd"
+                bg_color = "#f1f8e9" if is_selected else "white"
+                
+                st.markdown(f"""
+                <div style="border:{border_style}; border-radius:10px; padding:15px; 
+                            background-color:{bg_color}; text-align:center; height:160px;
+                            cursor:pointer; margin-bottom:10px;">
+                    <div style="font-size:32px;">{profile_info['icon']}</div>
+                    <div style="font-size:18px; font-weight:bold; margin:5px 0;">{profile_name}</div>
+                    <div style="font-size:12px; color:#666;">{profile_info['description'][:30]}...</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 選擇按鈕
+                if st.button(f"選擇 {profile_name}", key=f"select_profile_{profile_name}", 
+                           type="primary" if is_selected else "secondary", use_container_width=True):
+                    st.session_state.buyer_profile = profile_name
+                    
+                    # 自動選擇對應設施
+                    auto_cats, auto_subtypes = self._auto_select_categories(profile_name)
+                    st.session_state.auto_selected_categories = auto_cats
+                    st.session_state.auto_selected_subtypes = auto_subtypes
+                    
+                    # 根據買家類型建議搜尋半徑
+                    suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
+                    st.session_state.suggested_radius = suggested_radius
+                    
+                    st.rerun()
+        
+        # 顯示當前選擇的買家類型摘要
+        current_profile = st.session_state.get('buyer_profile')
+        if current_profile:
+            profile_info = profiles.get(current_profile, {})
+            st.success(f"""
+            ✅ 當前選擇：**{profile_info.get('icon', '')} {current_profile}**  
+            📌 分析重點：{', '.join(profile_info.get('prompt_focus', [])[:3])}...
+            """)
+        else:
+            st.info("👆 請先選擇買家類型，系統將為您自動篩選最適合的生活機能")
+            # 如果沒有選擇買家類型，不顯示後續設定
+            return
+        
+        st.markdown("---")
+        
+        # ============= 步驟2: 房屋選擇 =============
+        st.markdown("### 🏠 步驟2：選擇要分析的房屋")
+        
         # 模式選擇
         analysis_mode = st.radio(
             "選擇分析模式",
@@ -184,9 +391,10 @@ class ComparisonAnalyzer:
         
         st.session_state.selected_houses = selected_houses
         
-        # 分析設定
         st.markdown("---")
-        st.subheader("⚙️ 分析設定")
+        
+        # ============= 步驟3: 分析設定 =============
+        st.markdown("### ⚙️ 步驟3：進階分析設定")
         
         # API Keys 檢查
         server_key = self._get_server_key()
@@ -205,10 +413,11 @@ class ComparisonAnalyzer:
             status = "✅" if browser_key else "❌"
             st.metric("Browser Key", status)
         
-        # 搜尋設定
+        # 搜尋設定 - 根據買家類型建議半徑
+        suggested_radius = st.session_state.get('suggested_radius', DEFAULT_RADIUS)
         radius = st.slider(
-            "搜尋半徑 (公尺)", 
-            100, 2000, DEFAULT_RADIUS, 100, 
+            f"搜尋半徑 (公尺) - {profiles[current_profile]['icon']} {current_profile}建議值：{suggested_radius}公尺", 
+            100, 2000, suggested_radius, 100, 
             key="radius_slider_main"
         )
         
@@ -218,26 +427,201 @@ class ComparisonAnalyzer:
             placeholder="例如：公園、健身房、銀行等"
         )
         
-        # 生活機能選擇
         st.markdown("---")
-        st.subheader("🔍 選擇生活機能類別")
         
-        selected_categories, selected_subtypes = self._render_category_selection()
+        # ============= 步驟4: 生活機能選擇（已根據買家類型自動篩選）=============
+        st.subheader("🔍 步驟4：確認生活機能類別")
+        
+        # 顯示自動選擇說明
+        auto_cats = st.session_state.get('auto_selected_categories', [])
+        auto_subtypes = st.session_state.get('auto_selected_subtypes', {})
+        
+        if auto_cats:
+            st.info(f"""
+            📌 **{current_profile} 推薦的生活機能**  
+            系統已根據您的買家類型，自動選擇以下 {len(auto_cats)} 大類、{sum(len(v) for v in auto_subtypes.values())} 種設施。
+            您可以手動調整選擇。
+            """)
+        
+        selected_categories, selected_subtypes = self._render_category_selection_with_preset(
+            preset_categories=auto_cats,
+            preset_subtypes=auto_subtypes
+        )
         
         # 如果沒有選擇類別，顯示警告
         if not selected_categories:
             st.warning("⚠️ 請至少選擇一個生活機能類別")
+            return
         
         # 顯示選擇摘要
         if selected_categories:
-            self._render_selection_summary(selected_categories, selected_subtypes)
+            self._render_selection_summary(selected_categories, selected_subtypes, current_profile)
         
         # 開始分析按鈕
         st.markdown("---")
         self._render_action_buttons(
             analysis_mode, selected_houses, selected_categories,
-            radius, keyword, selected_subtypes, fav_df
+            radius, keyword, selected_subtypes, fav_df, current_profile
         )
+    
+    def _render_category_selection_with_preset(self, preset_categories=None, preset_subtypes=None):
+        """渲染類別選擇界面 - 支援預設選擇"""
+        selected_categories = []
+        selected_subtypes = {}
+        
+        if preset_categories is None:
+            preset_categories = []
+        
+        if preset_subtypes is None:
+            preset_subtypes = {}
+        
+        # 大類別選擇
+        st.markdown("#### 選擇大類別")
+        all_categories = list(PLACE_TYPES.keys())
+        
+        category_selection = {}
+        cols = st.columns(len(all_categories))
+        
+        for i, cat in enumerate(all_categories):
+            with cols[i]:
+                color = CATEGORY_COLORS.get(cat, "#000000")
+                
+                # 判斷是否為系統推薦的類別
+                is_recommended = cat in preset_categories
+                recommended_tag = "⭐ 推薦 " if is_recommended else ""
+                
+                st.markdown(f"""
+                <div style="text-align:center; margin-bottom:5px;">
+                    <span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">
+                        {recommended_tag}{cat}
+                    </span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                # 預設勾選：如果在預設類別中
+                default_value = cat in preset_categories
+                checkbox_key = f"main_cat_{cat}"
+                category_selection[cat] = st.checkbox(f"選擇{cat}", key=checkbox_key, value=default_value)
+        
+        # 細分設施選擇
+        selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
+        
+        if selected_main_cats:
+            st.markdown("#### 選擇細分設施")
+            
+            # 取得買家類型，用於顯示推薦標記
+            current_profile = st.session_state.get('buyer_profile', '')
+            profiles = self._get_buyer_profiles()
+            priority_cats = {}
+            secondary_cats = {}
+            
+            if current_profile and current_profile in profiles:
+                priority_cats = profiles[current_profile].get("priority_categories", {})
+                secondary_cats = profiles[current_profile].get("secondary_categories", {})
+            
+            for cat_idx, cat in enumerate(selected_main_cats):
+                with st.expander(f"📁 {cat} 類別細選", expanded=True):
+                    # 快速選擇按鈕
+                    col_select_all, col_clear_all, col_recommend = st.columns([1, 1, 2])
+                    
+                    with col_select_all:
+                        if st.button(f"全選 {cat}", key=f"select_all_{cat}", use_container_width=True):
+                            st.session_state[f"select_all_flag_{cat}"] = True
+                            st.rerun()
+                    
+                    with col_clear_all:
+                        if st.button(f"清除 {cat}", key=f"clear_all_{cat}", use_container_width=True):
+                            st.session_state[f"select_all_flag_{cat}"] = False
+                            st.rerun()
+                    
+                    with col_recommend:
+                        if current_profile:
+                            st.markdown(f"💡 **{current_profile}推薦**：依優先度排序")
+                    
+                    # 取得此類別的所有設施
+                    items = PLACE_TYPES[cat]
+                    num_columns = 3
+                    num_items = len(items) // 2
+                    items_per_row = (num_items + num_columns - 1) // num_columns
+                    
+                    # 判斷是否要全選
+                    select_all_flag_key = f"select_all_flag_{cat}"
+                    force_select_all = st.session_state.get(select_all_flag_key, False)
+                    
+                    # 獲取預設選擇的子類型
+                    default_subtypes = preset_subtypes.get(cat, []) if cat in preset_subtypes else []
+                    
+                    for row in range(items_per_row):
+                        cols = st.columns(num_columns)
+                        for col_idx in range(num_columns):
+                            item_idx = row + col_idx * items_per_row
+                            if item_idx * 2 + 1 < len(items):
+                                chinese_name = items[item_idx * 2]
+                                english_keyword = items[item_idx * 2 + 1]
+                                
+                                with cols[col_idx]:
+                                    # 判斷是否為推薦設施
+                                    is_priority = False
+                                    is_secondary = False
+                                    
+                                    if cat in priority_cats and english_keyword in priority_cats[cat]:
+                                        is_priority = True
+                                        recommended_text = "⭐ 優先"
+                                        bg_color = "#FFD70020"
+                                        border_color = "#FFD700"
+                                    elif cat in secondary_cats and english_keyword in secondary_cats[cat]:
+                                        is_secondary = True
+                                        recommended_text = "📌 次要"
+                                        bg_color = "#87CEEB20"
+                                        border_color = "#87CEEB"
+                                    else:
+                                        recommended_text = ""
+                                        bg_color = "white"
+                                        border_color = "#ddd"
+                                    
+                                    # 決定預設值
+                                    default_value = False
+                                    if force_select_all:
+                                        default_value = True
+                                    elif english_keyword in default_subtypes:
+                                        default_value = True
+                                    elif is_priority:
+                                        default_value = True  # 優先類別預設勾選
+                                    
+                                    checkbox_key = f"subcat_{cat}_{english_keyword}_{row}_{col_idx}"
+                                    
+                                    # 顯示設施名稱及推薦標記
+                                    if recommended_text:
+                                        st.markdown(f"""
+                                        <div style="border-left:4px solid {border_color}; padding-left:8px; margin-bottom:5px;">
+                                            <span style="font-weight:bold;">{chinese_name}</span>
+                                            <span style="background-color:{border_color}; color:black; padding:2px 6px; border-radius:12px; font-size:10px; margin-left:5px;">
+                                                {recommended_text}
+                                            </span>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                        checkbox = st.checkbox(" ", key=checkbox_key, label_visibility="collapsed", value=default_value)
+                                    else:
+                                        checkbox = st.checkbox(chinese_name, key=checkbox_key, value=default_value)
+                                    
+                                    if checkbox:
+                                        if cat not in selected_subtypes:
+                                            selected_subtypes[cat] = []
+                                        selected_subtypes[cat].append(english_keyword)
+                    
+                    # 清除全選標記
+                    if select_all_flag_key in st.session_state:
+                        del st.session_state[select_all_flag_key]
+                    
+                    # 顯示此類別已選擇數量
+                    if cat in selected_subtypes and selected_subtypes[cat]:
+                        st.caption(f"✅ 已選擇 {len(selected_subtypes[cat])} 種設施")
+                
+                # 如果有選擇子類型，將類別加入清單
+                if cat in selected_subtypes and selected_subtypes[cat]:
+                    selected_categories.append(cat)
+        
+        return selected_categories, selected_subtypes
     
     def _on_analysis_mode_change(self):
         """當分析模式改變時的處理"""
@@ -347,99 +731,43 @@ class ComparisonAnalyzer:
             with col3:
                 st.metric("價格差距", f"{price_diff:.1f}%")
     
-    def _render_category_selection(self):
-        """渲染類別選擇界面"""
-        selected_categories = []
-        selected_subtypes = {}
-        
-        # 大類別選擇
-        st.markdown("### 選擇大類別")
-        all_categories = list(PLACE_TYPES.keys())
-        
-        category_selection = {}
-        cols = st.columns(len(all_categories))
-        
-        for i, cat in enumerate(all_categories):
-            with cols[i]:
-                color = CATEGORY_COLORS.get(cat, "#000000")
-                st.markdown(f"""
-                <div style="text-align:center; margin-bottom:5px;">
-                    <span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">
-                        {cat}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                checkbox_key = f"main_cat_{cat}"
-                category_selection[cat] = st.checkbox(f"選擇{cat}", key=checkbox_key)
-        
-        # 細分設施選擇
-        selected_main_cats = [cat for cat, selected in category_selection.items() if selected]
-        
-        if selected_main_cats:
-            st.markdown("### 選擇細分設施")
-            
-            for cat_idx, cat in enumerate(selected_main_cats):
-                with st.expander(f"📁 {cat} 類別細選", expanded=True):
-                    select_all_key = f"select_all_{cat}"
-                    select_all = st.checkbox(f"選擇所有{cat}設施", key=select_all_key)
-                    
-                    if select_all:
-                        items = PLACE_TYPES[cat]
-                        selected_subtypes[cat] = items[1::2]
-                        selected_categories.append(cat)
-                        st.info(f"已選擇 {cat} 全部 {len(items)//2} 種設施")
-                    else:
-                        items = PLACE_TYPES[cat]
-                        num_columns = 3
-                        num_items = len(items) // 2
-                        items_per_row = (num_items + num_columns - 1) // num_columns
-                        
-                        for row in range(items_per_row):
-                            cols = st.columns(num_columns)
-                            for col_idx in range(num_columns):
-                                item_idx = row + col_idx * items_per_row
-                                if item_idx * 2 + 1 < len(items):
-                                    chinese_name = items[item_idx * 2]
-                                    english_keyword = items[item_idx * 2 + 1]
-                                    
-                                    with cols[col_idx]:
-                                        checkbox_key = f"subcat_{cat}_{english_keyword}_{row}_{col_idx}"
-                                        if st.checkbox(chinese_name, key=checkbox_key):
-                                            if cat not in selected_subtypes:
-                                                selected_subtypes[cat] = []
-                                            selected_subtypes[cat].append(english_keyword)
-                        
-                        if cat in selected_subtypes and selected_subtypes[cat]:
-                            selected_categories.append(cat)
-        
-        return selected_categories, selected_subtypes
-    
-    def _render_selection_summary(self, selected_categories, selected_subtypes):
-        """渲染選擇摘要 - 簡化版，只顯示基本摘要"""
+    def _render_selection_summary(self, selected_categories, selected_subtypes, current_profile=""):
+        """渲染選擇摘要"""
         st.markdown("---")
         st.subheader("📋 已選擇的設施摘要")
         
+        profiles = self._get_buyer_profiles()
+        
         # 使用網格布局顯示摘要
         num_cols = min(len(selected_categories), 4)
-        summary_cols = st.columns(num_cols)
-        
-        for idx, cat in enumerate(selected_categories):
-            with summary_cols[idx % num_cols]:
-                if cat in selected_subtypes:
-                    count = len(selected_subtypes[cat])
-                    color = CATEGORY_COLORS.get(cat, "#000000")
-                    
-                    st.markdown(f"""
-                    <div style="background-color:{color}20; padding:10px; border-radius:5px; 
-                                border-left:4px solid {color}; margin-bottom:10px;">
-                        <h4 style="color:{color}; margin:0;">{cat}</h4>
-                        <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
-                    </div>
-                    """, unsafe_allow_html=True)
+        if num_cols > 0:
+            summary_cols = st.columns(num_cols)
+            
+            for idx, cat in enumerate(selected_categories):
+                with summary_cols[idx % num_cols]:
+                    if cat in selected_subtypes:
+                        count = len(selected_subtypes[cat])
+                        color = CATEGORY_COLORS.get(cat, "#000000")
+                        
+                        # 判斷是否為此買家類型的推薦類別
+                        is_recommended = False
+                        if current_profile and current_profile in profiles:
+                            priority_cats = profiles[current_profile].get("priority_categories", {})
+                            secondary_cats = profiles[current_profile].get("secondary_categories", {})
+                            is_recommended = cat in priority_cats or cat in secondary_cats
+                        
+                        recommended_badge = "⭐ 推薦" if is_recommended else ""
+                        
+                        st.markdown(f"""
+                        <div style="background-color:{color}20; padding:10px; border-radius:5px; 
+                                    border-left:4px solid {color}; margin-bottom:10px;">
+                            <h4 style="color:{color}; margin:0;">{cat} {recommended_badge}</h4>
+                            <p style="margin:5px 0 0 0;">已選擇 {count} 種設施</p>
+                        </div>
+                        """, unsafe_allow_html=True)
     
     def _render_action_buttons(self, analysis_mode, selected_houses, selected_categories, 
-                              radius, keyword, selected_subtypes, fav_df):
+                              radius, keyword, selected_subtypes, fav_df, current_profile):
         """渲染操作按鈕"""
         col_start, col_clear = st.columns([3, 1])
         
@@ -459,7 +787,7 @@ class ComparisonAnalyzer:
                 # 開始分析流程
                 self._start_analysis_process(
                     analysis_mode, selected_houses, radius, keyword,
-                    selected_categories, selected_subtypes, fav_df
+                    selected_categories, selected_subtypes, fav_df, current_profile
                 )
         
         with col_clear:
@@ -481,10 +809,13 @@ class ComparisonAnalyzer:
         if not selected_houses:
             return "⚠️ 請選擇要分析的房屋"
         
+        if not st.session_state.get('buyer_profile'):
+            return "⚠️ 請先選擇買家類型"
+        
         return "OK"
     
     def _start_analysis_process(self, analysis_mode, selected_houses, radius, keyword,
-                               selected_categories, selected_subtypes, fav_df):
+                               selected_categories, selected_subtypes, fav_df, current_profile):
         """開始分析流程"""
         try:
             # 儲存分析設定
@@ -497,7 +828,8 @@ class ComparisonAnalyzer:
                 "selected_subtypes": selected_subtypes,
                 "server_key": self._get_server_key(),
                 "gemini_key": self._get_gemini_key(),
-                "fav_df_json": fav_df.to_json(orient='split')
+                "fav_df_json": fav_df.to_json(orient='split'),
+                "buyer_profile": current_profile
             }
             
             # 清除舊結果
@@ -541,7 +873,11 @@ class ComparisonAnalyzer:
             'used_prompt',
             'selected_template',
             'last_template',
-            'selected_houses'
+            'selected_houses',
+            'buyer_profile',
+            'auto_selected_categories',
+            'auto_selected_subtypes',
+            'suggested_radius'
         ]
         for key in keys_to_clear:
             if key in st.session_state:
@@ -630,7 +966,8 @@ class ComparisonAnalyzer:
                 "radius": settings["radius"],
                 "keyword": settings["keyword"],
                 "num_houses": len(houses_data),
-                "facilities_table": facilities_table
+                "facilities_table": facilities_table,
+                "buyer_profile": settings.get("buyer_profile", "未指定")
             }
             
             progress_bar.progress(100)
@@ -730,13 +1067,27 @@ class ComparisonAnalyzer:
                 return
             
             analysis_mode = results["analysis_mode"]
+            buyer_profile = results.get("buyer_profile", "未指定")
             
-            # 顯示分析標題
+            # 顯示分析標題與買家類型
             st.markdown("---")
+            
+            profiles = self._get_buyer_profiles()
+            profile_info = profiles.get(buyer_profile, {})
+            profile_icon = profile_info.get("icon", "👤")
+            
             if analysis_mode == "單一房屋分析":
-                st.markdown(f"## 📊 單一房屋分析結果")
+                st.markdown(f"## {profile_icon} {buyer_profile}視角 · 單一房屋分析結果")
             else:
-                st.markdown(f"## 📊 比較結果 ({results['num_houses']}間房屋)")
+                st.markdown(f"## {profile_icon} {buyer_profile}視角 · 比較結果 ({results['num_houses']}間房屋)")
+            
+            # 顯示買家類型分析重點
+            if profile_info:
+                with st.expander(f"📌 {buyer_profile} 分析重點說明", expanded=False):
+                    focus_points = profile_info.get("prompt_focus", [])
+                    st.markdown("**本次分析將特別關注：**")
+                    for point in focus_points:
+                        st.markdown(f"- {point}")
             
             # 顯示設施表格
             self._display_facilities_table(results)
@@ -1276,7 +1627,10 @@ class ComparisonAnalyzer:
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
-        # 準備AI分析資料
+        # 取得買家類型
+        buyer_profile = results.get("buyer_profile", "未指定")
+        
+        # 準備AI分析資料（已整合買家類型）
         analysis_text = self._prepare_analysis_prompt(
             results["houses_data"], 
             results["places_data"], 
@@ -1285,16 +1639,17 @@ class ComparisonAnalyzer:
             results["radius"],
             results["keyword"],
             results["analysis_mode"],
-            results.get("facilities_table", pd.DataFrame())
+            results.get("facilities_table", pd.DataFrame()),
+            buyer_profile  # 傳入買家類型
         )
         
         # 初始化自訂提示詞
         if "custom_prompt" not in st.session_state:
             st.session_state.custom_prompt = analysis_text
         
-        # 模板選擇
+        # 模板選擇 - 根據買家類型調整
         st.markdown("### 📋 提示詞模板選擇")
-        templates = self._get_prompt_templates(results["analysis_mode"])
+        templates = self._get_prompt_templates(results["analysis_mode"], buyer_profile)
         
         template_options = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
         
@@ -1329,20 +1684,21 @@ class ComparisonAnalyzer:
                 st.success("✅ 提示詞已儲存！")
         
         with col_info:
-            st.markdown("#### 💡 提示詞使用說明")
-            st.markdown("""
-            **預設提示詞包含：**
-            - 房屋資訊
-            - 搜尋條件
-            - 設施統計
-            - 分析要求
+            profiles = self._get_buyer_profiles()
+            profile_info = profiles.get(buyer_profile, {})
+            focus_points = profile_info.get("prompt_focus", [])
             
-            **您可以：**
-            1. 調整分析重點
-            2. 添加特定問題
-            3. 修改評分標準
-            4. 調整語言風格
-            """)
+            st.markdown(f"#### 💡 {buyer_profile} 分析重點")
+            if focus_points:
+                for point in focus_points:
+                    st.markdown(f"- {point}")
+            
+            st.markdown("---")
+            st.markdown("**您可以：**")
+            st.markdown("1. 調整分析重點")
+            st.markdown("2. 添加特定問題")
+            st.markdown("3. 修改評分標準")
+            st.markdown("4. 調整語言風格")
             
             if st.button("🔄 恢復預設提示詞", type="secondary", use_container_width=True, key="reset_prompt_btn_ai"):
                 st.session_state.custom_prompt = analysis_text
@@ -1417,7 +1773,8 @@ class ComparisonAnalyzer:
         # 下載報告
         if "analysis_results" in st.session_state:
             results = st.session_state.analysis_results
-            report_title = "房屋分析報告" if results["analysis_mode"] == "單一房屋分析" else f"{results['num_houses']}間房屋比較報告"
+            buyer_profile = results.get("buyer_profile", "未指定")
+            report_title = f"{buyer_profile}視角-房屋分析報告" if results["analysis_mode"] == "單一房屋分析" else f"{buyer_profile}視角-{results['num_houses']}間房屋比較報告"
             
             report_text = f"{report_title}\n生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
             report_text += f"AI 分析結果：\n{st.session_state.gemini_result}"
@@ -1431,7 +1788,6 @@ class ComparisonAnalyzer:
                 key="download_report_btn_main"
             )
     
-    # 以下是原有的輔助方法
     def _create_facilities_table(self, houses_data, places_data):
         """建立設施表格資料"""
         all_facilities = []
@@ -1459,8 +1815,15 @@ class ComparisonAnalyzer:
         return pd.DataFrame(all_facilities)
     
     def _prepare_analysis_prompt(self, houses_data, places_data, facility_counts, 
-                                selected_categories, radius, keyword, analysis_mode, facilities_table):
-        """準備分析提示詞"""
+                                selected_categories, radius, keyword, analysis_mode, 
+                                facilities_table, buyer_profile):
+        """準備分析提示詞 - 根據買家類型客製化"""
+        
+        profiles = self._get_buyer_profiles()
+        profile_info = profiles.get(buyer_profile, {})
+        focus_points = profile_info.get("prompt_focus", [])
+        profile_icon = profile_info.get("icon", "👤")
+        
         if analysis_mode == "單一房屋分析":
             house_name = list(houses_data.keys())[0]
             house_info = houses_data[house_name]
@@ -1477,27 +1840,24 @@ class ComparisonAnalyzer:
                 chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
                 subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
             
-            table_summary = ""
-            if not facilities_table.empty:
-                sample_facilities = facilities_table.head(20).to_string(index=False)
-                table_summary = f"""
-                
-                【設施表格摘要（前20筆）】
-                以下是搜尋到的設施表格資料：
-                {sample_facilities}
-                
-                【表格欄位說明】
-                - 房屋：房屋名稱
-                - 房屋標題：房屋詳細標題
-                - 房屋地址：房屋地址
-                - 設施名稱：設施名稱
-                - 設施子類別：設施的具體類型（如超市、便利商店等）
-                - 距離(公尺)：設施距離房屋的距離
-                - 經度、緯度：設施的GPS座標
-                """
+            # 找出優先設施的滿足情況
+            priority_facilities = []
+            if buyer_profile in profiles:
+                priority_cats = profiles[buyer_profile].get("priority_categories", {})
+                for cat, subtypes in priority_cats.items():
+                    for subtype in subtypes:
+                        found = False
+                        for p in places:
+                            if p[1] == subtype or ENGLISH_TO_CHINESE.get(p[1]) == subtype:
+                                found = True
+                                break
+                        priority_facilities.append(f"- {subtype}: {'✅ 有' if found else '❌ 無'}")
             
             prompt = f"""
-            你是一位專業的房地產分析師，請對以下房屋的生活機能進行詳細分析。
+            你是一位專業的房地產分析師，請以「{profile_icon} {buyer_profile}」的視角，對以下房屋進行詳細的生活機能分析。
+            
+            【分析對象身份】{buyer_profile}
+            【本次分析特別關注】{', '.join(focus_points)}
             
             【房屋資訊】
             - 標題：{house_info['title']}
@@ -1514,27 +1874,28 @@ class ComparisonAnalyzer:
             - 最近設施：{min_distance} 公尺
             
             【各類型設施數量】
-            {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
+            {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)][:15])}
             
-            {table_summary}
+            【{buyer_profile}優先設施檢核】
+            {chr(10).join(priority_facilities[:10])}
             
-            【請分析以下面向】
-            1. 生活便利性評估（以1-5星評分）
-            2. 設施完整性分析（哪些設施類型充足，哪些缺乏）
-            3. 適合的居住族群分析（單身、小家庭、大家庭、退休族等）
-            4. 投資潛力評估（以1-5星評分）
-            5. 優點總結（至少3點）
-            6. 缺點提醒（至少2點）
-            7. 建議改善或補充的生活機能
-            8. 綜合評價與建議
+            【請以{buyer_profile}的視角進行分析】
+            1. **生活便利性評分**（1-5星）：針對{buyer_profile}最在意的{focus_points[0] if focus_points else "生活機能"}進行評分
+            2. **設施完整性分析**：哪些{buyer_profile}需要的設施充足？哪些明顯缺乏？
+            3. **適合度評估**：此房屋對{buyer_profile}的整體適合度評分（1-5星）
+            4. **優點總結**（至少3點，需緊扣{buyer_profile}需求）
+            5. **缺點提醒**（至少2點，從{buyer_profile}視角）
+            6. **與理想物件的差距**：距離{buyer_profile}的「夢幻房屋」還差哪些條件？
+            7. **綜合評價與建議**
             
-            請使用專業但易懂的語言，提供具體、實用的建議。
+            請使用專業但溫暖、貼近{buyer_profile}生活經驗的語言，避免過於冰冷的數據堆疊。
             """
         
         else:  # 多房屋比較
             num_houses = len(houses_data)
             
             if num_houses == 1:
+                # 單一房屋但選擇了比較模式
                 house_name = list(houses_data.keys())[0]
                 house_info = houses_data[house_name]
                 places = places_data[house_name]
@@ -1543,23 +1904,11 @@ class ComparisonAnalyzer:
                 distances = [p[5] for p in places]
                 avg_distance = sum(distances) / len(distances) if distances else 0
                 
-                # 設施子類別統計
-                subtype_stats = {}
-                for cat, subtype, name, lat, lng, dist, pid in places:
-                    chinese_subtype = ENGLISH_TO_CHINESE.get(subtype, subtype)
-                    subtype_stats[chinese_subtype] = subtype_stats.get(chinese_subtype, 0) + 1
-                
-                table_summary = ""
-                if not facilities_table.empty:
-                    sample_facilities = facilities_table.head(15).to_string(index=False)
-                    table_summary = f"""
-                    
-                    【設施表格摘要（前15筆）】
-                    {sample_facilities}
-                    """
-                
                 prompt = f"""
-                你是一位專業的房地產分析師，請對以下房屋的生活機能進行綜合評估。
+                你是一位專業的房地產分析師，請以「{profile_icon} {buyer_profile}」的視角，對以下房屋進行綜合評估。
+                
+                【分析對象身份】{buyer_profile}
+                【本次分析特別關注】{', '.join(focus_points)}
                 
                 【房屋資訊】
                 - 標題：{house_info['title']}
@@ -1568,30 +1917,19 @@ class ComparisonAnalyzer:
                 【搜尋條件】
                 - 搜尋半徑：{radius} 公尺
                 - 選擇的生活機能類別：{', '.join(selected_categories)}
-                - 額外關鍵字：{keyword if keyword else '無'}
                 
-                【設施統計】
-                - 總設施數量：{count} 個
-                - 平均距離：{avg_distance:.0f} 公尺
+                【請以{buyer_profile}視角提供深度分析】
+                1. 此區域對{buyer_profile}的生活機能整體評價
+                2. 與{buyer_profile}理想居住條件的匹配度
+                3. 未來5年對此{buyer_profile}的居住價值變化預測
+                4. 風險因素分析（從{buyer_profile}角度）
+                5. 最佳使用建議
                 
-                【各類型設施數量】
-                {chr(10).join([f'- {subtype}: {num} 個' for subtype, num in sorted(subtype_stats.items(), key=lambda x: x[1], reverse=True)])}
-                
-                {table_summary}
-                
-                【請提供深度分析】
-                1. 區域生活機能整體評價
-                2. 與類似區域的比較優勢
-                3. 未來發展潛力評估
-                4. 投資回報率預估
-                5. 風險因素分析
-                6. 最佳使用建議
-                
-                請提供專業、客觀的分析報告。
+                請提供具體、客觀、貼近{buyer_profile}需求的分析報告。
                 """
             else:
                 # 多個房屋比較
-                stats_summary = "統計摘要：\n"
+                stats_summary = "【各房屋設施統計】\n"
                 for house_name, count in facility_counts.items():
                     if places_data[house_name]:
                         nearest = min([p[5] for p in places_data[house_name]])
@@ -1601,12 +1939,12 @@ class ComparisonAnalyzer:
                 
                 # 排名
                 ranked_houses = sorted(facility_counts.items(), key=lambda x: x[1], reverse=True)
-                ranking_text = "設施數量排名：\n"
+                ranking_text = "【設施數量排名】\n"
                 for rank, (house_name, count) in enumerate(ranked_houses, 1):
                     ranking_text += f"第{rank}名：{house_name} ({count}個設施)\n"
                 
                 # 房屋詳細資訊
-                houses_details = "房屋詳細資訊：\n"
+                houses_details = "【房屋詳細資訊】\n"
                 for house_name, house_info in houses_data.items():
                     houses_details += f"""
                     {house_name}:
@@ -1614,134 +1952,125 @@ class ComparisonAnalyzer:
                     - 地址：{house_info['address']}
                     """
                 
-                # 建立表格摘要
-                table_summary = ""
-                if not facilities_table.empty:
-                    table_summary = "\n\n【各房屋設施摘要】\n"
-                    for house_name in houses_data.keys():
-                        house_facilities = facilities_table[facilities_table['房屋'] == house_name].head(10)
-                        if not house_facilities.empty:
-                            table_summary += f"\n{house_name} 的前10個設施：\n"
-                            table_summary += house_facilities[['設施名稱', '設施子類別', '距離(公尺)']].to_string(index=False) + "\n"
-                
                 prompt = f"""
-                你是一位專業的房地產分析師，請對以下{num_houses}間房屋進行綜合比較分析。
+                你是一位專業的房地產分析師，請以「{profile_icon} {buyer_profile}」的視角，對以下{num_houses}間房屋進行綜合比較分析。
+                
+                【分析對象身份】{buyer_profile}
+                【本次分析特別關注】{', '.join(focus_points)}
                 
                 【搜尋條件】
                 - 搜尋半徑：{radius} 公尺
                 - 選擇的生活機能類別：{', '.join(selected_categories)}
-                - 額外關鍵字：{keyword if keyword else '無'}
                 
                 {houses_details}
                 
-                【設施統計】
                 {stats_summary}
                 
                 {ranking_text}
                 
-                {table_summary}
+                【請以{buyer_profile}視角進行比較分析】
                 
-                【請依序分析】
-                1. 總體設施豐富度排名與分析
-                2. 各類型設施完整性比較
-                3. 生活便利性綜合評估（為每間房屋評1-5星）
-                4. 對「自住者」的推薦排名與原因
-                5. 對「投資者」的推薦排名與原因
-                6. 各房屋的優勢特色分析
-                7. 各房屋的潛在風險提醒
-                8. 綜合性價比評估
-                9. 最終推薦與總結
+                1. **總評排名**：依照對{buyer_profile}的整體適合度，將這些房屋由高到低排序，並簡述原因
                 
-                【分析要求】
-                - 提供清晰的排名和評分
-                - 每項評估都要有具體依據
-                - 考慮不同生活階段的需求
-                - 給出實用的購買建議
+                2. **各面向評分**（1-5星）：
+                   {chr(10).join([f'   - {point}評分' for point in focus_points])}
                 
-                請使用專業但易懂的語言，提供全面、客觀的分析。
+                3. **{buyer_profile}首選推薦**：
+                   - 最佳選擇是哪一間？為什麼？
+                   - 備選方案是哪一間？為什麼？
+                
+                4. **各房屋優勢分析**（從{buyer_profile}視角）：
+                   {chr(10).join([f'   - {house_name}的優勢' for house_name in houses_data.keys()])}
+                
+                5. **各房屋潛在風險**（從{buyer_profile}視角）：
+                   {chr(10).join([f'   - {house_name}的風險' for house_name in houses_data.keys()])}
+                
+                6. **CP值評估**：綜合價格與生活機能，哪一間對{buyer_profile}最划算？
+                
+                7. **最終購買建議**：如果{buyer_profile}今天就要決定，你會建議選擇哪一間？為什麼？
+                
+                請以溫暖、貼近{buyer_profile}生活情境的語言呈現，讓使用者感受到分析是「為我量身打造」的。
                 """
         
         return prompt
     
-    def _get_prompt_templates(self, analysis_mode):
-        """取得提示詞模板"""
+    def _get_prompt_templates(self, analysis_mode, buyer_profile=""):
+        """取得提示詞模板 - 根據買家類型調整"""
+        
         templates = {
             "default": {
-                "name": "預設分析模板",
-                "description": "標準的全面性分析"
+                "name": "🎯 預設分析模板",
+                "description": f"為{buyer_profile}量身打造的標準分析"
             },
             "detailed": {
-                "name": "詳細分析模板",
-                "description": "更深入的詳細分析",
-                "content": """
-                你是一位專業的房地產分析師，請對以下房屋進行極其詳細的分析。
+                "name": "🔍 深度解析模板",
+                "description": f"更深入、更全面的{buyer_profile}視角分析",
+                "content": f"""
+                你是一位專業的房地產分析師，請以「{buyer_profile}}」的身份，對房屋進行極其詳細的分析。
                 
-                【要求】
-                1. 提供1-5星的詳細評分，並說明每個星等的評分標準
-                2. 分析每個生活機能類別的優缺點
-                3. 提供具體的數據支持和比較
-                4. 考慮不同時間段的需求（平日/假日、白天/晚上）
-                5. 分析噪音、交通、安全等環境因素
-                6. 預測未來3-5年的發展潛力
-                7. 提供具體的改善建議
+                【分析要求】
+                1. 請完全代入{buyer_profile}的角色，用「我」的角度來分析（例如：「對我來說，這個捷運站距離...」）
+                2. 提供1-5星的詳細評分，並具體說明每個星等的給分依據
+                3. 分析平日與假日的不同生活情境
+                4. 考慮不同季節、不同時間段的使用需求
+                5. 預測未來3-5年，這個區域對{buyer_profile}的價值變化
+                6. 具體描述住在這裡的一天生活樣貌
                 
-                請使用專業術語，但讓非專業人士也能理解。
+                請用溫暖、生活化的語言，讓使用者感受到你是真正懂他需求的事家。
                 """
             },
             "investment": {
-                "name": "投資分析模板",
-                "description": "專注於投資回報率的分析",
-                "content": """
-                你是一位房地產投資專家，請從投資角度分析以下房產。
+                "name": "💰 投資分析模板",
+                "description": "專注於投資價值的分析",
+                "content": f"""
+                你是一位房地產投資專家，請從「{buyer_profile}」的投資需求角度進行分析。
                 
                 【投資分析重點】
-                1. 租金收益率預估
-                2. 資本增值潛力評估
-                3. 目標租客族群分析
-                4. 空置風險評估
-                5. 管理成本估算
-                6. 投資回收期計算
-                7. 競爭優勢分析
-                8. 風險因素與對策
+                1. 未來轉手難易度評估
+                2. 租金投報率預估（若{buyer_profile}有出租可能）
+                3. 區域發展潛力分析
+                4. 持有成本與增值空間評估
+                5. 與周邊同類型物件的競爭力比較
+                6. 風險因素量化分析
                 
-                請提供具體的數字和百分比估計。
+                請提供具體的數字估計和市場比較。
                 """
             },
-            "family": {
-                "name": "家庭需求模板",
-                "description": "專注於家庭生活需求的分析",
-                "content": """
-                你是一位家庭生活規劃專家，請分析以下房屋對家庭的適合度。
+            "lifestyle": {
+                "name": "🏡 生活情境模板",
+                "description": "描繪實際居住的生活樣貌",
+                "content": f"""
+                你是一位生活風格規劃師，請以「{buyer_profile}」的視角，描繪住在這裡的生活樣貌。
                 
-                【家庭需求分析】
-                1. 兒童教育資源評估（學校、補習班、圖書館）
-                2. 育兒便利性（公園、醫療、安全）
-                3. 家庭採購便利性（超市、市場）
-                4. 家庭娛樂設施（公園、運動場所）
-                5. 社區安全與環境
-                6. 通勤便利性對家庭的影響
-                7. 鄰里關係與社區活動
+                【請描述】
+                1. 平日早晨：如何開始一天？（通勤、買早餐、送小孩等）
+                2. 工作日的晚上：下班後如何放鬆？（採買、運動、外食等）
+                3. 週末時光：假日可以去哪裡？（休閒、親子、聚會等）
+                4. 緊急狀況：臨時需要醫療或採買時的應變方案
+                5. 社區生活：可能與鄰居產生什麼互動？
+                6. 季節變化：夏天、冬天、雨天時的生活便利性差異
                 
-                考慮不同家庭階段的需求（新生兒、學齡兒童、青少年）。
+                請用說故事的方式，讓使用者「看見」自己住在這裡的樣子。
                 """
             },
             "simple": {
-                "name": "簡明報告模板",
-                "description": "簡潔扼要的分析報告",
-                "content": """
-                請提供簡潔的房屋分析報告，包含：
+                "name": "📋 簡明報告模板",
+                "description": "快速掌握重點的分析",
+                "content": f"""
+                請以「{buyer_profile}」的視角，提供簡潔的房屋分析報告：
                 
                 【簡明分析】
-                1. 整體評價（1-5星）
-                2. 主要優點（3點）
-                3. 主要缺點（3點）
-                4. 最適合族群
+                1. 整體適合度評分（1-5星）
+                2. 三大優點（對{buyer_profile}來說）
+                3. 三大缺點（對{buyer_profile}來說）
+                4. 最適合的{buyer_profile}類型
                 5. 一句話總結
                 
-                請使用簡短的段落和要點式說明。
+                請使用要點式說明，方便快速閱讀。
                 """
             }
         }
+        
         return templates
     
     def _get_favorites_data(self):
