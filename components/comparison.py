@@ -1,3 +1,4 @@
+# components/comparison.py
 import streamlit as st
 import pandas as pd
 import time
@@ -61,7 +62,7 @@ class ComparisonAnalyzer:
                 "icon": "🏠",
                 "description": "年輕首購，預算有限，追求高效率生活",
                 "priority_categories": {
-                    "交通運輸": ["捷運站", "公車站", "火車站", "輕軌站", "ubike站"],
+                    "交通運輸": ["捷運站", "公車站", "火車站", "輕軌站"],
                     "購物": ["便利商店", "超市", "市場"],
                     "餐飲美食": ["咖啡廳", "速食店", "早餐餐廳"],
                     "金融機構": ["銀行", "郵局", "ATM"]
@@ -78,7 +79,7 @@ class ComparisonAnalyzer:
                 "description": "有小孩的家庭，重視教育、安全與居住品質",
                 "priority_categories": {
                     "教育": ["小學", "中學", "幼兒園", "圖書館"],
-                    "公園綠地": ["公園", "兒童遊戲場", "狗公園"],
+                    "生活服務": ["公園", "兒童遊戲場", "狗公園"],
                     "健康與保健": ["小兒科", "診所", "藥局", "醫院"],
                     "購物": ["超市", "便利商店", "市場"]
                 },
@@ -95,7 +96,7 @@ class ComparisonAnalyzer:
                 "description": "退休長輩，重視醫療、寧靜、日常採買便利",
                 "priority_categories": {
                     "健康與保健": ["醫院", "診所", "藥局", "復健科", "中醫"],
-                    "公園綠地": ["公園", "河濱公園", "登山步道"],
+                    "生活服務": ["公園", "河濱公園", "登山步道"],
                     "購物": ["傳統市場", "超市", "便利商店"],
                     "宗教": ["廟宇", "教堂"]
                 },
@@ -113,7 +114,7 @@ class ComparisonAnalyzer:
                 "priority_categories": {
                     "交通運輸": ["捷運站", "公車站", "火車站", "高鐵站", "客運站", "輕軌站"],
                     "購物": ["便利商店", "超市"],
-                    "餐飲美食": ["咖啡廳", "連鎖餐廳", "速食店"],
+                    "餐飲美食": ["咖啡廳", "速食店"],
                     "金融機構": ["ATM", "銀行", "郵局"]
                 },
                 "secondary_categories": {
@@ -729,7 +730,8 @@ class ComparisonAnalyzer:
                     "設施子類別": p[1],
                     "距離(公尺)": p[5],
                     "經度": p[4],
-                    "緯度": p[3]
+                    "緯度": p[3],
+                    "place_id": p[6]
                 })
         return pd.DataFrame(rows)
     
@@ -757,13 +759,40 @@ class ComparisonAnalyzer:
         
         # 設施表格
         st.markdown("---")
-        st.subheader("📋 設施詳細資料")
+        st.subheader("📋 設施詳細資料表格")
         df = res.get("facilities_table", pd.DataFrame())
         if not df.empty:
-            st.info(f"📈 共 {len(df)} 筆設施")
-            st.dataframe(df.head(50), use_container_width=True, hide_index=True)
+            st.info(f"📈 共找到 {len(df)} 筆設施資料")
+            
+            # 顯示表格（包含 Google Maps 連結）
+            st.dataframe(
+                df.head(50),
+                use_container_width=True,
+                column_config={
+                    "房屋": st.column_config.TextColumn(width="small"),
+                    "房屋標題": st.column_config.TextColumn(width="medium"),
+                    "房屋地址": st.column_config.TextColumn(width="medium"),
+                    "設施名稱": st.column_config.TextColumn(width="large"),
+                    "設施子類別": st.column_config.TextColumn(width="small"),
+                    "距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
+                    "place_id": st.column_config.TextColumn("Google地圖", 
+                        help="點擊連結在Google地圖中查看",
+                        width="small"
+                    )
+                },
+                column_order=["房屋", "房屋標題", "房屋地址", "設施名稱", "設施子類別", "距離(公尺)", "place_id"],
+                hide_index=True
+            )
+            
+            # 下載按鈕
             csv = df.to_csv(index=False, encoding='utf-8-sig')
-            st.download_button("📥 下載 CSV", csv, f"設施_{time.strftime('%Y%m%d')}.csv", "text/csv")
+            st.download_button(
+                label="📥 下載完整設施資料 (CSV)",
+                data=csv,
+                file_name=f"設施資料_{time.strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key="download_facilities_csv"
+            )
         
         # 統計
         st.markdown("---")
@@ -775,6 +804,9 @@ class ComparisonAnalyzer:
         
         # 地圖
         self._display_maps(res)
+        
+        # 設施列表（含地圖連結）
+        self._display_facilities_list_with_links(res)
         
         # AI 分析
         self._display_ai_analysis(res)
@@ -791,9 +823,9 @@ class ComparisonAnalyzer:
             mini = min(dists)
             
             c1, c2, c3 = st.columns(3)
-            c1.metric("總設施", f"{cnt} 個")
-            c2.metric("平均距離", f"{avg:.0f} 公尺")
-            c3.metric("最近設施", f"{mini} 公尺")
+            c1.metric("🏠 總設施數量", f"{cnt} 個")
+            c2.metric("📏 平均距離", f"{avg:.0f} 公尺")
+            c3.metric("📍 最近設施", f"{mini} 公尺")
             
             # 類別統計
             from collections import Counter
@@ -801,15 +833,38 @@ class ComparisonAnalyzer:
             top10 = cat_cnt.most_common(10)
             
             if top10:
-                st.markdown("#### 🏪 設施類型 TOP 10")
-                chart = {
-                    "xAxis": {"type": "category", "data": [x[0] for x in top10], 
-                            "axisLabel": {"rotate": 45}},
+                st.markdown("#### 🏪 各類型設施分布")
+                chart_data = {
+                    "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+                    "grid": {"left": "3%", "right": "4%", "bottom": "15%", "top": "10%", "containLabel": True},
+                    "xAxis": {
+                        "type": "category",
+                        "data": [x[0] for x in top10],
+                        "axisLabel": {"rotate": 45, "interval": 0}
+                    },
                     "yAxis": {"type": "value"},
-                    "series": [{"type": "bar", "data": [x[1] for x in top10]}],
-                    "tooltip": {"trigger": "axis"}
+                    "series": [{
+                        "type": "bar",
+                        "data": [x[1] for x in top10],
+                        "itemStyle": {
+                            "color": {
+                                "type": "linear",
+                                "x": 0, "y": 0, "x2": 0, "y2": 1,
+                                "colorStops": [
+                                    {"offset": 0, "color": "#5470c6"},
+                                    {"offset": 1, "color": "#91cc75"}
+                                ]
+                            }
+                        },
+                        "label": {"show": True, "position": "top"}
+                    }]
                 }
-                st_echarts(chart, height="400px")
+                st_echarts(chart_data, height="500px")
+                
+                # 詳細統計表
+                with st.expander("📊 查看詳細設施類型統計"):
+                    subtype_df = pd.DataFrame(top10, columns=["設施類型", "數量"])
+                    st.dataframe(subtype_df, use_container_width=True, hide_index=True)
     
     def _show_multi_stats(self, res):
         """多房屋統計"""
@@ -825,12 +880,26 @@ class ComparisonAnalyzer:
         if len(names) > 1:
             st.markdown("#### 📊 設施數量排名")
             data = sorted([(n, c) for n, c in cnts.items()], key=lambda x: x[1], reverse=True)
-            chart = {
+            chart_data = {
                 "xAxis": {"type": "category", "data": [x[0] for x in data]},
                 "yAxis": {"type": "value"},
-                "series": [{"type": "bar", "data": [x[1] for x in data]}]
+                "series": [{
+                    "type": "bar",
+                    "data": [x[1] for x in data],
+                    "itemStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "#1E90FF"},
+                                {"offset": 1, "color": "#87CEFA"}
+                            ]
+                        }
+                    }
+                }],
+                "tooltip": {"trigger": "axis"}
             }
-            st_echarts(chart, height="300px")
+            st_echarts(chart_data, height="300px")
     
     def _display_maps(self, res):
         """顯示地圖"""
@@ -839,7 +908,7 @@ class ComparisonAnalyzer:
         
         bk = self._get_browser_key()
         if not bk:
-            st.error("❌ 請填寫 Browser Key")
+            st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
             return
         
         houses = res["houses_data"]
@@ -848,80 +917,299 @@ class ComparisonAnalyzer:
         
         if len(houses) == 1:
             n = list(houses.keys())[0]
-            self._render_map(houses[n]["lat"], houses[n]["lng"], places[n], radius, n, houses[n], bk)
+            self._render_map_with_links(
+                houses[n]["lat"], houses[n]["lng"], places[n], radius, n, houses[n], bk
+            )
         elif len(houses) <= 3:
             cols = st.columns(len(houses))
             for i, (n, info) in enumerate(houses.items()):
                 with cols[i]:
-                    st.markdown(f"**{n}**")
-                    self._render_map(info["lat"], info["lng"], places[n], radius, n, info, bk)
+                    st.markdown(f"### {n}")
+                    self._render_map_with_links(
+                        info["lat"], info["lng"], places[n], radius, n, info, bk
+                    )
         else:
             tabs = st.tabs(list(houses.keys()))
             for i, (n, info) in enumerate(houses.items()):
                 with tabs[i]:
-                    self._render_map(info["lat"], info["lng"], places[n], radius, n, info, bk)
+                    self._render_map_with_links(
+                        info["lat"], info["lng"], places[n], radius, n, info, bk
+                    )
     
-    def _render_map(self, lat, lng, places, radius, title, house_info, key):
-        """渲染單張地圖"""
-        if not places:
-            st.info(f"📭 {title} 半徑 {radius} 公尺內無設施")
+    def _render_map_with_links(self, lat, lng, places, radius, title, house_info, browser_key):
+        """渲染地圖 - 包含完整的 Google Maps 連結"""
+        if not browser_key:
+            st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
             return
         
-        data = []
+        if not places:
+            st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
+            return
+        
+        # 準備設施資料（包含 place_id 和地圖連結）
+        facilities_data = []
         for p in places:
             color = CATEGORY_COLORS.get(p[0], "#666")
-            data.append({
-                "name": p[2], "cat": p[0], "sub": p[1],
-                "lat": p[3], "lng": p[4], "dist": p[5],
+            facilities_data.append({
+                "name": p[2],
+                "category": p[0],
+                "subtype": p[1],
+                "lat": p[3],
+                "lng": p[4],
+                "distance": p[5],
                 "color": color,
-                "url": f"https://www.google.com/maps/search/?api=1&query={p[3]},{p[4]}"
+                "place_id": p[6],
+                "maps_url": f"https://www.google.com/maps/search/?api=1&query={p[3]},{p[4]}&query_place_id={p[6]}"
             })
         
-        # 圖例
-        cats = {}
-        for d in data:
-            cats[d["cat"]] = d["color"]
-        legend = "".join([f'<div style="display:flex; align-items:center; margin-bottom:5px;"><div style="width:12px; height:12px; background:{c}; margin-right:5px;"></div><span>{cat}</span></div>' 
-                         for cat, c in cats.items()])
+        # 建立圖例
+        categories = {}
+        for f in facilities_data:
+            categories[f["category"]] = f["color"]
         
+        legend_html = ""
+        for cat, color in categories.items():
+            legend_html += f"""
+            <div class="legend-item">
+                <div class="legend-color" style="background-color:{color};"></div>
+                <span>{cat}</span>
+            </div>
+            """
+        
+        # 地圖 HTML
         html_content = f"""
         <!DOCTYPE html>
         <html>
-        <head><title>{title}地圖</title>
-        <style>#map {{height:450px; width:100%;}} #legend {{background:white; padding:10px; border-radius:5px; margin:10px; font-size:12px;}}</style>
+        <head>
+            <title>{title} 周邊設施地圖</title>
+            <style>
+                #map {{
+                    height: 500px;
+                    width: 100%;
+                }}
+                #legend {{
+                    background: white;
+                    padding: 10px;
+                    border: 1px solid #ccc;
+                    border-radius: 5px;
+                    font-size: 12px;
+                    margin: 10px;
+                    max-width: 200px;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                }}
+                .legend-item {{
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 5px;
+                }}
+                .legend-color {{
+                    width: 12px;
+                    height: 12px;
+                    margin-right: 5px;
+                    border-radius: 2px;
+                }}
+                .info-window {{
+                    padding: 12px;
+                    max-width: 260px;
+                }}
+                .info-window h5 {{
+                    margin: 0 0 8px 0;
+                    color: #333;
+                    font-size: 16px;
+                }}
+                .info-window p {{
+                    margin: 5px 0;
+                    color: #666;
+                }}
+                .maps-link {{
+                    display: inline-block;
+                    margin-top: 10px;
+                    padding: 8px 12px;
+                    background-color: #1a73e8;
+                    color: white !important;
+                    text-decoration: none;
+                    border-radius: 4px;
+                    font-size: 12px;
+                    font-weight: 500;
+                }}
+                .maps-link:hover {{
+                    background-color: #1557b0;
+                }}
+            </style>
         </head>
         <body>
-        <div id="map"></div>
-        <script>
-        function initMap() {{
-            var center = {{lat: {lat}, lng: {lng}}};
-            var map = new google.maps.Map(document.getElementById('map'), {{zoom: 16, center: center}});
-            var main = new google.maps.Marker({{position: center, map: map, title: "{title}", icon: {{url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png", scaledSize: new google.maps.Size(40,40)}}}});
-            var win = new google.maps.InfoWindow({{content: '<div><h4>🏠 {title}</h4><p>地址: {house_info["address"] if house_info else "未知"}</p><p>半徑: {radius}公尺</p><p>設施: {len(data)}個</p></div>'}});
-            main.addListener('click', function() {{ win.open(map, main); }});
-            var legendDiv = document.createElement('div'); legendDiv.id = 'legend'; legendDiv.innerHTML = '<h4 style="margin:0 0 10px;">圖例</h4>' + `{legend}`;
-            map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
-            var facilities = {json.dumps(data, ensure_ascii=False)};
-            facilities.forEach(function(f) {{
-                var pos = {{lat: f.lat, lng: f.lng}};
-                var marker = new google.maps.Marker({{
-                    position: pos, map: map, title: f.name + " (" + f.dist + "m)",
-                    icon: {{path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: f.color, fillOpacity: 0.9, strokeColor: "#FFF", strokeWeight: 2}}
-                }});
-                var info = '<div><h5 style="margin:0 0 5px;">' + f.name + '</h5><p><span style="color:' + f.color + ';font-weight:bold;">' + f.cat + ' - ' + f.sub + '</span></p><p>距離: ' + f.dist + '公尺</p><a href="' + f.url + '" target="_blank" style="display:inline-block; background:#1a73e8; color:white; padding:5px 10px; text-decoration:none; border-radius:3px;">🗺️ 查看地圖</a></div>';
-                var infowindow = new google.maps.InfoWindow({{content: info}});
-                marker.addListener('click', function() {{ infowindow.open(map, marker); }});
-            }});
-            var circle = new google.maps.Circle({{strokeColor: "#FF0000", strokeOpacity: 0.8, strokeWeight: 2, fillColor: "#FF0000", fillOpacity: 0.1, map: map, center: center, radius: {radius}}});
-            setTimeout(function() {{ win.open(map, main); }}, 500);
-        }}
-        </script>
-        <script src="https://maps.googleapis.com/maps/api/js?key={key}&callback=initMap" async defer></script>
+            <div id="map"></div>
+            
+            <script>
+                function initMap() {{
+                    // 中心點
+                    var center = {{lat: {lat}, lng: {lng}}};
+                    
+                    // 建立地圖
+                    var map = new google.maps.Map(document.getElementById('map'), {{
+                        zoom: 16,
+                        center: center,
+                        mapTypeControl: true,
+                        streetViewControl: true,
+                        fullscreenControl: true
+                    }});
+                    
+                    // 主房屋標記
+                    var mainMarker = new google.maps.Marker({{
+                        position: center,
+                        map: map,
+                        title: "{title}",
+                        icon: {{
+                            url: "http://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                            scaledSize: new google.maps.Size(40, 40)
+                        }},
+                        zIndex: 1000
+                    }});
+                    
+                    // 主房屋資訊視窗
+                    var mainInfoContent = '<div class="info-window">' +
+                                         '<h5>🏠 {title}</h5>' +
+                                         '<p><strong>地址：</strong>{house_info["address"] if house_info else "未知"}</p>' +
+                                         '<p><strong>搜尋半徑：</strong>{radius} 公尺</p>' +
+                                         '<p><strong>設施數量：</strong>{len(facilities_data)} 個</p>' +
+                                         '</div>';
+                    
+                    var mainInfoWindow = new google.maps.InfoWindow({{
+                        content: mainInfoContent
+                    }});
+                    
+                    mainMarker.addListener("click", function() {{
+                        mainInfoWindow.open(map, mainMarker);
+                    }});
+                    
+                    // 建立圖例
+                    var legendDiv = document.createElement('div');
+                    legendDiv.id = 'legend';
+                    legendDiv.innerHTML = '<h4 style="margin-top:0; margin-bottom:10px;">設施類別圖例</h4>' + `{legend_html}`;
+                    map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
+                    
+                    // 添加設施標記
+                    var facilities = {json.dumps(facilities_data, ensure_ascii=False)};
+                    
+                    facilities.forEach(function(facility) {{
+                        var position = {{lat: facility.lat, lng: facility.lng}};
+                        
+                        var marker = new google.maps.Marker({{
+                            position: position,
+                            map: map,
+                            title: facility.name + " (" + facility.distance + "m)",
+                            icon: {{
+                                path: google.maps.SymbolPath.CIRCLE,
+                                scale: 8,
+                                fillColor: facility.color,
+                                fillOpacity: 0.9,
+                                strokeColor: "#FFFFFF",
+                                strokeWeight: 2
+                            }},
+                            animation: google.maps.Animation.DROP
+                        }});
+                        
+                        var infoContent = '<div class="info-window">' +
+                                          '<h5>' + facility.name + '</h5>' +
+                                          '<p>' +
+                                          '<span style="color:' + facility.color + '; font-weight:bold;">' + 
+                                          facility.category + ' - ' + facility.subtype + 
+                                          '</span></p>' +
+                                          '<p><strong>距離：</strong>' + facility.distance + ' 公尺</p>' +
+                                          '<a href="' + facility.maps_url + '" target="_blank" class="maps-link">' +
+                                          '🗺️ 在 Google 地圖中查看</a>' +
+                                          '</div>';
+                        
+                        var infoWindow = new google.maps.InfoWindow({{
+                            content: infoContent
+                        }});
+                        
+                        marker.addListener("click", function() {{
+                            infoWindow.open(map, marker);
+                        }});
+                    }});
+                    
+                    // 繪製搜尋半徑圓
+                    var circle = new google.maps.Circle({{
+                        strokeColor: "#FF0000",
+                        strokeOpacity: 0.8,
+                        strokeWeight: 2,
+                        fillColor: "#FF0000",
+                        fillOpacity: 0.1,
+                        map: map,
+                        center: center,
+                        radius: {radius}
+                    }});
+                    
+                    // 自動打開主房屋資訊視窗
+                    setTimeout(function() {{
+                        mainInfoWindow.open(map, mainMarker);
+                    }}, 1000);
+                }}
+                
+                function handleMapError() {{
+                    document.getElementById('map').innerHTML = 
+                        '<div style="padding:20px; text-align:center; color:red;">' +
+                        '<h3>❌ 地圖載入失敗</h3>' +
+                        '<p>請檢查 Google Maps API Key 是否正確</p>' +
+                        '</div>';
+                }}
+            </script>
+            
+            <script src="https://maps.googleapis.com/maps/api/js?key={browser_key}&callback=initMap" 
+                    async defer 
+                    onerror="handleMapError()"></script>
         </body>
         </html>
         """
-        st.markdown(f"**🗺️ {title} - 周邊設施**  (共 {len(places)} 個)")
-        html(html_content, height=500)
+        
+        st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
+        st.markdown(f"📊 **共找到 {len(places)} 個設施** (搜尋半徑: {radius}公尺)")
+        html(html_content, height=550)
+    
+    def _display_facilities_list_with_links(self, res):
+        """顯示設施列表 - 包含 Google Maps 連結按鈕"""
+        st.markdown("---")
+        st.subheader("📍 全部設施列表")
+        
+        for house_name, places in res["places_data"].items():
+            if places:
+                with st.expander(f"🏠 {house_name} - 共 {len(places)} 個設施", expanded=False):
+                    for i, p in enumerate(places, 1):
+                        cat, subtype, name, lat, lng, dist, pid = p
+                        color = CATEGORY_COLORS.get(cat, "#666")
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
+                        
+                        # 距離分類
+                        if dist <= 300:
+                            dist_color = "#28a745"
+                            dist_badge = "很近"
+                        elif dist <= 600:
+                            dist_color = "#ffc107"
+                            dist_badge = "中等"
+                        else:
+                            dist_color = "#dc3545"
+                            dist_badge = "較遠"
+                        
+                        col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
+                        
+                        with col1:
+                            st.markdown(f"**{i}.** {name}")
+                        
+                        with col2:
+                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{subtype}</span>', 
+                                      unsafe_allow_html=True)
+                        
+                        with col3:
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺 ({dist_badge})</span>', 
+                                      unsafe_allow_html=True)
+                        
+                        with col4:
+                            st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
+                        
+                        st.divider()
+            else:
+                st.info(f"📭 {house_name} 周圍未找到設施")
     
     def _display_ai_analysis(self, res):
         """AI 分析"""
@@ -942,7 +1230,7 @@ class ComparisonAnalyzer:
         # 模板
         templates = self._get_prompt_templates(profile)
         opt = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
-        sel = st.selectbox("📋 提示詞模板", list(opt.keys()), format_func=lambda x: opt[x], key="tmpl")
+        sel = st.selectbox("📋 提示詞模板選擇", list(opt.keys()), format_func=lambda x: opt[x], key="tmpl")
         
         if sel == "default":
             st.session_state.custom_prompt = prompt
@@ -951,36 +1239,56 @@ class ComparisonAnalyzer:
         
         c1, c2 = st.columns([3, 1])
         with c1:
-            edited = st.text_area("📝 編輯提示詞", st.session_state.custom_prompt, height=350, key="pedit")
-            if st.button("💾 儲存", use_container_width=True):
+            edited = st.text_area("📝 AI 分析提示詞設定", st.session_state.custom_prompt, height=350, key="pedit")
+            if st.button("💾 儲存提示詞修改", use_container_width=True, key="save_prompt"):
                 st.session_state.custom_prompt = edited
-                st.success("已儲存")
+                st.success("✅ 提示詞已儲存！")
         with c2:
             pinfo = self._get_buyer_profiles().get(profile, {})
             st.markdown(f"#### 💡 {profile} 分析重點")
             for pt in pinfo.get("prompt_focus", [])[:4]:
                 st.markdown(f"- {pt}")
             st.markdown("---")
-            if st.button("🔄 恢復預設", use_container_width=True):
+            st.markdown("**您可以：**")
+            st.markdown("1. 調整分析重點")
+            st.markdown("2. 添加特定問題")
+            st.markdown("3. 修改評分標準")
+            if st.button("🔄 恢復預設提示詞", use_container_width=True, key="reset_prompt"):
                 st.session_state.custom_prompt = prompt
                 st.rerun()
         
-        if st.button("🚀 開始AI分析", type="primary", use_container_width=True):
+        if st.button("🚀 開始AI分析", type="primary", use_container_width=True, key="start_ai"):
             self._call_gemini(edited)
         
         if "gemini_result" in st.session_state:
             st.markdown("### 📋 AI 分析報告")
+            
+            with st.expander("ℹ️ 查看本次使用的提示詞摘要", expanded=False):
+                used = st.session_state.used_prompt
+                st.text(used[:500] + ("..." if len(used) > 500 else ""))
+            
+            st.markdown("---")
             st.markdown(st.session_state.gemini_result)
+            st.markdown("---")
             
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("🔄 重新分析", use_container_width=True):
+                if st.button("🔄 重新分析", use_container_width=True, key="reanalyze"):
                     del st.session_state.gemini_result
                     del st.session_state.used_prompt
                     st.rerun()
             with c2:
-                report = f"{profile}視角-分析報告\n{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n{st.session_state.gemini_result}"
-                st.download_button("📥 下載報告", report, f"{profile}_報告_{time.strftime('%Y%m%d')}.txt", use_container_width=True)
+                report_title = f"{profile}視角-房屋分析報告" if res["analysis_mode"] == "單一房屋分析" else f"{profile}視角-{res['num_houses']}間房屋比較報告"
+                report = f"{report_title}\n生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                report += f"AI 分析結果：\n{st.session_state.gemini_result}"
+                st.download_button(
+                    label="📥 下載分析報告",
+                    data=report,
+                    file_name=f"{report_title}_{time.strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain",
+                    use_container_width=True,
+                    key="download_report"
+                )
     
     def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, table, profile):
         """建立提示詞 - 完全客製化買家視角"""
@@ -1022,7 +1330,6 @@ class ComparisonAnalyzer:
 請用溫暖、貼近生活的語言，讓使用者感受到這是「為我量身打造的建議」。
 """
         else:
-            # 多房屋比較
             house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
             rank_list = "\n".join([f"{i+1}. {n}（{counts[n]}個設施）" 
                                   for i, (n, _) in enumerate(sorted(counts.items(), key=lambda x: x[1], reverse=True))])
@@ -1053,20 +1360,50 @@ class ComparisonAnalyzer:
     def _get_prompt_templates(self, profile=""):
         """提示詞模板"""
         return {
-            "default": {"name": "🎯 預設模板", "description": f"{profile}視角標準分析"},
-            "simple": {"name": "📋 簡明模板", "description": "快速掌握重點", 
-                      "content": f"請以{profile}視角，用5要點分析：1.評分 2.三大優點 3.三大缺點 4.適合誰 5.一句話結論"},
-            "lifestyle": {"name": "🏡 生活情境", "description": "描繪居住樣貌",
-                         "content": f"請以{profile}身份，描述平日、週末、緊急狀況下的生活便利性"},
-            "investment": {"name": "💰 投資價值", "description": "增值潛力分析",
-                         "content": f"請以{profile}的投資需求，分析轉手性、租金投報、區域發展"}
+            "default": {"name": "🎯 預設分析模板", "description": f"{profile}視角標準分析"},
+            "simple": {"name": "📋 簡明報告模板", "description": "快速掌握重點", 
+                      "content": f"""
+請以{profile}視角，提供簡潔的房屋分析報告：
+
+1. **整體適合度評分**（1-5星）
+2. **三大優點**
+3. **三大缺點**
+4. **最適合的居住族群**
+5. **一句話總結**
+
+請使用要點式說明，方便快速閱讀。
+"""},
+            "lifestyle": {"name": "🏡 生活情境模板", "description": "描繪實際居住樣貌",
+                         "content": f"""
+請以{profile}的身份，描繪住在這裡的生活樣貌：
+
+1. **平日早晨**：如何開始一天？
+2. **工作日晚間**：下班後如何放鬆？
+3. **週末時光**：假日可以去哪裡？
+4. **緊急狀況**：臨時需要醫療或採買時的應變方案
+5. **季節變化**：夏天、冬天、雨天的生活便利性差異
+
+請用說故事的方式，讓使用者「看見」自己住在這裡的樣子。
+"""},
+            "investment": {"name": "💰 投資分析模板", "description": "專注投資價值分析",
+                         "content": f"""
+請從{profile}的投資需求角度進行分析：
+
+1. **未來轉手難易度**評估
+2. **租金投報率**預估
+3. **區域發展潛力**分析
+4. **持有成本**與**增值空間**評估
+5. **風險因素**量化分析
+
+請提供具體的數字估計和市場比較。
+"""}
         }
     
     def _call_gemini(self, prompt):
         """呼叫 Gemini API"""
         now = time.time()
         if now - st.session_state.get("last_gemini_call", 0) < 30:
-            st.warning("⏳ 請等待30秒後再試")
+            st.warning("⏳ AI 分析請等待30秒後再試")
             return
         
         st.session_state.last_gemini_call = now
@@ -1076,7 +1413,7 @@ class ComparisonAnalyzer:
                 import google.generativeai as genai
                 key = st.session_state.get("GEMINI_KEY", "")
                 if not key:
-                    st.error("❌ 請填寫 Gemini Key")
+                    st.error("❌ 請在側邊欄填入 Gemini Key")
                     return
                 
                 genai.configure(api_key=key)
@@ -1087,7 +1424,7 @@ class ComparisonAnalyzer:
                 st.session_state.used_prompt = prompt
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Gemini 錯誤: {e}")
+                st.error(f"❌ Gemini API 錯誤: {e}")
     
     # ============= 輔助方法 =============
     
