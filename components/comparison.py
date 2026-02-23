@@ -9,6 +9,7 @@ import requests
 import math
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
+from collections import Counter
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,7 +19,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES, CHINESE_TO_CATEGORY
+    from components.place_types import PLACE_TYPES, CHINESE_TO_CATEGORY, NUISANCE_TYPES
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -26,6 +27,7 @@ except ImportError as e:
     st.warning(f"無法載入設定: {e}")
     # 避免後續錯誤
     PLACE_TYPES = {}
+    NUISANCE_TYPES = {}
     CHINESE_TO_CATEGORY = {}
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
@@ -47,16 +49,17 @@ class ComparisonAnalyzer:
             'last_gemini_call': 0,
             'buyer_profile': None,
             'auto_selected_categories': [],
-            'auto_selected_subtypes': {}
+            'auto_selected_subtypes': {},
+            'analysis_type': '生活機能分析'  # 新增：分析類型
         }
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
     
-    # ============= 買家類型定義（完全對應你的純中文 place_types）=============
+    # ============= 買家類型定義 =============
     
     def _get_buyer_profiles(self):
-        """定義買家類型 - 關鍵字完全對應 place_types.py 的中文"""
+        """定義買家類型"""
         return {
             "首購族": {
                 "icon": "🏠",
@@ -72,7 +75,8 @@ class ComparisonAnalyzer:
                     "生活服務": ["公園", "電影院"]
                 },
                 "radius": 500,
-                "prompt_focus": ["通勤便利性", "日常採買效率", "預算內最高CP值", "夜間生活便利性"]
+                "prompt_focus": ["通勤便利性", "日常採買效率", "預算內最高CP值", "夜間生活便利性"],
+                "prompt_template": "default"  # 預設使用哪個提示詞模板
             },
             "家庭": {
                 "icon": "👨‍👩‍👧‍👦",
@@ -89,7 +93,8 @@ class ComparisonAnalyzer:
                     "生活服務": ["社區中心", "運動中心"]
                 },
                 "radius": 800,
-                "prompt_focus": ["學區品質與距離", "親子友善環境", "社區安全性", "假日家庭活動空間"]
+                "prompt_focus": ["學區品質與距離", "親子友善環境", "社區安全性", "假日家庭活動空間"],
+                "prompt_template": "lifestyle"
             },
             "長輩退休族": {
                 "icon": "🧓",
@@ -106,7 +111,8 @@ class ComparisonAnalyzer:
                     "餐飲美食": ["素食餐廳", "傳統小吃"]
                 },
                 "radius": 600,
-                "prompt_focus": ["醫療資源可及性", "散步運動空間", "傳統市場便利性", "安靜宜居環境"]
+                "prompt_focus": ["醫療資源可及性", "散步運動空間", "傳統市場便利性", "安靜宜居環境"],
+                "prompt_template": "simple"
             },
             "外地工作": {
                 "icon": "🚄",
@@ -122,12 +128,30 @@ class ComparisonAnalyzer:
                     "生活服務": ["洗衣店", "電影院"]
                 },
                 "radius": 400,
-                "prompt_focus": ["交通樞紐距離", "南北往來便利性", "高效率生活圈", "短暫停留採買便利性"]
+                "prompt_focus": ["交通樞紐距離", "南北往來便利性", "高效率生活圈", "短暫停留採買便利性"],
+                "prompt_template": "investment"
+            },
+            "投資客": {
+                "icon": "💰",
+                "description": "房產投資，重視增值潛力與租金報酬",
+                "priority_categories": {
+                    "交通運輸": ["捷運站", "火車站", "公車站"],
+                    "購物": ["超市", "便利商店", "百貨公司"],
+                    "餐飲美食": ["餐廳", "咖啡廳"],
+                    "生活服務": ["公園"]
+                },
+                "secondary_categories": {
+                    "教育": ["大學", "中學"],
+                    "健康與保健": ["醫院", "診所"]
+                },
+                "radius": 700,
+                "prompt_focus": ["區域發展潛力", "未來轉手性", "租金投報率", "增值空間"],
+                "prompt_template": "investment"
             }
         }
     
     def _auto_select_categories(self, profile_name):
-        """根據買家類型自動選擇設施 - 完全對應純中文 place_types"""
+        """根據買家類型自動選擇設施"""
         profiles = self._get_buyer_profiles()
         if profile_name not in profiles:
             return [], {}
@@ -142,17 +166,28 @@ class ComparisonAnalyzer:
                 auto_categories.append(cat)
                 if cat not in auto_subtypes:
                     auto_subtypes[cat] = []
-                # 只加入存在於 PLACE_TYPES[cat] 的有效子類別
-                valid_subtypes = [s for s in subtypes if s in PLACE_TYPES[cat]]
+                # 只加入存在於 PLACE_TYPES[cat] 的有效子類別，並去除重複
+                valid_subtypes = []
+                seen = set()
+                for s in subtypes:
+                    if s in PLACE_TYPES[cat] and s not in seen:
+                        valid_subtypes.append(s)
+                        seen.add(s)
                 auto_subtypes[cat].extend(valid_subtypes)
         
         # 處理次要類別
         for cat, subtypes in profile.get("secondary_categories", {}).items():
             if cat in PLACE_TYPES:
-                auto_categories.append(cat)
+                if cat not in auto_categories:
+                    auto_categories.append(cat)
                 if cat not in auto_subtypes:
                     auto_subtypes[cat] = []
-                valid_subtypes = [s for s in subtypes if s in PLACE_TYPES[cat]]
+                valid_subtypes = []
+                seen = set(auto_subtypes.get(cat, []))
+                for s in subtypes:
+                    if s in PLACE_TYPES[cat] and s not in seen:
+                        valid_subtypes.append(s)
+                        seen.add(s)
                 auto_subtypes[cat].extend(valid_subtypes)
         
         # 移除重複的類別
@@ -176,42 +211,35 @@ class ComparisonAnalyzer:
                 self._show_analysis_in_progress()
                 return
             
-            self._render_analysis_setup(fav_df)
+            # 分析類型選擇
+            st.markdown("### 📊 選擇分析類型")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🏪 生活機能分析", 
+                           type="primary" if st.session_state.analysis_type == "生活機能分析" else "secondary",
+                           use_container_width=True):
+                    st.session_state.analysis_type = "生活機能分析"
+                    st.rerun()
+            with col2:
+                if st.button("⚠️ 嫌惡設施分析", 
+                           type="primary" if st.session_state.analysis_type == "嫌惡設施分析" else "secondary",
+                           use_container_width=True):
+                    st.session_state.analysis_type = "嫌惡設施分析"
+                    st.rerun()
             
-            if "analysis_results" in st.session_state:
-                self._display_analysis_results(st.session_state.analysis_results)
+            st.markdown("---")
+            
+            if st.session_state.analysis_type == "生活機能分析":
+                self._render_life_function_analysis(fav_df)
+            else:
+                self._render_nuisance_analysis(fav_df)
                 
         except Exception as e:
             st.error(f"❌ 渲染分析頁面時發生錯誤: {str(e)}")
             st.button("🔄 重新整理頁面", on_click=self._reset_page)
     
-    def _show_analysis_in_progress(self):
-        """顯示分析進行中"""
-        st.warning("🔍 分析進行中，請稍候...")
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        
-        for i in range(100):
-            progress_bar.progress(i + 1)
-            status_text.text(f"分析中... {i+1}%")
-            time.sleep(0.01)
-        
-        st.success("✅ 分析完成！")
-        time.sleep(1)
-        st.session_state.analysis_in_progress = False
-        st.rerun()
-    
-    def _reset_page(self):
-        """重設頁面"""
-        keys = ['analysis_in_progress', 'analysis_results', 'gemini_result', 
-                'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes']
-        for k in keys:
-            if k in st.session_state:
-                del st.session_state[k]
-    
-    def _render_analysis_setup(self, fav_df):
-        """渲染分析設定 - 買家類型在最前面"""
-        
+    def _render_life_function_analysis(self, fav_df):
+        """渲染生活機能分析"""
         # ============= 步驟1: 買家類型選擇 =============
         st.markdown("### 👤 步驟1：誰要住這裡？")
         st.markdown("選擇買家類型，系統將**自動推薦**最適合的生活機能")
@@ -258,21 +286,21 @@ class ComparisonAnalyzer:
         # ============= 步驟2: 房屋選擇 =============
         st.markdown("### 🏠 步驟2：選擇要分析的房屋")
         
-        mode = st.radio("選擇分析模式", ["單一房屋分析", "多房屋比較"], horizontal=True, key="mode")
+        mode = st.radio("選擇分析模式", ["單一房屋分析", "多房屋比較"], horizontal=True, key="life_mode")
         st.session_state.analysis_mode = mode
         
         options = fav_df['標題'] + " | " + fav_df['地址']
         selected = []
         
         if mode == "單一房屋分析":
-            choice = st.selectbox("選擇要分析的房屋", options, key="single_select")
+            choice = st.selectbox("選擇要分析的房屋", options, key="life_single_select")
             if choice:
                 selected = [choice]
                 house = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice].iloc[0]
                 self._show_house_preview_single(house)
         else:
             default = options[:min(2, len(options))] if len(options) >= 1 else []
-            selected = st.multiselect("選擇要比較的房屋", options, default=default, key="multi_select")
+            selected = st.multiselect("選擇要比較的房屋", options, default=default, key="life_multi_select")
             if selected:
                 self._show_houses_preview_multi(fav_df, selected)
         
@@ -295,20 +323,20 @@ class ComparisonAnalyzer:
         
         suggest_r = st.session_state.get('suggested_radius', DEFAULT_RADIUS)
         radius = st.slider(f"搜尋半徑（{profiles[current_profile]['icon']} 建議：{suggest_r}公尺）", 
-                          100, 2000, suggest_r, 100, key="radius")
+                          100, 2000, suggest_r, 100, key="life_radius")
         
-        keyword = st.text_input("額外關鍵字搜尋（選填）", key="keyword", placeholder="例如：公園、健身房")
+        keyword = st.text_input("額外關鍵字搜尋（選填）", key="life_keyword", placeholder="例如：公園、健身房")
         
         st.markdown("---")
         
-        # ============= 步驟4: 生活機能選擇（已自動勾選）=============
+        # ============= 步驟4: 生活機能選擇 =============
         st.subheader("🔍 步驟4：確認生活機能類別")
         
         auto_cats = st.session_state.get('auto_selected_categories', [])
         auto_subs = st.session_state.get('auto_selected_subtypes', {})
         
         if auto_cats:
-            total = sum(len(v) for v in auto_subs.values())
+            total = sum(len(set(v)) for v in auto_subs.values())  # 使用 set 確保不重複
             st.info(f"📌 **{current_profile} 推薦設施**：已自動選擇 {len(auto_cats)} 大類、{total} 種設施，可手動調整")
         
         selected_cats, selected_subs = self._render_category_selection(auto_cats, auto_subs)
@@ -324,20 +352,412 @@ class ComparisonAnalyzer:
         col1, col2 = st.columns([3, 1])
         with col1:
             btn_text = "🚀 開始分析" if mode == "單一房屋分析" else "🚀 開始比較"
-            if st.button(btn_text, type="primary", use_container_width=True, key="start"):
+            if st.button(btn_text, type="primary", use_container_width=True, key="life_start"):
                 valid = self._validate_inputs(selected, selected_cats)
                 if valid == "OK":
                     self._start_analysis(mode, selected, radius, keyword, 
-                                        selected_cats, selected_subs, fav_df, current_profile)
+                                        selected_cats, selected_subs, fav_df, current_profile, "生活機能")
                 else:
                     st.error(valid)
         with col2:
-            if st.button("🗑️ 清除", use_container_width=True, key="clear"):
+            if st.button("🗑️ 清除", use_container_width=True, key="life_clear"):
                 self._clear_all()
                 st.rerun()
     
+    def _render_nuisance_analysis(self, fav_df):
+        """渲染嫌惡設施分析"""
+        # ============= 步驟1: 買家類型選擇 =============
+        st.markdown("### 👤 步驟1：誰要住這裡？")
+        st.markdown("選擇買家類型，系統將**自動推薦**最需注意的嫌惡設施")
+        
+        profiles = self._get_buyer_profiles()
+        col_profiles = st.columns(len(profiles))
+        
+        for idx, (profile_name, profile_info) in enumerate(profiles.items()):
+            with col_profiles[idx]:
+                is_selected = st.session_state.get('buyer_profile') == profile_name
+                border = "3px solid #4CAF50" if is_selected else "1px solid #ddd"
+                bg = "#f1f8e9" if is_selected else "white"
+                
+                st.markdown(f"""
+                <div style="border:{border}; border-radius:10px; padding:15px; 
+                            background-color:{bg}; text-align:center; height:170px;
+                            margin-bottom:10px;">
+                    <div style="font-size:36px;">{profile_info['icon']}</div>
+                    <div style="font-size:18px; font-weight:bold; margin:5px 0;">{profile_name}</div>
+                    <div style="font-size:12px; color:#666;">{profile_info['description']}</div>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                btn_type = "primary" if is_selected else "secondary"
+                if st.button(f"選擇 {profile_name}", key=f"nuisance_select_{profile_name}", 
+                           type=btn_type, use_container_width=True):
+                    st.session_state.buyer_profile = profile_name
+                    # 不自動選擇嫌惡設施，但會根據買家類型給出建議
+                    st.rerun()
+        
+        current_profile = st.session_state.get('buyer_profile')
+        if current_profile:
+            profile_info = profiles[current_profile]
+            st.success(f"✅ 當前選擇：**{profile_info['icon']} {current_profile}**")
+            
+            # 根據買家類型顯示特別需要注意的嫌惡設施
+            st.markdown("#### 💡 建議注意的嫌惡設施類型")
+            if current_profile == "家庭":
+                st.info("👨‍👩‍👧‍👦 家庭建議特別注意：宮廟、工業區、特種行業、高架道路")
+            elif current_profile == "長輩退休族":
+                st.info("🧓 長輩建議特別注意：噪音源（宮廟、高架）、空氣汙染（工業區、焚化爐）、安全問題（治安死角）")
+            elif current_profile == "首購族":
+                st.info("🏠 首購建議平衡考量：避開明顯嫌惡設施，但不必過度敏感，以預算為優先")
+            elif current_profile == "投資客":
+                st.info("💰 投資角度：嫌惡設施會影響轉手性，需特別注意公墓、殯儀館、工業區、宮廟")
+        else:
+            st.info("👆 請先選擇買家類型")
+            return
+        
+        st.markdown("---")
+        
+        # ============= 步驟2: 房屋選擇 =============
+        st.markdown("### 🏠 步驟2：選擇要分析的房屋")
+        
+        mode = st.radio("選擇分析模式", ["單一房屋分析", "多房屋比較"], horizontal=True, key="nuisance_mode")
+        st.session_state.analysis_mode = mode
+        
+        options = fav_df['標題'] + " | " + fav_df['地址']
+        selected = []
+        
+        if mode == "單一房屋分析":
+            choice = st.selectbox("選擇要分析的房屋", options, key="nuisance_single_select")
+            if choice:
+                selected = [choice]
+                house = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == choice].iloc[0]
+                self._show_house_preview_single(house)
+        else:
+            default = options[:min(2, len(options))] if len(options) >= 1 else []
+            selected = st.multiselect("選擇要比較的房屋", options, default=default, key="nuisance_multi_select")
+            if selected:
+                self._show_houses_preview_multi(fav_df, selected)
+        
+        if not selected:
+            if mode == "多房屋比較" and len(options) > 0:
+                st.info("請至少選擇一間房屋")
+            return
+        
+        st.session_state.selected_houses = selected
+        st.markdown("---")
+        
+        # ============= 步驟3: 嫌惡設施選擇 =============
+        st.markdown("### ⚙️ 步驟3：選擇要分析的嫌惡設施")
+        
+        # API 檢查
+        k1, k2, k3 = st.columns(3)
+        with k1: st.metric("Server Key", "✅" if self._get_server_key() else "❌")
+        with k2: st.metric("Gemini Key", "✅" if self._get_gemini_key() else "❌")
+        with k3: st.metric("Browser Key", "✅" if self._get_browser_key() else "❌")
+        
+        # 嫌惡設施選擇
+        selected_nuisances = self._render_nuisance_selection()
+        
+        if not selected_nuisances:
+            st.warning("⚠️ 請至少選擇一個嫌惡設施類別")
+            return
+        
+        # 搜尋半徑
+        radius = st.slider("搜尋半徑（公尺）", 300, 2000, 1000, 100, key="nuisance_radius")
+        
+        st.markdown("---")
+        
+        # ============= 開始分析 =============
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            btn_text = "🚀 開始分析" if mode == "單一房屋分析" else "🚀 開始比較"
+            if st.button(btn_text, type="primary", use_container_width=True, key="nuisance_start"):
+                valid = self._validate_nuisance_inputs(selected, selected_nuisances)
+                if valid == "OK":
+                    self._start_nuisance_analysis(mode, selected, radius, 
+                                                 selected_nuisances, fav_df, current_profile)
+                else:
+                    st.error(valid)
+        with col2:
+            if st.button("🗑️ 清除", use_container_width=True, key="nuisance_clear"):
+                self._clear_all()
+                st.rerun()
+    
+    def _render_nuisance_selection(self):
+        """渲染嫌惡設施選擇"""
+        selected = []
+        
+        st.markdown("#### 選擇嫌惡設施類型（可複選）")
+        
+        cols = st.columns(3)
+        for i, (nuisance_name, nuisance_info) in enumerate(NUISANCE_TYPES.items()):
+            with cols[i % 3]:
+                color = nuisance_info.get("color", "#dc3545")
+                level = nuisance_info.get("level", "中")
+                
+                # 根據等級顯示不同標記
+                if level == "高":
+                    level_badge = "🔴 高度注意"
+                elif level == "中":
+                    level_badge = "🟡 中度注意"
+                else:
+                    level_badge = "🟢 低度注意"
+                
+                st.markdown(f"""
+                <div style="border-left:4px solid {color}; padding-left:8px; margin-bottom:5px;">
+                    <span style="font-weight:bold;">{nuisance_name}</span>
+                    <span style="color:{color}; font-size:12px; margin-left:5px;">{level_badge}</span>
+                </div>
+                """, unsafe_allow_html=True)
+                
+                if st.checkbox(f"選擇 {nuisance_name}", key=f"nuisance_{i}"):
+                    selected.append(nuisance_name)
+        
+        if selected:
+            st.success(f"✅ 已選擇 {len(selected)} 類嫌惡設施")
+        
+        return selected
+    
+    def _validate_nuisance_inputs(self, houses, nuisances):
+        """驗證嫌惡設施輸入"""
+        if not self._get_browser_key(): return "❌ 請填寫 Google Maps Browser Key"
+        if not self._get_server_key(): return "❌ 請填寫 Server Key"
+        if not self._get_gemini_key(): return "❌ 請填寫 Gemini Key"
+        if not nuisances: return "⚠️ 請至少選擇一個嫌惡設施類別"
+        if not houses: return "⚠️ 請選擇房屋"
+        if not st.session_state.get('buyer_profile'): return "⚠️ 請先選擇買家類型"
+        return "OK"
+    
+    def _start_nuisance_analysis(self, mode, houses, radius, nuisances, fav_df, profile):
+        """開始嫌惡設施分析"""
+        try:
+            st.session_state.analysis_settings = {
+                "mode": mode, 
+                "houses": houses, 
+                "radius": radius, 
+                "nuisances": nuisances,
+                "server": self._get_server_key(),
+                "gemini": self._get_gemini_key(), 
+                "fav": fav_df.to_json(orient='split'),
+                "profile": profile,
+                "analysis_type": "嫌惡設施"
+            }
+            self._clear_old()
+            st.session_state.analysis_in_progress = True
+            self._execute_nuisance_analysis()
+        except Exception as e:
+            st.error(f"❌ 啟動失敗: {e}")
+            st.session_state.analysis_in_progress = False
+    
+    def _execute_nuisance_analysis(self):
+        """執行嫌惡設施分析核心"""
+        try:
+            s = st.session_state.analysis_settings
+            fav_df = pd.read_json(s["fav"], orient='split')
+            
+            bar = st.progress(0)
+            txt = st.empty()
+            
+            # 步驟1: 解析地址
+            txt.text("🔍 步驟 1/4: 解析地址...")
+            houses_data = {}
+            for i, opt in enumerate(s["houses"]):
+                h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
+                name = f"房屋 {chr(65+i)}" if len(s["houses"]) > 1 else "分析房屋"
+                lat, lng = geocode_address(h["地址"], s["server"])
+                if not lat or not lng:
+                    st.error(f"❌ {name} 地址解析失敗")
+                    st.session_state.analysis_in_progress = False
+                    return
+                houses_data[name] = {
+                    "name": name, "title": h['標題'], "address": h['地址'],
+                    "lat": lat, "lng": lng
+                }
+            bar.progress(25)
+            
+            # 步驟2: 查詢嫌惡設施
+            txt.text("🔍 步驟 2/4: 查詢周邊嫌惡設施...")
+            nuisances_data = {}
+            total = len(houses_data)
+            for idx, (name, info) in enumerate(houses_data.items()):
+                nuisances = self._query_nuisances(
+                    info["lat"], info["lng"], s["server"],
+                    s["nuisances"], s["radius"]
+                )
+                nuisances_data[name] = nuisances
+                bar.progress(25 + int(((idx+1)/total)*25))
+            bar.progress(50)
+            
+            # 步驟3: 統計
+            txt.text("📊 步驟 3/4: 計算風險評分...")
+            counts = {n: len(p) for n, p in nuisances_data.items()}
+            
+            # 計算風險分數
+            risk_scores = {}
+            for name, nuisances in nuisances_data.items():
+                score = 0
+                for n in nuisances:
+                    nuisance_type = n[0]
+                    distance = n[5]
+                    weight = self._get_nuisance_weight(nuisance_type)
+                    # 距離越近權重越高
+                    if distance <= 300:
+                        distance_factor = 1.0
+                    elif distance <= 600:
+                        distance_factor = 0.7
+                    elif distance <= 900:
+                        distance_factor = 0.4
+                    else:
+                        distance_factor = 0.2
+                    score += weight * distance_factor
+                risk_scores[name] = round(score, 1)
+            
+            table = self._create_nuisance_table(houses_data, nuisances_data)
+            bar.progress(75)
+            
+            # 步驟4: 儲存
+            txt.text("💾 步驟 4/4: 儲存結果...")
+            st.session_state.analysis_results = {
+                "analysis_mode": s["mode"],
+                "analysis_type": "嫌惡設施",
+                "houses_data": houses_data,
+                "places_data": nuisances_data,
+                "facility_counts": counts,
+                "risk_scores": risk_scores,
+                "selected_nuisances": s["nuisances"],
+                "radius": s["radius"],
+                "num_houses": len(houses_data),
+                "facilities_table": table,
+                "buyer_profile": s.get("profile", "未指定")
+            }
+            bar.progress(100)
+            txt.text("✅ 分析完成！")
+            
+            st.session_state.analysis_in_progress = False
+            time.sleep(1)
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ 分析失敗: {e}")
+            st.session_state.analysis_in_progress = False
+    
+    def _query_nuisances(self, lat, lng, api_key, nuisances, radius):
+        """查詢嫌惡設施"""
+        results = []
+        seen = set()
+        
+        # 收集所有關鍵字
+        keywords = []
+        for nuisance in nuisances:
+            if nuisance in NUISANCE_TYPES:
+                keywords.extend(NUISANCE_TYPES[nuisance].get("keywords", []))
+        
+        if not keywords:
+            return results
+        
+        bar = st.progress(0)
+        txt = st.empty()
+        completed = 0
+        
+        for keyword in keywords:
+            completed += 1
+            txt.text(f"搜尋 {completed}/{len(keywords)}: {keyword}")
+            bar.progress(completed / len(keywords))
+            
+            try:
+                places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
+                for p in places:
+                    if p[5] > radius:
+                        continue
+                    pid = p[6]
+                    if pid in seen:
+                        continue
+                    seen.add(pid)
+                    
+                    # 找出此設施屬於哪個嫌惡類別
+                    found_nuisance = "其他"
+                    for nuisance_name, nuisance_info in NUISANCE_TYPES.items():
+                        if keyword in nuisance_info.get("keywords", []):
+                            found_nuisance = nuisance_name
+                            break
+                    
+                    results.append((found_nuisance, keyword, p[2], p[3], p[4], p[5], p[6]))
+                
+                time.sleep(0.3)
+            except:
+                continue
+        
+        bar.progress(1.0)
+        txt.text("✅ 查詢完成")
+        results.sort(key=lambda x: x[5])
+        return results
+    
+    def _get_nuisance_weight(self, nuisance_type):
+        """取得嫌惡設施的權重分數"""
+        weights = {
+            "高壓電塔/變電所": 8,
+            "宮廟/神壇": 7,
+            "工業區/工廠": 9,
+            "加油站/瓦斯行": 9,
+            "垃圾場/回收場": 8,
+            "公墓/靈骨塔": 10,
+            "殯儀館/禮儀社": 10,
+            "特種行業": 7,
+            "醫院": 5,
+            "警察局/消防局": 4,
+            "高架道路/捷運": 6,
+            "飛機場": 8,
+            "焚化爐": 9,
+            "汙水處理廠": 8,
+            "屠宰場/畜牧業": 7
+        }
+        return weights.get(nuisance_type, 5)
+    
+    def _create_nuisance_table(self, houses, places):
+        """建立嫌惡設施表格"""
+        rows = []
+        for h_name, h_info in houses.items():
+            for p in places.get(h_name, []):
+                rows.append({
+                    "房屋": h_name,
+                    "房屋標題": h_info['title'][:50],
+                    "房屋地址": h_info['address'],
+                    "嫌惡設施名稱": p[2],
+                    "嫌惡設施類型": p[1],
+                    "主要類別": p[0],
+                    "距離(公尺)": p[5],
+                    "經度": p[4],
+                    "緯度": p[3],
+                    "place_id": p[6]
+                })
+        return pd.DataFrame(rows)
+    
+    def _show_analysis_in_progress(self):
+        """顯示分析進行中"""
+        st.warning("🔍 分析進行中，請稍候...")
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        
+        for i in range(100):
+            progress_bar.progress(i + 1)
+            status_text.text(f"分析中... {i+1}%")
+            time.sleep(0.01)
+        
+        st.success("✅ 分析完成！")
+        time.sleep(1)
+        st.session_state.analysis_in_progress = False
+        st.rerun()
+    
+    def _reset_page(self):
+        """重設頁面"""
+        keys = ['analysis_in_progress', 'analysis_results', 'gemini_result', 
+                'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes']
+        for k in keys:
+            if k in st.session_state:
+                del st.session_state[k]
+    
     def _render_category_selection(self, preset_categories=None, preset_subtypes=None):
-        """渲染類別選擇 - 完全對應純中文 place_types"""
+        """渲染類別選擇 - 修正重複顯示問題"""
         selected_cats = []
         selected_subs = {}
         
@@ -381,20 +801,24 @@ class ComparisonAnalyzer:
                     cc1, cc2, cc3 = st.columns([1, 1, 2])
                     with cc1:
                         if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
-                            st.session_state[f"flag_{cat}"] = True
+                            # 設定全選標記
+                            st.session_state[f"all_{cat}"] = True
                             st.rerun()
                     with cc2:
                         if st.button(f"清除 {cat}", key=f"clear_{cat}", use_container_width=True):
-                            st.session_state[f"flag_{cat}"] = False
+                            st.session_state[f"clear_{cat}"] = True
                             st.rerun()
                     with cc3:
                         if current_profile:
-                            st.markdown(f"💡 **{current_profile}推薦**：優先")
+                            st.markdown(f"💡 **{current_profile}推薦**")
                     
-                    # 取得此類別所有設施
-                    items = PLACE_TYPES[cat]
-                    force_all = st.session_state.get(f"flag_{cat}", False)
-                    default_list = preset_subs.get(cat, []) if cat in preset_subs else []
+                    # 取得此類別所有設施（去除重複）
+                    items = []
+                    seen = set()
+                    for item in PLACE_TYPES[cat]:
+                        if item not in seen:
+                            items.append(item)
+                            seen.add(item)
                     
                     # 取得優先/次要推薦清單
                     priority_list = []
@@ -403,6 +827,15 @@ class ComparisonAnalyzer:
                         p = profiles[current_profile]
                         priority_list = p.get("priority_categories", {}).get(cat, [])
                         secondary_list = p.get("secondary_categories", {}).get(cat, [])
+                    
+                    # 處理全選/清除
+                    force_all = st.session_state.get(f"all_{cat}", False)
+                    force_clear = st.session_state.get(f"clear_{cat}", False)
+                    
+                    if force_clear:
+                        default_list = []
+                    else:
+                        default_list = preset_subs.get(cat, []) if cat in preset_subs else []
                     
                     # 3欄布局
                     per_row = (len(items) + 2) // 3
@@ -429,7 +862,7 @@ class ComparisonAnalyzer:
                                     default_val = True
                                 elif name in default_list:
                                     default_val = True
-                                elif name in priority_list:
+                                elif name in priority_list and not force_clear:
                                     default_val = True
                                 
                                 with cols[ci]:
@@ -451,15 +884,21 @@ class ComparisonAnalyzer:
                                             selected_subs[cat] = []
                                         selected_subs[cat].append(name)
                     
-                    # 清除全選標記
-                    if f"flag_{cat}" in st.session_state:
-                        del st.session_state[f"flag_{cat}"]
+                    # 清除標記
+                    if f"all_{cat}" in st.session_state:
+                        del st.session_state[f"all_{cat}"]
+                    if f"clear_{cat}" in st.session_state:
+                        del st.session_state[f"clear_{cat}"]
                     
                     if cat in selected_subs:
-                        st.caption(f"✅ 已選擇 {len(selected_subs[cat])} 種")
+                        st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
                 
                 if cat in selected_subs and selected_subs[cat]:
                     selected_cats.append(cat)
+        
+        # 移除重複的選擇
+        for cat in selected_subs:
+            selected_subs[cat] = list(dict.fromkeys(selected_subs[cat]))
         
         return selected_cats, selected_subs
     
@@ -477,7 +916,7 @@ class ComparisonAnalyzer:
         for i, cat in enumerate(categories):
             with cols[i % len(cols)]:
                 if cat in subtypes:
-                    cnt = len(subtypes[cat])
+                    cnt = len(set(subtypes[cat]))  # 使用 set 確保不重複
                     color = CATEGORY_COLORS.get(cat, "#666")
                     
                     is_rec = False
@@ -536,14 +975,14 @@ class ComparisonAnalyzer:
         if not st.session_state.get('buyer_profile'): return "⚠️ 請先選擇買家類型"
         return "OK"
     
-    def _start_analysis(self, mode, houses, radius, keyword, cats, subs, fav_df, profile):
+    def _start_analysis(self, mode, houses, radius, keyword, cats, subs, fav_df, profile, analysis_type):
         """開始分析"""
         try:
             st.session_state.analysis_settings = {
                 "mode": mode, "houses": houses, "radius": radius, "keyword": keyword,
                 "cats": cats, "subs": subs, "server": self._get_server_key(),
                 "gemini": self._get_gemini_key(), "fav": fav_df.to_json(orient='split'),
-                "profile": profile
+                "profile": profile, "analysis_type": analysis_type
             }
             self._clear_old()
             st.session_state.analysis_in_progress = True
@@ -591,7 +1030,7 @@ class ComparisonAnalyzer:
                 }
             bar.progress(25)
             
-            # 步驟2: 查詢設施（純中文關鍵字）
+            # 步驟2: 查詢設施
             txt.text("🔍 步驟 2/4: 查詢周邊設施...")
             places_data = {}
             total = len(houses_data)
@@ -613,11 +1052,17 @@ class ComparisonAnalyzer:
             # 步驟4: 儲存
             txt.text("💾 步驟 4/4: 儲存結果...")
             st.session_state.analysis_results = {
-                "analysis_mode": s["mode"], "houses_data": houses_data,
-                "places_data": places_data, "facility_counts": counts,
-                "selected_categories": s["cats"], "radius": s["radius"],
-                "keyword": s["keyword"], "num_houses": len(houses_data),
-                "facilities_table": table, "buyer_profile": s.get("profile", "未指定")
+                "analysis_mode": s["mode"],
+                "analysis_type": s.get("analysis_type", "生活機能"),
+                "houses_data": houses_data,
+                "places_data": places_data,
+                "facility_counts": counts,
+                "selected_categories": s["cats"],
+                "radius": s["radius"],
+                "keyword": s["keyword"],
+                "num_houses": len(houses_data),
+                "facilities_table": table,
+                "buyer_profile": s.get("profile", "未指定")
             }
             bar.progress(100)
             txt.text("✅ 分析完成！")
@@ -631,30 +1076,32 @@ class ComparisonAnalyzer:
             st.session_state.analysis_in_progress = False
     
     def _query_places_chinese(self, lat, lng, api_key, categories, subtypes, radius=500, extra=""):
-        """查詢設施 - 純中文關鍵字，完全對應你的 place_types.py"""
+        """查詢設施"""
         results = []
         seen = set()
         
-        # 計算總任務數
-        tasks = []
+        # 收集所有關鍵字（去除重複）
+        keywords = set()
         for cat in categories:
             if cat in subtypes:
                 for keyword in subtypes[cat]:
-                    tasks.append(keyword)
+                    keywords.add(keyword)
         if extra:
-            tasks.append(extra)
+            keywords.add(extra)
         
-        if not tasks:
+        keywords = list(keywords)
+        
+        if not keywords:
             return results
         
         bar = st.progress(0)
         txt = st.empty()
         completed = 0
         
-        for keyword in tasks:
+        for keyword in keywords:
             completed += 1
-            txt.text(f"搜尋 {completed}/{len(tasks)}: {keyword}")
-            bar.progress(completed / len(tasks))
+            txt.text(f"搜尋 {completed}/{len(keywords)}: {keyword}")
+            bar.progress(completed / len(keywords))
             
             try:
                 places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
@@ -685,7 +1132,7 @@ class ComparisonAnalyzer:
         return results
     
     def _search_google_places_chinese(self, lat, lng, api_key, keyword, radius):
-        """Google Places 文字搜尋 - 直接使用中文關鍵字"""
+        """Google Places 文字搜尋"""
         url = "https://maps.googleapis.com/maps/api/place/textsearch/json"
         params = {
             "query": keyword,
@@ -742,15 +1189,19 @@ class ComparisonAnalyzer:
         
         mode = res["analysis_mode"]
         profile = res.get("buyer_profile", "未指定")
+        analysis_type = res.get("analysis_type", "生活機能")
         profiles = self._get_buyer_profiles()
         pinfo = profiles.get(profile, {})
         icon = pinfo.get("icon", "👤")
         
         st.markdown("---")
-        if mode == "單一房屋分析":
-            st.markdown(f"## {icon} {profile}視角 · 單一房屋分析")
+        if analysis_type == "嫌惡設施":
+            st.markdown(f"## {icon} {profile}視角 · 嫌惡設施分析")
         else:
-            st.markdown(f"## {icon} {profile}視角 · {res['num_houses']}間房屋比較")
+            if mode == "單一房屋分析":
+                st.markdown(f"## {icon} {profile}視角 · 單一房屋分析")
+            else:
+                st.markdown(f"## {icon} {profile}視角 · {res['num_houses']}間房屋比較")
         
         if pinfo:
             with st.expander(f"📌 {profile} 分析重點", expanded=False):
@@ -759,12 +1210,16 @@ class ComparisonAnalyzer:
         
         # 設施表格
         st.markdown("---")
-        st.subheader("📋 設施詳細資料表格")
+        if analysis_type == "嫌惡設施":
+            st.subheader("⚠️ 嫌惡設施詳細資料表格")
+        else:
+            st.subheader("📋 設施詳細資料表格")
+        
         df = res.get("facilities_table", pd.DataFrame())
         if not df.empty:
-            st.info(f"📈 共找到 {len(df)} 筆設施資料")
+            st.info(f"📈 共找到 {len(df)} 筆資料")
             
-            # 顯示表格（包含 Google Maps 連結）
+            # 顯示表格
             st.dataframe(
                 df.head(50),
                 use_container_width=True,
@@ -786,30 +1241,87 @@ class ComparisonAnalyzer:
             
             # 下載按鈕
             csv = df.to_csv(index=False, encoding='utf-8-sig')
+            filename_prefix = "嫌惡設施" if analysis_type == "嫌惡設施" else "生活機能"
             st.download_button(
-                label="📥 下載完整設施資料 (CSV)",
+                label=f"📥 下載完整{filename_prefix}資料 (CSV)",
                 data=csv,
-                file_name=f"設施資料_{time.strftime('%Y%m%d_%H%M%S')}.csv",
+                file_name=f"{filename_prefix}_{time.strftime('%Y%m%d_%H%M%S')}.csv",
                 mime="text/csv",
                 key="download_facilities_csv"
             )
         
         # 統計
         st.markdown("---")
-        st.subheader("📈 設施統計")
-        if res["num_houses"] == 1:
-            self._show_single_stats(res)
+        if analysis_type == "嫌惡設施":
+            st.subheader("⚠️ 風險評分與統計")
+            self._show_nuisance_stats(res)
         else:
-            self._show_multi_stats(res)
+            st.subheader("📈 設施統計")
+            if res["num_houses"] == 1:
+                self._show_single_stats(res)
+            else:
+                self._show_multi_stats(res)
         
         # 地圖
         self._display_maps(res)
         
-        # 設施列表（含地圖連結）
+        # 設施列表
         self._display_facilities_list_with_links(res)
         
         # AI 分析
         self._display_ai_analysis(res)
+    
+    def _show_nuisance_stats(self, res):
+        """顯示嫌惡設施統計"""
+        risk_scores = res.get("risk_scores", {})
+        counts = res.get("facility_counts", {})
+        names = list(counts.keys())
+        
+        if risk_scores:
+            st.markdown("#### 🎯 風險評分（分數越高風險越大）")
+            cols = st.columns(min(4, len(names)))
+            for i, name in enumerate(names):
+                with cols[i % len(cols)]:
+                    score = risk_scores.get(name, 0)
+                    if score < 5:
+                        color = "🟢"
+                        level = "低風險"
+                    elif score < 15:
+                        color = "🟡"
+                        level = "中風險"
+                    else:
+                        color = "🔴"
+                        level = "高風險"
+                    
+                    st.metric(
+                        f"{name}", 
+                        f"{color} {score} 分", 
+                        f"{counts.get(name, 0)} 處嫌惡設施 - {level}"
+                    )
+        
+        if len(names) > 1:
+            st.markdown("#### 📊 嫌惡設施數量比較")
+            data = sorted([(n, c) for n, c in counts.items()], key=lambda x: x[1], reverse=True)
+            chart_data = {
+                "xAxis": {"type": "category", "data": [x[0] for x in data]},
+                "yAxis": {"type": "value"},
+                "series": [{
+                    "type": "bar",
+                    "data": [x[1] for x in data],
+                    "itemStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "#FF4444"},
+                                {"offset": 1, "color": "#FFA07A"}
+                            ]
+                        }
+                    }
+                }],
+                "tooltip": {"trigger": "axis"}
+            }
+            st_echarts(chart_data, height="300px")
     
     def _show_single_stats(self, res):
         """單一房屋統計"""
@@ -828,7 +1340,6 @@ class ComparisonAnalyzer:
             c3.metric("📍 最近設施", f"{mini} 公尺")
             
             # 類別統計
-            from collections import Counter
             cat_cnt = Counter([p[1] for p in places])
             top10 = cat_cnt.most_common(10)
             
@@ -937,7 +1448,7 @@ class ComparisonAnalyzer:
                     )
     
     def _render_map_with_links(self, lat, lng, places, radius, title, house_info, browser_key):
-        """渲染地圖 - 包含完整的 Google Maps 連結"""
+        """渲染地圖"""
         if not browser_key:
             st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
             return
@@ -946,7 +1457,7 @@ class ComparisonAnalyzer:
             st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
             return
         
-        # 準備設施資料（包含 place_id 和地圖連結）
+        # 準備設施資料
         facilities_data = []
         for p in places:
             color = CATEGORY_COLORS.get(p[0], "#666")
@@ -1168,28 +1679,32 @@ class ComparisonAnalyzer:
         html(html_content, height=550)
     
     def _display_facilities_list_with_links(self, res):
-        """顯示設施列表 - 包含 Google Maps 連結按鈕"""
+        """顯示設施列表"""
         st.markdown("---")
-        st.subheader("📍 全部設施列表")
+        analysis_type = res.get("analysis_type", "生活機能")
+        if analysis_type == "嫌惡設施":
+            st.subheader("📍 全部嫌惡設施列表")
+        else:
+            st.subheader("📍 全部設施列表")
         
         for house_name, places in res["places_data"].items():
             if places:
-                with st.expander(f"🏠 {house_name} - 共 {len(places)} 個設施", expanded=False):
+                with st.expander(f"🏠 {house_name} - 共 {len(places)} 個{'嫌惡設施' if analysis_type=='嫌惡設施' else '設施'}", expanded=False):
                     for i, p in enumerate(places, 1):
                         cat, subtype, name, lat, lng, dist, pid = p
-                        color = CATEGORY_COLORS.get(cat, "#666")
+                        color = CATEGORY_COLORS.get(cat, "#666") if analysis_type != "嫌惡設施" else "#dc3545"
                         maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
                         
                         # 距離分類
                         if dist <= 300:
-                            dist_color = "#28a745"
-                            dist_badge = "很近"
+                            dist_color = "#dc3545" if analysis_type == "嫌惡設施" else "#28a745"
+                            dist_badge = "很近" if analysis_type != "嫌惡設施" else "⚠️ 危險近"
                         elif dist <= 600:
-                            dist_color = "#ffc107"
-                            dist_badge = "中等"
+                            dist_color = "#fd7e14" if analysis_type == "嫌惡設施" else "#ffc107"
+                            dist_badge = "中等" if analysis_type != "嫌惡設施" else "⚠️ 需注意"
                         else:
-                            dist_color = "#dc3545"
-                            dist_badge = "較遠"
+                            dist_color = "#ffc107" if analysis_type == "嫌惡設施" else "#dc3545"
+                            dist_badge = "較遠" if analysis_type != "嫌惡設施" else "🟢 尚可"
                         
                         col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
                         
@@ -1209,28 +1724,47 @@ class ComparisonAnalyzer:
                         
                         st.divider()
             else:
-                st.info(f"📭 {house_name} 周圍未找到設施")
+                st.info(f"📭 {house_name} 周圍未找到{'嫌惡設施' if analysis_type=='嫌惡設施' else '設施'}")
     
     def _display_ai_analysis(self, res):
-        """AI 分析"""
+        """AI 分析 - 根據買家類型自動選擇模板"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
         profile = res.get("buyer_profile", "未指定")
+        analysis_type = res.get("analysis_type", "生活機能")
+        profiles = self._get_buyer_profiles()
+        pinfo = profiles.get(profile, {})
+        
+        # 根據買家類型取得建議的模板
+        suggested_template = pinfo.get("prompt_template", "default")
         
         prompt = self._build_prompt(
             res["houses_data"], res["places_data"], res["facility_counts"],
-            res["selected_categories"], res["radius"], res["keyword"],
-            res["analysis_mode"], res.get("facilities_table", pd.DataFrame()), profile
+            res.get("selected_categories", []), res["radius"], res.get("keyword", ""),
+            res["analysis_mode"], res.get("facilities_table", pd.DataFrame()), 
+            profile, analysis_type
         )
         
         if "custom_prompt" not in st.session_state:
             st.session_state.custom_prompt = prompt
         
-        # 模板
-        templates = self._get_prompt_templates(profile)
+        # 提示詞模板 - 根據買家類型有不同的預設
+        templates = self._get_prompt_templates(profile, analysis_type)
+        
+        # 顯示模板選擇，並根據買家類型預設選中建議的模板
         opt = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
-        sel = st.selectbox("📋 提示詞模板選擇", list(opt.keys()), format_func=lambda x: opt[x], key="tmpl")
+        
+        # 設定預設選擇為買家類型建議的模板
+        default_idx = list(templates.keys()).index(suggested_template) if suggested_template in templates else 0
+        
+        sel = st.selectbox(
+            "📋 提示詞模板選擇", 
+            list(opt.keys()), 
+            format_func=lambda x: opt[x], 
+            key="tmpl",
+            index=default_idx
+        )
         
         if sel == "default":
             st.session_state.custom_prompt = prompt
@@ -1244,7 +1778,6 @@ class ComparisonAnalyzer:
                 st.session_state.custom_prompt = edited
                 st.success("✅ 提示詞已儲存！")
         with c2:
-            pinfo = self._get_buyer_profiles().get(profile, {})
             st.markdown(f"#### 💡 {profile} 分析重點")
             for pt in pinfo.get("prompt_focus", [])[:4]:
                 st.markdown(f"- {pt}")
@@ -1278,7 +1811,10 @@ class ComparisonAnalyzer:
                     del st.session_state.used_prompt
                     st.rerun()
             with c2:
-                report_title = f"{profile}視角-房屋分析報告" if res["analysis_mode"] == "單一房屋分析" else f"{profile}視角-{res['num_houses']}間房屋比較報告"
+                report_title = f"{profile}視角-{analysis_type}報告"
+                if res["analysis_mode"] != "單一房屋分析":
+                    report_title = f"{profile}視角-{res['num_houses']}間房屋{analysis_type}比較報告"
+                
                 report = f"{report_title}\n生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
                 report += f"AI 分析結果：\n{st.session_state.gemini_result}"
                 st.download_button(
@@ -1290,18 +1826,21 @@ class ComparisonAnalyzer:
                     key="download_report"
                 )
     
-    def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, table, profile):
-        """建立提示詞 - 完全客製化買家視角"""
+    def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, table, profile, analysis_type):
+        """建立提示詞"""
         pinfo = self._get_buyer_profiles().get(profile, {})
         icon = pinfo.get("icon", "👤")
         focus = pinfo.get("prompt_focus", [])
         
-        if mode == "單一房屋分析":
-            name = list(houses.keys())[0]
-            h = houses[name]
-            cnt = counts.get(name, 0)
-            
-            return f"""
+        if analysis_type == "嫌惡設施":
+            return self._build_nuisance_prompt(houses, places, counts, radius, mode, profile, icon, focus)
+        else:
+            if mode == "單一房屋分析":
+                name = list(houses.keys())[0]
+                h = houses[name]
+                cnt = counts.get(name, 0)
+                
+                return f"""
 你是一位專業的房地產分析師，請以「{icon} {profile}」的身份與視角，對以下房屋進行**深度生活機能分析**。
 
 【本次分析特別關注】
@@ -1329,12 +1868,12 @@ class ComparisonAnalyzer:
 
 請用溫暖、貼近生活的語言，讓使用者感受到這是「為我量身打造的建議」。
 """
-        else:
-            house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
-            rank_list = "\n".join([f"{i+1}. {n}（{counts[n]}個設施）" 
-                                  for i, (n, _) in enumerate(sorted(counts.items(), key=lambda x: x[1], reverse=True))])
-            
-            return f"""
+            else:
+                house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
+                rank_list = "\n".join([f"{i+1}. {n}（{counts[n]}個設施）" 
+                                      for i, (n, _) in enumerate(sorted(counts.items(), key=lambda x: x[1], reverse=True))])
+                
+                return f"""
 你是一位專業的房地產分析師，請以「{icon} {profile}」的身份，對以下{len(houses)}間房屋進行**比較分析**。
 
 【本次分析特別關注】
@@ -1357,13 +1896,149 @@ class ComparisonAnalyzer:
 請用「你就是{profile}」的口吻，給出真正有用的購買建議。
 """
     
-    def _get_prompt_templates(self, profile=""):
-        """提示詞模板"""
-        return {
-            "default": {"name": "🎯 預設分析模板", "description": f"{profile}視角標準分析"},
-            "simple": {"name": "📋 簡明報告模板", "description": "快速掌握重點", 
-                      "content": f"""
-請以{profile}視角，提供簡潔的房屋分析報告：
+    def _build_nuisance_prompt(self, houses, places, counts, radius, mode, profile, icon, focus):
+        """建立嫌惡設施分析提示詞"""
+        if mode == "單一房屋分析":
+            name = list(houses.keys())[0]
+            h = houses[name]
+            cnt = counts.get(name, 0)
+            
+            # 列出附近的嫌惡設施
+            nuisance_list = []
+            for p in places.get(name, [])[:10]:  # 只列出前10個
+                nuisance_list.append(f"- {p[2]}（{p[1]}）：距離 {p[5]} 公尺")
+            
+            nuisance_text = "\n".join(nuisance_list) if nuisance_list else "無"
+            
+            return f"""
+你是一位專業的房地產分析師，請以「{icon} {profile}」的身份與視角，對以下房屋進行**嫌惡設施風險評估**。
+
+【本次分析特別關注】
+{chr(10).join([f'✅ {f}' for f in focus])}
+以及周邊環境的安全性與寧靜度。
+
+【房屋資訊】
+- 標題：{h['title']}
+- 地址：{h['address']}
+
+【搜尋條件】
+- 搜尋半徑：{radius} 公尺
+- 共找到 {cnt} 處嫌惡設施
+
+【附近嫌惡設施列表（前10個）】
+{nuisance_text}
+
+【分析要求 - 完全代入{profile}角色】
+1. **整體風險評分**（1-5分，分數越高風險越大）：請評估周邊嫌惡設施的整體影響
+2. **三大主要風險**：對{profile}來說，最需要擔心的3個嫌惡設施與其影響
+3. **次要風險**：其他需要注意但影響較小的設施
+4. **風險緩解建議**：如果選擇這裡，可以如何降低這些風險的影響？
+5. **居住適合度調整**：考慮到這些嫌惡設施，原本的生活機能評分應該扣減多少？
+6. **終極建議**：綜合考量嫌惡設施的影響，您會建議{profile}購買這間房子嗎？
+
+請特別注意：不同類型的嫌惡設施對不同買家的影響程度不同。例如：
+- 家庭：特別在意宮廟、特種行業、治安問題
+- 長輩：特別在意醫院、空汙、噪音
+- 投資客：特別在意殯葬設施、公墓對轉手的影響
+
+請根據{profile}的身份，給出量身定制的風險評估。
+"""
+        else:
+            house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
+            
+            # 計算每個房屋的風險摘要
+            risk_summary = []
+            for name, cnt in counts.items():
+                risk_summary.append(f"- {name}：{cnt} 處嫌惡設施")
+            
+            risk_text = "\n".join(risk_summary)
+            
+            return f"""
+你是一位專業的房地產分析師，請以「{icon} {profile}」的身份，對以下{len(houses)}間房屋進行**嫌惡設施風險比較**。
+
+【本次分析特別關注】
+{chr(10).join([f'✅ {f}' for f in focus])}
+以及周邊環境的安全性與寧靜度。
+
+【候選房屋】
+{house_list}
+
+【嫌惡設施數量統計】
+{risk_text}
+
+【分析要求 - 完全代入{profile}角色】
+1. **風險排名**：以{profile}的需求，將這幾間房屋由低風險到高風險排序
+2. **最安全選擇**：哪一間的周邊環境最適合{profile}？為什麼？
+3. **最需避開的房屋**：哪一間的嫌惡設施問題最嚴重？為什麼？
+4. **各房屋風險分析**：
+   - 每間房屋的主要風險來源
+   - 對{profile}的具體影響
+   - 是否可透過其他方式緩解？
+5. **綜合比較**：考慮生活機能與嫌惡設施的平衡，哪間最值得推薦？
+6. **終極建議**：如果{profile}今天就要決定，您會建議選擇哪間？為什麼？
+
+請根據{profile}的身份，給出量身定制的風險比較分析。
+"""
+    
+    def _get_prompt_templates(self, profile="", analysis_type="生活機能"):
+        """提示詞模板 - 根據買家類型調整"""
+        base_templates = {
+            "default": {
+                "name": "🎯 標準分析模板", 
+                "description": "平衡完整的分析報告"
+            },
+            "simple": {
+                "name": "📋 簡明報告模板", 
+                "description": "快速掌握重點"
+            },
+            "lifestyle": {
+                "name": "🏡 生活情境模板", 
+                "description": "描繪實際居住樣貌"
+            },
+            "investment": {
+                "name": "💰 投資分析模板", 
+                "description": "專注投資價值分析"
+            }
+        }
+        
+        # 根據分析類型調整模板內容
+        if analysis_type == "嫌惡設施":
+            base_templates["default"]["content"] = f"""
+請以{profile}視角，提供完整的嫌惡設施風險評估：
+
+1. **整體風險評分**（1-5分）
+2. **主要風險來源**
+3. **風險等級說明**
+4. **居住建議**
+5. **一句話總結**
+
+請根據{profile}的身份特質，分析不同嫌惡設施的影響程度。
+"""
+            base_templates["simple"]["content"] = f"""
+請以{profile}視角，提供簡潔的風險評估：
+
+1. **風險評分**（1-5分）
+2. **三大風險點**
+3. **最適合的居住族群**
+4. **一句話建議**
+
+請用要點式說明。
+"""
+        else:
+            base_templates["default"]["content"] = f"""
+請以{profile}視角，提供完整的房屋分析報告：
+
+1. **整體適合度評分**（1-5星）
+2. **三大優點**
+3. **三大缺點**
+4. **理想居住情境**
+5. **CP值評估**
+6. **一句話總結**
+
+請使用溫暖、貼近生活的語言。
+"""
+            base_templates["simple"]["content"] = f"""
+請以{profile}視角，提供簡潔的房屋分析：
 
 1. **整體適合度評分**（1-5星）
 2. **三大優點**
@@ -1372,9 +2047,8 @@ class ComparisonAnalyzer:
 5. **一句話總結**
 
 請使用要點式說明，方便快速閱讀。
-"""},
-            "lifestyle": {"name": "🏡 生活情境模板", "description": "描繪實際居住樣貌",
-                         "content": f"""
+"""
+            base_templates["lifestyle"]["content"] = f"""
 請以{profile}的身份，描繪住在這裡的生活樣貌：
 
 1. **平日早晨**：如何開始一天？
@@ -1384,9 +2058,8 @@ class ComparisonAnalyzer:
 5. **季節變化**：夏天、冬天、雨天的生活便利性差異
 
 請用說故事的方式，讓使用者「看見」自己住在這裡的樣子。
-"""},
-            "investment": {"name": "💰 投資分析模板", "description": "專注投資價值分析",
-                         "content": f"""
+"""
+            base_templates["investment"]["content"] = f"""
 請從{profile}的投資需求角度進行分析：
 
 1. **未來轉手難易度**評估
@@ -1396,8 +2069,9 @@ class ComparisonAnalyzer:
 5. **風險因素**量化分析
 
 請提供具體的數字估計和市場比較。
-"""}
-        }
+"""
+        
+        return base_templates
     
     def _call_gemini(self, prompt):
         """呼叫 Gemini API"""
