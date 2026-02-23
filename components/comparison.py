@@ -208,15 +208,37 @@ class ComparisonAnalyzer:
                 st.info("⭐ 尚未有收藏房產，無法分析")
                 return
             
-            # 檢查是否有分析結果
-            if "analysis_results" in st.session_state and not st.session_state.analysis_in_progress:
-                self._display_analysis_results(st.session_state.analysis_results)
-                return
-            
+            # 檢查是否在分析中
             if st.session_state.get('analysis_in_progress', False):
                 self._show_analysis_in_progress()
                 return
             
+            # 如果有分析結果，先顯示結果
+            if "analysis_results" in st.session_state:
+                self._display_analysis_results(st.session_state.analysis_results)
+                
+                # 新增：清除結果的按鈕
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col1:
+                    if st.button("🆕 新分析", use_container_width=True):
+                        # 清除結果但保留買家類型
+                        keys_to_keep = ['buyer_profile', 'auto_selected_categories', 
+                                       'auto_selected_subtypes', 'suggested_radius']
+                        keys_to_remove = ['analysis_results', 'gemini_result', 'used_prompt']
+                        
+                        for key in keys_to_remove:
+                            if key in st.session_state:
+                                del st.session_state[key]
+                        st.rerun()
+                
+                with col2:
+                    if st.button("🗑️ 全部清除", use_container_width=True):
+                        self._clear_all()
+                        st.rerun()
+                
+                return  # 顯示結果後就返回，不顯示設定界面
+            
+            # 沒有分析結果時，顯示分析類型選擇和設定界面
             # 分析類型選擇
             st.markdown("### 📊 選擇分析類型")
             col1, col2 = st.columns(2)
@@ -235,6 +257,7 @@ class ComparisonAnalyzer:
             
             st.markdown("---")
             
+            # 根據分析類型顯示對應的設定界面
             if st.session_state.analysis_type == "生活機能分析":
                 self._render_life_function_analysis(fav_df)
             else:
