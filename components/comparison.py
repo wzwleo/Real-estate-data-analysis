@@ -50,7 +50,8 @@ class ComparisonAnalyzer:
             'buyer_profile': None,
             'auto_selected_categories': [],
             'auto_selected_subtypes': {},
-            'analysis_type': '生活機能分析'
+            'analysis_type': '生活機能分析',
+            'analysis_completed': False  # 新增：標記分析是否完成
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -205,6 +206,11 @@ class ComparisonAnalyzer:
             fav_df = self._get_favorites_data()
             if fav_df.empty:
                 st.info("⭐ 尚未有收藏房產，無法分析")
+                return
+            
+            # 檢查是否有分析結果
+            if "analysis_results" in st.session_state and not st.session_state.analysis_in_progress:
+                self._display_analysis_results(st.session_state.analysis_results)
                 return
             
             if st.session_state.get('analysis_in_progress', False):
@@ -543,105 +549,102 @@ class ComparisonAnalyzer:
             }
             self._clear_old()
             st.session_state.analysis_in_progress = True
+            st.session_state.analysis_completed = False
             self._execute_nuisance_analysis()
         except Exception as e:
             st.error(f"❌ 啟動失敗: {e}")
             st.session_state.analysis_in_progress = False
     
     def _execute_nuisance_analysis(self):
-        """執行嫌惡設施分析核心"""
+        """執行嫌惡設施分析核心 - 修正版（不移除 rerun）"""
         try:
             s = st.session_state.analysis_settings
             fav_df = pd.read_json(s["fav"], orient='split')
             
-            bar = st.progress(0)
-            txt = st.empty()
-            
-            # 步驟1: 解析地址
-            txt.text("🔍 步驟 1/4: 解析地址...")
-            houses_data = {}
-            for i, opt in enumerate(s["houses"]):
-                h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
-                name = f"房屋 {chr(65+i)}" if len(s["houses"]) > 1 else "分析房屋"
-                lat, lng = geocode_address(h["地址"], s["server"])
-                if not lat or not lng:
-                    st.error(f"❌ {name} 地址解析失敗")
-                    st.session_state.analysis_in_progress = False
-                    return
-                houses_data[name] = {
-                    "name": name, "title": h['標題'], "address": h['地址'],
-                    "lat": lat, "lng": lng
+            # 使用 st.status 顯示進度
+            with st.status("🔍 分析進行中...", expanded=True) as status:
+                # 步驟1: 解析地址
+                st.write("📌 步驟 1/4: 解析地址...")
+                houses_data = {}
+                for i, opt in enumerate(s["houses"]):
+                    h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
+                    name = f"房屋 {chr(65+i)}" if len(s["houses"]) > 1 else "分析房屋"
+                    lat, lng = geocode_address(h["地址"], s["server"])
+                    if not lat or not lng:
+                        st.error(f"❌ {name} 地址解析失敗")
+                        st.session_state.analysis_in_progress = False
+                        return
+                    houses_data[name] = {
+                        "name": name, "title": h['標題'], "address": h['地址'],
+                        "lat": lat, "lng": lng
+                    }
+                
+                # 步驟2: 查詢嫌惡設施
+                st.write("🔍 步驟 2/4: 查詢周邊嫌惡設施...")
+                nuisances_data = {}
+                total = len(houses_data)
+                for idx, (name, info) in enumerate(houses_data.items()):
+                    st.write(f"   - 查詢 {name} 周邊設施...")
+                    nuisances = self._query_nuisances_no_progress(
+                        info["lat"], info["lng"], s["server"],
+                        s["nuisances"], s["radius"]
+                    )
+                    nuisances_data[name] = nuisances
+                
+                # 步驟3: 統計
+                st.write("📊 步驟 3/4: 計算風險評分...")
+                counts = {n: len(p) for n, p in nuisances_data.items()}
+                
+                # 計算風險分數
+                risk_scores = {}
+                for name, nuisances in nuisances_data.items():
+                    score = 0
+                    for n in nuisances:
+                        nuisance_type = n[0]
+                        distance = n[5]
+                        weight = self._get_nuisance_weight(nuisance_type)
+                        # 距離越近權重越高
+                        if distance <= 300:
+                            distance_factor = 1.0
+                        elif distance <= 600:
+                            distance_factor = 0.7
+                        elif distance <= 900:
+                            distance_factor = 0.4
+                        else:
+                            distance_factor = 0.2
+                        score += weight * distance_factor
+                    risk_scores[name] = round(score, 1)
+                
+                table = self._create_nuisance_table(houses_data, nuisances_data)
+                
+                # 步驟4: 儲存
+                st.write("💾 步驟 4/4: 儲存結果...")
+                st.session_state.analysis_results = {
+                    "analysis_mode": s["mode"],
+                    "analysis_type": "嫌惡設施",
+                    "houses_data": houses_data,
+                    "places_data": nuisances_data,
+                    "facility_counts": counts,
+                    "risk_scores": risk_scores,
+                    "selected_nuisances": s["nuisances"],
+                    "radius": s["radius"],
+                    "num_houses": len(houses_data),
+                    "facilities_table": table,
+                    "buyer_profile": s.get("profile", "未指定")
                 }
-            bar.progress(25)
-            
-            # 步驟2: 查詢嫌惡設施
-            txt.text("🔍 步驟 2/4: 查詢周邊嫌惡設施...")
-            nuisances_data = {}
-            total = len(houses_data)
-            for idx, (name, info) in enumerate(houses_data.items()):
-                nuisances = self._query_nuisances(
-                    info["lat"], info["lng"], s["server"],
-                    s["nuisances"], s["radius"]
-                )
-                nuisances_data[name] = nuisances
-                bar.progress(25 + int(((idx+1)/total)*25))
-            bar.progress(50)
-            
-            # 步驟3: 統計
-            txt.text("📊 步驟 3/4: 計算風險評分...")
-            counts = {n: len(p) for n, p in nuisances_data.items()}
-            
-            # 計算風險分數
-            risk_scores = {}
-            for name, nuisances in nuisances_data.items():
-                score = 0
-                for n in nuisances:
-                    nuisance_type = n[0]
-                    distance = n[5]
-                    weight = self._get_nuisance_weight(nuisance_type)
-                    # 距離越近權重越高
-                    if distance <= 300:
-                        distance_factor = 1.0
-                    elif distance <= 600:
-                        distance_factor = 0.7
-                    elif distance <= 900:
-                        distance_factor = 0.4
-                    else:
-                        distance_factor = 0.2
-                    score += weight * distance_factor
-                risk_scores[name] = round(score, 1)
-            
-            table = self._create_nuisance_table(houses_data, nuisances_data)
-            bar.progress(75)
-            
-            # 步驟4: 儲存
-            txt.text("💾 步驟 4/4: 儲存結果...")
-            st.session_state.analysis_results = {
-                "analysis_mode": s["mode"],
-                "analysis_type": "嫌惡設施",
-                "houses_data": houses_data,
-                "places_data": nuisances_data,
-                "facility_counts": counts,
-                "risk_scores": risk_scores,
-                "selected_nuisances": s["nuisances"],
-                "radius": s["radius"],
-                "num_houses": len(houses_data),
-                "facilities_table": table,
-                "buyer_profile": s.get("profile", "未指定")
-            }
-            bar.progress(100)
-            txt.text("✅ 分析完成！")
+                
+                status.update(label="✅ 分析完成！", state="complete", expanded=False)
             
             st.session_state.analysis_in_progress = False
-            time.sleep(1)
-            st.rerun()
+            st.session_state.analysis_completed = True
+            st.rerun()  # 保留 rerun 來顯示結果
             
         except Exception as e:
             st.error(f"❌ 分析失敗: {e}")
             st.session_state.analysis_in_progress = False
     
-    def _query_nuisances(self, lat, lng, api_key, nuisances, radius):
-        """查詢嫌惡設施"""
+    def _query_nuisances_no_progress(self, lat, lng, api_key, nuisances, radius):
+        """查詢嫌惡設施（無進度條版本）"""
         results = []
         seen = set()
         
@@ -654,15 +657,7 @@ class ComparisonAnalyzer:
         if not keywords:
             return results
         
-        bar = st.progress(0)
-        txt = st.empty()
-        completed = 0
-        
         for keyword in keywords:
-            completed += 1
-            txt.text(f"搜尋 {completed}/{len(keywords)}: {keyword}")
-            bar.progress(completed / len(keywords))
-            
             try:
                 places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
                 for p in places:
@@ -686,8 +681,6 @@ class ComparisonAnalyzer:
             except:
                 continue
         
-        bar.progress(1.0)
-        txt.text("✅ 查詢完成")
         results.sort(key=lambda x: x[5])
         return results
     
@@ -750,7 +743,8 @@ class ComparisonAnalyzer:
     def _reset_page(self):
         """重設頁面"""
         keys = ['analysis_in_progress', 'analysis_results', 'gemini_result', 
-                'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes']
+                'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes',
+                'analysis_completed']
         for k in keys:
             if k in st.session_state:
                 del st.session_state[k]
@@ -984,6 +978,7 @@ class ComparisonAnalyzer:
             }
             self._clear_old()
             st.session_state.analysis_in_progress = True
+            st.session_state.analysis_completed = False
             self._execute_analysis()
         except Exception as e:
             st.error(f"❌ 啟動失敗: {e}")
@@ -998,83 +993,80 @@ class ComparisonAnalyzer:
         """全部清除"""
         keys = ['analysis_settings', 'analysis_results', 'analysis_in_progress', 'gemini_result',
                 'custom_prompt', 'used_prompt', 'selected_houses', 'buyer_profile',
-                'auto_selected_categories', 'auto_selected_subtypes', 'suggested_radius']
+                'auto_selected_categories', 'auto_selected_subtypes', 'suggested_radius',
+                'analysis_completed']
         for k in keys:
             if k in st.session_state: del st.session_state[k]
     
     def _execute_analysis(self):
-        """執行分析核心"""
+        """執行分析核心 - 修正版（使用 st.status）"""
         try:
             s = st.session_state.analysis_settings
             fav_df = pd.read_json(s["fav"], orient='split')
             
-            bar = st.progress(0)
-            txt = st.empty()
-            
-            # 步驟1: 解析地址
-            txt.text("🔍 步驟 1/4: 解析地址...")
-            houses_data = {}
-            for i, opt in enumerate(s["houses"]):
-                h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
-                name = f"房屋 {chr(65+i)}" if len(s["houses"]) > 1 else "分析房屋"
-                lat, lng = geocode_address(h["地址"], s["server"])
-                if not lat or not lng:
-                    st.error(f"❌ {name} 地址解析失敗")
-                    st.session_state.analysis_in_progress = False
-                    return
-                houses_data[name] = {
-                    "name": name, "title": h['標題'], "address": h['地址'],
-                    "lat": lat, "lng": lng
+            # 使用 st.status 顯示進度
+            with st.status("🔍 分析進行中...", expanded=True) as status:
+                # 步驟1: 解析地址
+                st.write("📌 步驟 1/4: 解析地址...")
+                houses_data = {}
+                for i, opt in enumerate(s["houses"]):
+                    h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
+                    name = f"房屋 {chr(65+i)}" if len(s["houses"]) > 1 else "分析房屋"
+                    lat, lng = geocode_address(h["地址"], s["server"])
+                    if not lat or not lng:
+                        st.error(f"❌ {name} 地址解析失敗")
+                        st.session_state.analysis_in_progress = False
+                        return
+                    houses_data[name] = {
+                        "name": name, "title": h['標題'], "address": h['地址'],
+                        "lat": lat, "lng": lng
+                    }
+                
+                # 步驟2: 查詢設施
+                st.write("🔍 步驟 2/4: 查詢周邊設施...")
+                places_data = {}
+                total = len(houses_data)
+                for idx, (name, info) in enumerate(houses_data.items()):
+                    st.write(f"   - 查詢 {name} 周邊設施...")
+                    places = self._query_places_chinese_no_progress(
+                        info["lat"], info["lng"], s["server"],
+                        s["cats"], s["subs"], s["radius"], s["keyword"]
+                    )
+                    places_data[name] = places
+                
+                # 步驟3: 統計
+                st.write("📊 步驟 3/4: 計算統計...")
+                counts = {n: len(p) for n, p in places_data.items()}
+                table = self._create_facilities_table(houses_data, places_data)
+                
+                # 步驟4: 儲存
+                st.write("💾 步驟 4/4: 儲存結果...")
+                st.session_state.analysis_results = {
+                    "analysis_mode": s["mode"],
+                    "analysis_type": s.get("analysis_type", "生活機能"),
+                    "houses_data": houses_data,
+                    "places_data": places_data,
+                    "facility_counts": counts,
+                    "selected_categories": s["cats"],
+                    "radius": s["radius"],
+                    "keyword": s["keyword"],
+                    "num_houses": len(houses_data),
+                    "facilities_table": table,
+                    "buyer_profile": s.get("profile", "未指定")
                 }
-            bar.progress(25)
-            
-            # 步驟2: 查詢設施
-            txt.text("🔍 步驟 2/4: 查詢周邊設施...")
-            places_data = {}
-            total = len(houses_data)
-            for idx, (name, info) in enumerate(houses_data.items()):
-                places = self._query_places_chinese(
-                    info["lat"], info["lng"], s["server"],
-                    s["cats"], s["subs"], s["radius"], s["keyword"]
-                )
-                places_data[name] = places
-                bar.progress(25 + int(((idx+1)/total)*25))
-            bar.progress(50)
-            
-            # 步驟3: 統計
-            txt.text("📊 步驟 3/4: 計算統計...")
-            counts = {n: len(p) for n, p in places_data.items()}
-            table = self._create_facilities_table(houses_data, places_data)
-            bar.progress(75)
-            
-            # 步驟4: 儲存
-            txt.text("💾 步驟 4/4: 儲存結果...")
-            st.session_state.analysis_results = {
-                "analysis_mode": s["mode"],
-                "analysis_type": s.get("analysis_type", "生活機能"),
-                "houses_data": houses_data,
-                "places_data": places_data,
-                "facility_counts": counts,
-                "selected_categories": s["cats"],
-                "radius": s["radius"],
-                "keyword": s["keyword"],
-                "num_houses": len(houses_data),
-                "facilities_table": table,
-                "buyer_profile": s.get("profile", "未指定")
-            }
-            bar.progress(100)
-            txt.text("✅ 分析完成！")
+                
+                status.update(label="✅ 分析完成！", state="complete", expanded=False)
             
             st.session_state.analysis_in_progress = False
-            time.sleep(1)
-            st.rerun()
+            st.session_state.analysis_completed = True
+            st.rerun()  # 保留 rerun 來顯示結果
             
         except Exception as e:
             st.error(f"❌ 分析失敗: {e}")
             st.session_state.analysis_in_progress = False
     
-    def _query_places_chinese(self, lat, lng, api_key, categories, subtypes, radius=500, extra=""):
-        """查詢設施"""
+    def _query_places_chinese_no_progress(self, lat, lng, api_key, categories, subtypes, radius=500, extra=""):
+        """查詢設施（無進度條版本）"""
         results = []
         seen = set()
         
@@ -1092,15 +1084,7 @@ class ComparisonAnalyzer:
         if not keywords:
             return results
         
-        bar = st.progress(0)
-        txt = st.empty()
-        completed = 0
-        
         for keyword in keywords:
-            completed += 1
-            txt.text(f"搜尋 {completed}/{len(keywords)}: {keyword}")
-            bar.progress(completed / len(keywords))
-            
             try:
                 places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
                 for p in places:
@@ -1124,8 +1108,6 @@ class ComparisonAnalyzer:
             except:
                 continue
         
-        bar.progress(1.0)
-        txt.text("✅ 查詢完成")
         results.sort(key=lambda x: x[5])
         return results
     
