@@ -50,7 +50,7 @@ class ComparisonAnalyzer:
             'buyer_profile': None,
             'auto_selected_categories': [],
             'auto_selected_subtypes': {},
-            'analysis_type': '生活機能分析'  # 新增：分析類型
+            'analysis_type': '生活機能分析'
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -76,7 +76,7 @@ class ComparisonAnalyzer:
                 },
                 "radius": 500,
                 "prompt_focus": ["通勤便利性", "日常採買效率", "預算內最高CP值", "夜間生活便利性"],
-                "prompt_template": "default"  # 預設使用哪個提示詞模板
+                "prompt_template": "default"
             },
             "家庭": {
                 "icon": "👨‍👩‍👧‍👦",
@@ -336,7 +336,7 @@ class ComparisonAnalyzer:
         auto_subs = st.session_state.get('auto_selected_subtypes', {})
         
         if auto_cats:
-            total = sum(len(set(v)) for v in auto_subs.values())  # 使用 set 確保不重複
+            total = sum(len(set(v)) for v in auto_subs.values())
             st.info(f"📌 **{current_profile} 推薦設施**：已自動選擇 {len(auto_cats)} 大類、{total} 種設施，可手動調整")
         
         selected_cats, selected_subs = self._render_category_selection(auto_cats, auto_subs)
@@ -393,7 +393,6 @@ class ComparisonAnalyzer:
                 if st.button(f"選擇 {profile_name}", key=f"nuisance_select_{profile_name}", 
                            type=btn_type, use_container_width=True):
                     st.session_state.buyer_profile = profile_name
-                    # 不自動選擇嫌惡設施，但會根據買家類型給出建議
                     st.rerun()
         
         current_profile = st.session_state.get('buyer_profile')
@@ -709,7 +708,7 @@ class ComparisonAnalyzer:
             "飛機場": 8,
             "焚化爐": 9,
             "汙水處理廠": 8,
-            "屠宰場/畜牧業": 7
+            "畜牧業": 7
         }
         return weights.get(nuisance_type, 5)
     
@@ -801,7 +800,6 @@ class ComparisonAnalyzer:
                     cc1, cc2, cc3 = st.columns([1, 1, 2])
                     with cc1:
                         if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
-                            # 設定全選標記
                             st.session_state[f"all_{cat}"] = True
                             st.rerun()
                     with cc2:
@@ -916,7 +914,7 @@ class ComparisonAnalyzer:
         for i, cat in enumerate(categories):
             with cols[i % len(cols)]:
                 if cat in subtypes:
-                    cnt = len(set(subtypes[cat]))  # 使用 set 確保不重複
+                    cnt = len(set(subtypes[cat]))
                     color = CATEGORY_COLORS.get(cat, "#666")
                     
                     is_rec = False
@@ -1448,13 +1446,9 @@ class ComparisonAnalyzer:
                     )
     
     def _render_map_with_links(self, lat, lng, places, radius, title, house_info, browser_key):
-        """渲染地圖"""
+        """渲染地圖 - 修正版"""
         if not browser_key:
             st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
-            return
-        
-        if not places:
-            st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
             return
         
         # 準備設施資料
@@ -1487,6 +1481,13 @@ class ComparisonAnalyzer:
             </div>
             """
         
+        # 將設施資料轉為 JSON 字串
+        facilities_json = json.dumps(facilities_data, ensure_ascii=False)
+        
+        # 安全處理地址字串
+        address_str = house_info.get('address', '未知地址') if house_info else '未知地址'
+        address_str = address_str.replace('"', '&quot;').replace("'", "\\'")
+        
         # 地圖 HTML
         html_content = f"""
         <!DOCTYPE html>
@@ -1507,6 +1508,10 @@ class ComparisonAnalyzer:
                     margin: 10px;
                     max-width: 200px;
                     box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+                    position: absolute;
+                    right: 10px;
+                    top: 10px;
+                    z-index: 1000;
                 }}
                 .legend-item {{
                     display: flex;
@@ -1580,9 +1585,9 @@ class ComparisonAnalyzer:
                     // 主房屋資訊視窗
                     var mainInfoContent = '<div class="info-window">' +
                                          '<h5>🏠 {title}</h5>' +
-                                         '<p><strong>地址：</strong>{house_info["address"] if house_info else "未知"}</p>' +
+                                         '<p><strong>地址：</strong>{address_str}</p>' +
                                          '<p><strong>搜尋半徑：</strong>{radius} 公尺</p>' +
-                                         '<p><strong>設施數量：</strong>{len(facilities_data)} 個</p>' +
+                                         '<p><strong>設施數量：</strong>{len(places)} 個</p>' +
                                          '</div>';
                     
                     var mainInfoWindow = new google.maps.InfoWindow({{
@@ -1600,7 +1605,7 @@ class ComparisonAnalyzer:
                     map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
                     
                     // 添加設施標記
-                    var facilities = {json.dumps(facilities_data, ensure_ascii=False)};
+                    var facilities = {facilities_json};
                     
                     facilities.forEach(function(facility) {{
                         var position = {{lat: facility.lat, lng: facility.lng}};
@@ -1675,7 +1680,11 @@ class ComparisonAnalyzer:
         """
         
         st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
-        st.markdown(f"📊 **共找到 {len(places)} 個設施** (搜尋半徑: {radius}公尺)")
+        if places:
+            st.markdown(f"📊 **共找到 {len(places)} 個設施** (搜尋半徑: {radius}公尺)")
+        else:
+            st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
+        
         html(html_content, height=550)
     
     def _display_facilities_list_with_links(self, res):
@@ -1756,19 +1765,20 @@ class ComparisonAnalyzer:
         opt = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
         
         # 設定預設選擇為買家類型建議的模板
-        default_idx = list(templates.keys()).index(suggested_template) if suggested_template in templates else 0
+        template_keys = list(templates.keys())
+        default_idx = template_keys.index(suggested_template) if suggested_template in template_keys else 0
         
         sel = st.selectbox(
             "📋 提示詞模板選擇", 
-            list(opt.keys()), 
-            format_func=lambda x: opt[x], 
+            template_keys,
+            format_func=lambda x: opt.get(x, x), 
             key="tmpl",
             index=default_idx
         )
         
         if sel == "default":
             st.session_state.custom_prompt = prompt
-        elif "content" in templates[sel]:
+        elif "content" in templates.get(sel, {}):
             st.session_state.custom_prompt = templates[sel]["content"]
         
         c1, c2 = st.columns([3, 1])
@@ -1852,7 +1862,7 @@ class ComparisonAnalyzer:
 
 【搜尋條件】
 - 半徑：{radius} 公尺
-- 類別：{', '.join(cats)}
+- 類別：{', '.join(cats) if cats else '無'}
 - 關鍵字：{keyword if keyword else '無'}
 
 【設施統計】
@@ -1936,12 +1946,7 @@ class ComparisonAnalyzer:
 5. **居住適合度調整**：考慮到這些嫌惡設施，原本的生活機能評分應該扣減多少？
 6. **終極建議**：綜合考量嫌惡設施的影響，您會建議{profile}購買這間房子嗎？
 
-請特別注意：不同類型的嫌惡設施對不同買家的影響程度不同。例如：
-- 家庭：特別在意宮廟、特種行業、治安問題
-- 長輩：特別在意醫院、空汙、噪音
-- 投資客：特別在意殯葬設施、公墓對轉手的影響
-
-請根據{profile}的身份，給出量身定制的風險評估。
+請特別注意：不同類型的嫌惡設施對不同買家的影響程度不同。請根據{profile}的身份，給出量身定制的風險評估。
 """
         else:
             house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
@@ -2023,6 +2028,24 @@ class ComparisonAnalyzer:
 4. **一句話建議**
 
 請用要點式說明。
+"""
+            base_templates["lifestyle"]["content"] = f"""
+請以{profile}視角，描繪生活在這裡的日常，並分析嫌惡設施的影響：
+
+1. **平日生活**：嫌惡設施如何影響日常生活？
+2. **特殊時段**：夜晚、假日是否有特別影響？
+3. **心理感受**：居住時的心理壓迫感或不安感
+4. **長期影響**：對身心健康可能造成的影響
+5. **因應對策**：可以如何調整生活方式來應對？
+"""
+            base_templates["investment"]["content"] = f"""
+請從{profile}的投資需求角度進行嫌惡設施分析：
+
+1. **轉手影響評估**：這些嫌惡設施會降低多少轉手價值？
+2. **租金影響**：對租金收益的負面影響程度
+3. **未來風險**：嫌惡設施可能惡化或擴大的風險
+4. **增值潛力**：是否可能因為都更或遷移而改善？
+5. **量化評估**：建議的價格折讓幅度（百分比）
 """
         else:
             base_templates["default"]["content"] = f"""
