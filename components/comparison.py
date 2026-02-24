@@ -260,9 +260,21 @@ class ComparisonAnalyzer:
                 self._display_analysis_results(current_analysis)
                 
                 # 返回設定按鈕
-                if st.button("🆕 進行新分析", use_container_width=True):
-                    st.session_state.current_analysis_index = -1
-                    st.rerun()
+                col1, col2, col3 = st.columns([1, 1, 2])
+                with col1:
+                    if st.button("🆕 進行新分析", use_container_width=True):
+                        st.session_state.current_analysis_index = -1
+                        st.rerun()
+                with col2:
+                    if st.button("🗑️ 清除當前", use_container_width=True):
+                        # 移除當前分析
+                        if st.session_state.analysis_history:
+                            st.session_state.analysis_history.pop(st.session_state.current_analysis_index)
+                            if st.session_state.analysis_history:
+                                st.session_state.current_analysis_index = len(st.session_state.analysis_history) - 1
+                            else:
+                                st.session_state.current_analysis_index = -1
+                        st.rerun()
             else:
                 # 沒有選中分析時，顯示設定界面
                 # 分析類型選擇
