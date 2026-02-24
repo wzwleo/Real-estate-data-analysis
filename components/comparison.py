@@ -10,6 +10,22 @@ import math
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
 from collections import Counter
+import base64
+from datetime import datetime
+import io
+import plotly.graph_objects as go
+import plotly.express as px
+
+# 嘗試導入PDF相關庫
+try:
+    from fpdf import FPDF
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')  # 使用非互動式後端
+    PDF_AVAILABLE = True
+except ImportError as e:
+    PDF_AVAILABLE = False
+    st.warning("PDF生成功能需要安裝 fpdf 和 matplotlib：pip install fpdf matplotlib")
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +47,60 @@ except ImportError as e:
     CHINESE_TO_CATEGORY = {}
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
+
+
+class PDFReport(FPDF):
+    """自定義PDF報告類"""
+    
+    def __init__(self):
+        super().__init__()
+        self.set_auto_page_break(auto=True, margin=15)
+        self.add_font('DroidSans', '', 'DejaVuSans.ttf', uni=True)  # 支援中文
+        
+    def header(self):
+        self.set_font('DroidSans', '', 12)
+        self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
+        self.ln(10)
+    
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('DroidSans', '', 8)
+        self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
+    
+    def chapter_title(self, title):
+        self.set_font('DroidSans', '', 14)
+        self.set_fill_color(200, 220, 255)
+        self.cell(0, 10, title, 0, 1, 'L', 1)
+        self.ln(5)
+    
+    def chapter_body(self, body):
+        self.set_font('DroidSans', '', 11)
+        self.multi_cell(0, 8, body)
+        self.ln()
+    
+    def add_table(self, df, title):
+        """添加表格到PDF"""
+        self.set_font('DroidSans', '', 12)
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(2)
+        
+        # 表格列寬
+        col_width = self.w / (len(df.columns) + 1) - 2
+        
+        # 表頭
+        self.set_font('DroidSans', '', 10)
+        self.set_fill_color(200, 200, 200)
+        for col in df.columns:
+            self.cell(col_width, 8, str(col)[:10], 1, 0, 'C', 1)
+        self.ln()
+        
+        # 表格內容（只顯示前10行）
+        self.set_fill_color(255, 255, 255)
+        for i, row in df.head(10).iterrows():
+            for col in df.columns:
+                value = str(row[col])[:15]  # 限制長度
+                self.cell(col_width, 8, value, 1, 0, 'C')
+            self.ln()
 
 
 class ComparisonAnalyzer:
@@ -80,7 +150,7 @@ class ComparisonAnalyzer:
                 },
                 "radius": 500,
                 "prompt_focus": ["通勤便利性", "日常採買效率", "預算內最高CP值", "夜間生活便利性"],
-                "prompt_template": "default"
+                "prompt_template": "analysis"  # 改為 analysis 模板
             },
             "家庭": {
                 "icon": "👨‍👩‍👧‍👦",
@@ -98,7 +168,7 @@ class ComparisonAnalyzer:
                 },
                 "radius": 800,
                 "prompt_focus": ["學區品質與距離", "親子友善環境", "社區安全性", "假日家庭活動空間"],
-                "prompt_template": "lifestyle"
+                "prompt_template": "analysis"
             },
             "長輩退休族": {
                 "icon": "🧓",
@@ -116,7 +186,7 @@ class ComparisonAnalyzer:
                 },
                 "radius": 600,
                 "prompt_focus": ["醫療資源可及性", "散步運動空間", "傳統市場便利性", "安靜宜居環境"],
-                "prompt_template": "simple"
+                "prompt_template": "analysis"
             },
             "外地工作": {
                 "icon": "🚄",
@@ -133,7 +203,7 @@ class ComparisonAnalyzer:
                 },
                 "radius": 400,
                 "prompt_focus": ["交通樞紐距離", "南北往來便利性", "高效率生活圈", "短暫停留採買便利性"],
-                "prompt_template": "investment"
+                "prompt_template": "analysis"
             },
             "投資客": {
                 "icon": "💰",
@@ -150,7 +220,7 @@ class ComparisonAnalyzer:
                 },
                 "radius": 700,
                 "prompt_focus": ["區域發展潛力", "未來轉手性", "租金投報率", "增值空間"],
-                "prompt_template": "investment"
+                "prompt_template": "analysis"
             }
         }
     
@@ -199,6 +269,85 @@ class ComparisonAnalyzer:
         
         return auto_categories, auto_subtypes
     
+    # ============= PDF 下載功能 =============
+    
+    def _generate_pdf_report(self):
+        """生成包含所有分析結果的PDF報告"""
+        if not PDF_AVAILABLE:
+            st.error("PDF生成功能需要安裝 fpdf 和 matplotlib：pip install fpdf matplotlib")
+            return None
+        
+        if not st.session_state.saved_analyses:
+            st.warning("沒有儲存的分析結果")
+            return None
+        
+        pdf = PDFReport()
+        pdf.add_page()
+        
+        # 標題
+        pdf.set_font('DroidSans', '', 20)
+        pdf.cell(0, 20, '房屋分析綜合報告', 0, 1, 'C')
+        pdf.set_font('DroidSans', '', 12)
+        pdf.cell(0, 10, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+        pdf.ln(10)
+        
+        # 目錄
+        pdf.chapter_title('目錄')
+        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
+            profile = analysis.get('buyer_profile', '未知')
+            pdf.cell(0, 8, f'{i+1}. {name} ({profile}視角)', 0, 1)
+        pdf.ln(10)
+        
+        # 逐個分析結果
+        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
+            pdf.add_page()
+            pdf.chapter_title(f'{i+1}. {name}')
+            
+            # 基本資訊
+            profile = analysis.get('buyer_profile', '未知')
+            timestamp = analysis.get('timestamp', '未知時間')
+            mode = analysis.get('analysis_mode', '')
+            analysis_type = analysis.get('analysis_type', '生活機能')
+            
+            info = f"""
+            分析類型：{analysis_type}
+            買家類型：{profile}
+            分析時間：{timestamp}
+            分析模式：{mode}
+            """
+            pdf.chapter_body(info)
+            
+            # 房屋資訊
+            houses_data = analysis.get('houses_data', {})
+            pdf.chapter_title('房屋資訊')
+            for h_name, h_info in houses_data.items():
+                pdf.chapter_body(f"""
+                {h_name}：
+                標題：{h_info.get('title', '未知')}
+                地址：{h_info.get('address', '未知')}
+                """)
+            
+            # 設施統計
+            counts = analysis.get('facility_counts', {})
+            pdf.chapter_title('設施統計')
+            for h_name, count in counts.items():
+                pdf.chapter_body(f"{h_name}：{count} 個設施")
+            
+            # 設施表格摘要
+            df = analysis.get('facilities_table', pd.DataFrame())
+            if not df.empty:
+                pdf.add_table(df, '設施清單（前10筆）')
+            
+            # AI 分析結果
+            if 'gemini_result' in analysis:
+                pdf.chapter_title('AI 分析報告')
+                pdf.chapter_body(analysis['gemini_result'])
+            
+            pdf.ln(10)
+        
+        # 生成PDF二進制數據
+        return pdf.output(dest='S').encode('latin1')
+    
     # ============= 主要渲染方法 =============
     
     def render_comparison_tab(self):
@@ -236,6 +385,15 @@ class ComparisonAnalyzer:
                         if st.button(btn_label, key=f"saved_{name}", use_container_width=True):
                             st.session_state.current_analysis_name = name
                             st.rerun()
+                    
+                    # PDF下載按鈕
+                    if PDF_AVAILABLE and st.button("📥 下載所有分析為PDF", use_container_width=True):
+                        with st.spinner("生成PDF中..."):
+                            pdf_data = self._generate_pdf_report()
+                            if pdf_data:
+                                b64 = base64.b64encode(pdf_data).decode()
+                                href = f'<a href="data:application/octet-stream;base64,{b64}" download="房屋分析報告_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf">點此下載PDF</a>'
+                                st.markdown(href, unsafe_allow_html=True)
                     
                     # 清除所有按鈕
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
@@ -399,7 +557,7 @@ class ComparisonAnalyzer:
             st.warning("⚠️ 請至少選擇一個生活機能類別")
             return
         
-        # ============= 新增：是否加入嫌惡設施分析 =============
+        # 新增：是否加入嫌惡設施分析
         st.markdown("---")
         st.subheader("⚠️ 進階選項")
         include_nuisance = st.checkbox("加入嫌惡設施分析", value=False, 
@@ -407,7 +565,6 @@ class ComparisonAnalyzer:
         
         if include_nuisance:
             st.info("系統將同時分析周邊的嫌惡設施，如宮廟、加油站、工業區等")
-            # 可以讓使用者選擇要分析的嫌惡設施
             with st.expander("選擇要分析的嫌惡設施類型", expanded=False):
                 selected_nuisances = self._render_nuisance_selection(compact=True)
                 st.session_state.selected_nuisances = selected_nuisances
@@ -1826,7 +1983,7 @@ class ComparisonAnalyzer:
         pinfo = profiles.get(profile, {})
         
         # 根據買家類型取得建議的模板
-        suggested_template = pinfo.get("prompt_template", "default")
+        suggested_template = pinfo.get("prompt_template", "analysis")
         
         prompt = self._build_prompt(
             res["houses_data"], res["places_data"], res["facility_counts"],
@@ -1838,15 +1995,15 @@ class ComparisonAnalyzer:
         if "custom_prompt" not in st.session_state:
             st.session_state.custom_prompt = prompt
         
-        # 提示詞模板 - 根據買家類型有不同的預設
+        # 提示詞模板 - 新的分析型模板
         templates = self._get_prompt_templates(profile, analysis_type)
         
-        # 顯示模板選擇，並根據買家類型預設選中建議的模板
+        # 顯示模板選擇
         opt = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
-        
-        # 設定預設選擇為買家類型建議的模板
         template_keys = list(templates.keys())
-        default_idx = template_keys.index(suggested_template) if suggested_template in template_keys else 0
+        
+        # 預設選擇 analysis 模板
+        default_idx = template_keys.index("analysis") if "analysis" in template_keys else 0
         
         sel = st.selectbox(
             "📋 提示詞模板選擇", 
@@ -1856,7 +2013,7 @@ class ComparisonAnalyzer:
             index=default_idx
         )
         
-        if sel == "default":
+        if sel == "analysis":
             st.session_state.custom_prompt = prompt
         elif "content" in templates.get(sel, {}):
             st.session_state.custom_prompt = templates[sel]["content"]
@@ -1894,6 +2051,10 @@ class ComparisonAnalyzer:
             st.markdown(st.session_state.gemini_result)
             st.markdown("---")
             
+            # 將AI結果儲存到分析結果中
+            if st.session_state.current_analysis_name and st.session_state.current_analysis_name in st.session_state.saved_analyses:
+                st.session_state.saved_analyses[st.session_state.current_analysis_name]['gemini_result'] = st.session_state.gemini_result
+            
             c1, c2 = st.columns(2)
             with c1:
                 if st.button("🔄 重新分析", use_container_width=True, key="reanalyze"):
@@ -1917,12 +2078,23 @@ class ComparisonAnalyzer:
                 )
     
     def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, table, profile, analysis_type):
-        """建立提示詞"""
+        """建立提示詞 - 新的分析型模板"""
         pinfo = self._get_buyer_profiles().get(profile, {})
         icon = pinfo.get("icon", "👤")
         focus = pinfo.get("prompt_focus", [])
         
-        if analysis_type == "嫌惡設施":
+        # 建立設施摘要
+        facilities_summary = []
+        for cat in cats:
+            if cat in places:
+                cat_places = places.get(list(houses.keys())[0], []) if mode == "單一房屋分析" else places
+                cat_count = len([p for p in cat_places if p[0] == cat])
+                if cat_count > 0:
+                    facilities_summary.append(f"- {cat}：{cat_count} 個設施")
+        
+        facilities_text = "\n".join(facilities_summary) if facilities_summary else "無周邊設施"
+        
+        if analysis_type == "嫌惡施設":
             return self._build_nuisance_prompt(houses, places, counts, radius, mode, profile, icon, focus)
         else:
             if mode == "單一房屋分析":
@@ -1931,10 +2103,11 @@ class ComparisonAnalyzer:
                 cnt = counts.get(name, 0)
                 
                 return f"""
-你是一位專業的房地產分析師，請以「{icon} {profile}」的身份與視角，對以下房屋進行**深度生活機能分析**。
+你是一位專業的房地產分析師，請以「{icon} {profile}」的身份，對以下房屋進行分析與預測。
 
-【本次分析特別關注】
-{chr(10).join([f'✅ {f}' for f in focus])}
+【買家類型】
+{profile} - {pinfo.get('description', '')}
+重點關注：{', '.join(focus)}
 
 【房屋資訊】
 - 標題：{h['title']}
@@ -1942,48 +2115,92 @@ class ComparisonAnalyzer:
 
 【搜尋條件】
 - 半徑：{radius} 公尺
-- 類別：{', '.join(cats) if cats else '無'}
+- 分析類別：{', '.join(cats)}
 - 關鍵字：{keyword if keyword else '無'}
 
-【設施統計】
-- 總數量：{cnt} 個
+【周邊設施統計】
+- 總數量：{cnt} 個設施
+{facilities_text}
 
-【分析要求 - 完全代入{profile}角色】
-1. **整體適合度評分**（1-5星）：請以{profile}的角度，給出綜合評分
-2. **三大優點**：對{profile}來說，這間房子最吸引人的3點
-3. **三大缺點**：對{profile}來說，這間房子最需要考慮的3點
-4. **理想居住情境**：描述{profile}住在這裡的一天生活樣貌
-5. **CP值評估**：以{profile}的預算與需求，這間房子划算嗎？
-6. **一句話總結**：用一句話告訴{profile}要不要買
+請提供以下分析：
 
-請用溫暖、貼近生活的語言，讓使用者感受到這是「為我量身打造的建議」。
+1. **綜合評分**（1-10分）
+   根據{profile}的需求，給出一個具體的分數，並簡述原因。
+
+2. **主要優點**（3-5點）
+   對{profile}來說最實用的設施和生活機能，請具體說明每個優點如何提升生活品質。
+
+3. **主要缺點**（3-5點）
+   對{profile}來說的不足之處或潛在問題，請具體說明每個缺點的影響程度。
+
+4. **生活便利性預測**
+   - 平日通勤/上班日：預測平日的生活便利性
+   - 假日生活：預測週末的生活樣貌
+   - 緊急情況（醫療、採買）：評估緊急情況下的應變能力
+
+5. **未來發展潛力**
+   根據周邊設施和區域特性，預測這個地點未來3-5年的發展潛力。
+
+6. **購買建議**
+   - 是否適合{profile}購買？
+   - 合理的價格區間建議
+   - 什麼時候是最佳購買時機？
+
+請用專業、客觀的角度分析，給出實用的建議。
 """
             else:
                 house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
-                rank_list = "\n".join([f"{i+1}. {n}（{counts[n]}個設施）" 
-                                      for i, (n, _) in enumerate(sorted(counts.items(), key=lambda x: x[1], reverse=True))])
+                
+                # 建立比較表格
+                comparison_rows = []
+                for name, h_info in houses.items():
+                    cnt = counts.get(name, 0)
+                    comparison_rows.append(f"  {name}：{cnt} 個設施")
+                
+                comparison_text = "\n".join(comparison_rows)
                 
                 return f"""
-你是一位專業的房地產分析師，請以「{icon} {profile}」的身份，對以下{len(houses)}間房屋進行**比較分析**。
+你是一位專業的房地產分析師，請比較以下{len(houses)}間房屋，並以「{icon} {profile}」的身份給出建議。
 
-【本次分析特別關注】
-{chr(10).join([f'✅ {f}' for f in focus])}
+【買家類型】
+{profile} - {pinfo.get('description', '')}
+重點關注：{', '.join(focus)}
 
 【候選房屋】
 {house_list}
 
-【設施數量排名】
-{rank_list}
+【各房屋設施數量】
+{comparison_text}
 
-【分析要求 - 完全代入{profile}角色】
-1. **總排名**：以{profile}的需求，將這幾間房屋由高到低排序
-2. **首選推薦**：哪一間最適合{profile}？為什麼？
-3. **備選推薦**：如果首選無法購買，第二選擇是哪間？
-4. **各房屋優勢**：每間房屋對{profile}來說的獨特價值
-5. **各房屋風險**：每間房屋對{profile}來說的潛在問題
-6. **終極建議**：如果{profile}今天就要決定，你會建議選哪間？
+請提供以下分析：
 
-請用「你就是{profile}」的口吻，給出真正有用的購買建議。
+1. **綜合排名**（1-{len(houses)}名）
+   請將這{len(houses)}間房屋從最適合到最不適合排序，並簡述原因。
+
+2. **各房屋評分**（1-10分）
+   {chr(10).join([f'   - {name}：___分 - 原因' for name in houses.keys()])}
+
+3. **優缺點比較表**
+   | 項目 | {' | '.join(houses.keys())} |
+   |------|{'|'.join(['---' for _ in houses])}|
+   | 交通便利性 | |{' |'.join([' ' for _ in houses])}|
+   | 日常採買 | |{' |'.join([' ' for _ in houses])}|
+   | 生活品質 | |{' |'.join([' ' for _ in houses])}|
+   | 價格效益 | |{' |'.join([' ' for _ in houses])}|
+   | 未來潛力 | |{' |'.join([' ' for _ in houses])}|
+
+4. **詳細分析**
+   {chr(10).join([f'   **{name}**：\n   - 優勢：\n   - 劣勢：\n   - 適合{profile}的程度：' for name in houses.keys()])}
+
+5. **最終推薦**
+   - **首選**：房屋___，因為...
+   - **備選**：房屋___，當首選有問題時
+   - **不建議**：房屋___，因為...
+
+6. **購買時機建議**
+   現在是否適合購買？應該等待還是立即行動？預期的價格趨勢如何？
+
+請用專業、客觀的角度分析，給出實用的比較建議。
 """
     
     def _build_nuisance_prompt(self, houses, places, counts, radius, mode, profile, icon, focus):
@@ -2018,13 +2235,30 @@ class ComparisonAnalyzer:
 【附近嫌惡設施列表（前10個）】
 {nuisance_text}
 
-【分析要求 - 完全代入{profile}角色】
-1. **整體風險評分**（1-5分，分數越高風險越大）：請評估周邊嫌惡設施的整體影響
-2. **三大主要風險**：對{profile}來說，最需要擔心的3個嫌惡設施與其影響
-3. **次要風險**：其他需要注意但影響較小的設施
-4. **風險緩解建議**：如果選擇這裡，可以如何降低這些風險的影響？
-5. **居住適合度調整**：考慮到這些嫌惡設施，原本的生活機能評分應該扣減多少？
-6. **終極建議**：綜合考量嫌惡設施的影響，您會建議{profile}購買這間房子嗎？
+請提供以下分析：
+
+1. **整體風險評分**（1-5分，分數越高風險越大）
+   評估周邊嫌惡設施的整體影響程度。
+
+2. **三大主要風險**
+   對{profile}來說，最需要擔心的3個嫌惡設施，說明其具體影響。
+
+3. **次要風險**
+   其他需要注意但影響較小的設施。
+
+4. **風險對生活品質的影響預測**
+   - 日常生活的影響
+   - 夜晚/假日的影響
+   - 長期居住的心理影響
+
+5. **風險緩解建議**
+   如果選擇這裡，可以如何降低這些風險的影響？
+
+6. **對房價的影響評估**
+   這些嫌惡設施會讓房價折損多少百分比？
+
+7. **終極建議**
+   綜合考量嫌惡設施的影響，您會建議{profile}購買這間房子嗎？
 
 請特別注意：不同類型的嫌惡設施對不同買家的影響程度不同。請根據{profile}的身份，給出量身定制的風險評估。
 """
@@ -2051,34 +2285,52 @@ class ComparisonAnalyzer:
 【嫌惡設施數量統計】
 {risk_text}
 
-【分析要求 - 完全代入{profile}角色】
-1. **風險排名**：以{profile}的需求，將這幾間房屋由低風險到高風險排序
-2. **最安全選擇**：哪一間的周邊環境最適合{profile}？為什麼？
-3. **最需避開的房屋**：哪一間的嫌惡設施問題最嚴重？為什麼？
-4. **各房屋風險分析**：
-   - 每間房屋的主要風險來源
-   - 對{profile}的具體影響
-   - 是否可透過其他方式緩解？
-5. **綜合比較**：考慮生活機能與嫌惡設施的平衡，哪間最值得推薦？
-6. **終極建議**：如果{profile}今天就要決定，您會建議選擇哪間？為什麼？
+請提供以下分析：
+
+1. **風險排名**
+   以{profile}的需求，將這幾間房屋由低風險到高風險排序。
+
+2. **各房屋風險評分**（1-10分，分數越高風險越大）
+   {chr(10).join([f'   - {name}：___分 - 主要風險來源' for name in houses.keys()])}
+
+3. **風險比較表**
+   | 風險項目 | {' | '.join(houses.keys())} |
+   |---------|{'|'.join(['---' for _ in houses])}|
+   | 噪音風險 | |{' |'.join([' ' for _ in houses])}|
+   | 空汙風險 | |{' |'.join([' ' for _ in houses])}|
+   | 安全風險 | |{' |'.join([' ' for _ in houses])}|
+   | 心理影響 | |{' |'.join([' ' for _ in houses])}|
+   | 轉手難易 | |{' |'.join([' ' for _ in houses])}|
+
+4. **最安全選擇**
+   哪一間的周邊環境最適合{profile}？為什麼？
+
+5. **最需避開的房屋**
+   哪一間的嫌惡設施問題最嚴重？為什麼？
+
+6. **綜合比較**
+   考慮生活機能與嫌惡設施的平衡，哪間最值得推薦？
+
+7. **終極建議**
+   如果{profile}今天就要決定，您會建議選擇哪間？為什麼？
 
 請根據{profile}的身份，給出量身定制的風險比較分析。
 """
     
     def _get_prompt_templates(self, profile="", analysis_type="生活機能"):
-        """提示詞模板 - 根據買家類型調整"""
+        """提示詞模板 - 新的分析型模板"""
         base_templates = {
-            "default": {
-                "name": "🎯 標準分析模板", 
-                "description": "平衡完整的分析報告"
+            "analysis": {
+                "name": "📊 分析預測模板", 
+                "description": "深度分析與未來預測"
             },
             "simple": {
                 "name": "📋 簡明報告模板", 
                 "description": "快速掌握重點"
             },
-            "lifestyle": {
-                "name": "🏡 生活情境模板", 
-                "description": "描繪實際居住樣貌"
+            "comparison": {
+                "name": "🔄 比較分析模板", 
+                "description": "詳細比較多個房屋"
             },
             "investment": {
                 "name": "💰 投資分析模板", 
@@ -2088,79 +2340,66 @@ class ComparisonAnalyzer:
         
         # 根據分析類型調整模板內容
         if analysis_type == "嫌惡設施":
-            base_templates["default"]["content"] = f"""
+            base_templates["analysis"]["content"] = f"""
 請以{profile}視角，提供完整的嫌惡設施風險評估：
 
-1. **整體風險評分**（1-5分）
-2. **主要風險來源**
-3. **風險等級說明**
-4. **居住建議**
-5. **一句話總結**
+1. **整體風險評分**（1-10分）
+2. **三大主要風險**
+3. **風險對生活的影響預測**
+4. **房價影響評估**
+5. **購買建議**
 
 請根據{profile}的身份特質，分析不同嫌惡設施的影響程度。
 """
             base_templates["simple"]["content"] = f"""
 請以{profile}視角，提供簡潔的風險評估：
 
-1. **風險評分**（1-5分）
+1. **風險評分**（1-10分）
 2. **三大風險點**
-3. **最適合的居住族群**
-4. **一句話建議**
-
-請用要點式說明。
+3. **一句話總結**
 """
-            base_templates["lifestyle"]["content"] = f"""
-請以{profile}視角，描繪生活在這裡的日常，並分析嫌惡設施的影響：
+            base_templates["comparison"]["content"] = f"""
+請以{profile}視角，比較多個房屋的嫌惡設施風險：
 
-1. **平日生活**：嫌惡設施如何影響日常生活？
-2. **特殊時段**：夜晚、假日是否有特別影響？
-3. **心理感受**：居住時的心理壓迫感或不安感
-4. **長期影響**：對身心健康可能造成的影響
-5. **因應對策**：可以如何調整生活方式來應對？
-"""
-            base_templates["investment"]["content"] = f"""
-請從{profile}的投資需求角度進行嫌惡設施分析：
-
-1. **轉手影響評估**：這些嫌惡設施會降低多少轉手價值？
-2. **租金影響**：對租金收益的負面影響程度
-3. **未來風險**：嫌惡設施可能惡化或擴大的風險
-4. **增值潛力**：是否可能因為都更或遷移而改善？
-5. **量化評估**：建議的價格折讓幅度（百分比）
+1. **風險排名**
+2. **各房屋風險評分**
+3. **風險比較表**
+4. **最安全選擇**
+5. **終極建議**
 """
         else:
-            base_templates["default"]["content"] = f"""
-請以{profile}視角，提供完整的房屋分析報告：
+            base_templates["analysis"]["content"] = f"""
+請以{profile}視角，提供完整的分析與預測：
 
-1. **整體適合度評分**（1-5星）
-2. **三大優點**
-3. **三大缺點**
-4. **理想居住情境**
-5. **CP值評估**
-6. **一句話總結**
+1. **綜合評分**（1-10分）
+2. **主要優點**
+3. **主要缺點**
+4. **生活便利性預測**
+5. **未來發展潛力**
+6. **購買建議**
 
-請使用溫暖、貼近生活的語言。
+請用專業、客觀的角度分析。
 """
             base_templates["simple"]["content"] = f"""
 請以{profile}視角，提供簡潔的房屋分析：
 
-1. **整體適合度評分**（1-5星）
+1. **綜合評分**（1-10分）
 2. **三大優點**
 3. **三大缺點**
-4. **最適合的居住族群**
-5. **一句話總結**
+4. **購買建議**
 
-請使用要點式說明，方便快速閱讀。
+請用要點式說明。
 """
-            base_templates["lifestyle"]["content"] = f"""
-請以{profile}的身份，描繪住在這裡的生活樣貌：
+            base_templates["comparison"]["content"] = f"""
+請以{profile}視角，比較多個房屋：
 
-1. **平日早晨**：如何開始一天？
-2. **工作日晚間**：下班後如何放鬆？
-3. **週末時光**：假日可以去哪裡？
-4. **緊急狀況**：臨時需要醫療或採買時的應變方案
-5. **季節變化**：夏天、冬天、雨天的生活便利性差異
+1. **綜合排名**
+2. **各房屋評分**
+3. **優缺點比較表**
+4. **詳細分析**
+5. **最終推薦**
 
-請用說故事的方式，讓使用者「看見」自己住在這裡的樣子。
+請提供詳細的比較分析。
 """
             base_templates["investment"]["content"] = f"""
 請從{profile}的投資需求角度進行分析：
