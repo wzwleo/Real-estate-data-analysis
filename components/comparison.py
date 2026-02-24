@@ -52,8 +52,9 @@ class ComparisonAnalyzer:
             'auto_selected_subtypes': {},
             'analysis_type': '生活機能分析',
             'analysis_completed': False,
-            'analysis_history': [],  # 儲存分析歷史
-            'current_analysis_index': -1  # 當前查看的分析索引
+            'saved_analyses': {},  # 儲存的分析結果字典，key為房屋名稱
+            'current_analysis_name': None,  # 當前顯示的分析名稱
+            'include_nuisance': False  # 是否包含嫌惡設施
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -215,65 +216,51 @@ class ComparisonAnalyzer:
                 self._show_analysis_in_progress()
                 return
             
-            # 側邊欄：分析歷史
+            # 側邊欄：已儲存的分析
             with st.sidebar:
-                st.markdown("### 📊 分析歷史")
+                st.markdown("### 📊 已儲存分析")
                 
-                # 顯示歷史分析列表
-                if st.session_state.analysis_history:
-                    for i, analysis in enumerate(st.session_state.analysis_history):
-                        # 建立按鈕標題
-                        timestamp = analysis.get('timestamp', '未知時間')
+                if st.session_state.saved_analyses:
+                    for name, analysis in st.session_state.saved_analyses.items():
                         profile = analysis.get('buyer_profile', '未知')
-                        analysis_type = analysis.get('analysis_type', '分析')
-                        mode = analysis.get('analysis_mode', '')
+                        icon = self._get_buyer_profiles().get(profile, {}).get('icon', '🏠')
+                        timestamp = analysis.get('timestamp', '未知時間')
                         
-                        # 簡短標題
-                        if mode == "單一房屋分析":
-                            houses = list(analysis.get('houses_data', {}).keys())
-                            title = f"{houses[0][:20]}..." if houses else "房屋"
-                        else:
-                            title = f"{analysis.get('num_houses', 0)}間房屋比較"
-                        
-                        btn_label = f"{i+1}. {profile} - {analysis_type} - {title}"
+                        # 按鈕標題
+                        btn_label = f"{icon} {name}\n{profile} | {timestamp}"
                         
                         # 如果是當前顯示的分析，加上標記
-                        if i == st.session_state.current_analysis_index:
+                        if name == st.session_state.current_analysis_name:
                             btn_label = f"👉 {btn_label}"
                         
-                        if st.button(btn_label, key=f"history_{i}", use_container_width=True):
-                            st.session_state.current_analysis_index = i
+                        if st.button(btn_label, key=f"saved_{name}", use_container_width=True):
+                            st.session_state.current_analysis_name = name
                             st.rerun()
                     
-                    # 清除歷史按鈕
-                    if st.button("🗑️ 清除所有歷史", use_container_width=True):
-                        st.session_state.analysis_history = []
-                        st.session_state.current_analysis_index = -1
+                    # 清除所有按鈕
+                    if st.button("🗑️ 清除所有分析", use_container_width=True):
+                        st.session_state.saved_analyses = {}
+                        st.session_state.current_analysis_name = None
                         st.rerun()
                 else:
-                    st.info("尚無分析歷史")
+                    st.info("尚無儲存的分析")
             
             # 主內容區：顯示當前分析或設定界面
-            if st.session_state.analysis_history and st.session_state.current_analysis_index >= 0:
+            if st.session_state.current_analysis_name and st.session_state.current_analysis_name in st.session_state.saved_analyses:
                 # 顯示選中的分析結果
-                current_analysis = st.session_state.analysis_history[st.session_state.current_analysis_index]
+                current_analysis = st.session_state.saved_analyses[st.session_state.current_analysis_name]
                 self._display_analysis_results(current_analysis)
                 
                 # 返回設定按鈕
                 col1, col2, col3 = st.columns([1, 1, 2])
                 with col1:
-                    if st.button("🆕 進行新分析", use_container_width=True):
-                        st.session_state.current_analysis_index = -1
+                    if st.button("🆕 新分析", use_container_width=True):
+                        st.session_state.current_analysis_name = None
                         st.rerun()
                 with col2:
-                    if st.button("🗑️ 清除當前", use_container_width=True):
-                        # 移除當前分析
-                        if st.session_state.analysis_history:
-                            st.session_state.analysis_history.pop(st.session_state.current_analysis_index)
-                            if st.session_state.analysis_history:
-                                st.session_state.current_analysis_index = len(st.session_state.analysis_history) - 1
-                            else:
-                                st.session_state.current_analysis_index = -1
+                    if st.button("🗑️ 刪除此分析", use_container_width=True):
+                        del st.session_state.saved_analyses[st.session_state.current_analysis_name]
+                        st.session_state.current_analysis_name = None
                         st.rerun()
             else:
                 # 沒有選中分析時，顯示設定界面
@@ -412,6 +399,19 @@ class ComparisonAnalyzer:
             st.warning("⚠️ 請至少選擇一個生活機能類別")
             return
         
+        # ============= 新增：是否加入嫌惡設施分析 =============
+        st.markdown("---")
+        st.subheader("⚠️ 進階選項")
+        include_nuisance = st.checkbox("加入嫌惡設施分析", value=False, 
+                                      help="勾選後將同時分析周邊嫌惡設施")
+        
+        if include_nuisance:
+            st.info("系統將同時分析周邊的嫌惡設施，如宮廟、加油站、工業區等")
+            # 可以讓使用者選擇要分析的嫌惡設施
+            with st.expander("選擇要分析的嫌惡設施類型", expanded=False):
+                selected_nuisances = self._render_nuisance_selection(compact=True)
+                st.session_state.selected_nuisances = selected_nuisances
+        
         self._render_selection_summary(selected_cats, selected_subs, current_profile)
         st.markdown("---")
         
@@ -549,15 +549,19 @@ class ComparisonAnalyzer:
                 self._clear_all()
                 st.rerun()
     
-    def _render_nuisance_selection(self):
+    def _render_nuisance_selection(self, compact=False):
         """渲染嫌惡設施選擇"""
         selected = []
         
-        st.markdown("#### 選擇嫌惡設施類型（可複選）")
+        if compact:
+            st.markdown("##### 選擇嫌惡設施類型")
+            cols = st.columns(2)
+        else:
+            st.markdown("#### 選擇嫌惡設施類型（可複選）")
+            cols = st.columns(3)
         
-        cols = st.columns(3)
         for i, (nuisance_name, nuisance_info) in enumerate(NUISANCE_TYPES.items()):
-            with cols[i % 3]:
+            with cols[i % len(cols)]:
                 color = nuisance_info.get("color", "#dc3545")
                 level = nuisance_info.get("level", "中")
                 
@@ -569,17 +573,21 @@ class ComparisonAnalyzer:
                 else:
                     level_badge = "🟢 低度注意"
                 
-                st.markdown(f"""
-                <div style="border-left:4px solid {color}; padding-left:8px; margin-bottom:5px;">
-                    <span style="font-weight:bold;">{nuisance_name}</span>
-                    <span style="color:{color}; font-size:12px; margin-left:5px;">{level_badge}</span>
-                </div>
-                """, unsafe_allow_html=True)
+                if compact:
+                    label = f"{nuisance_name}"
+                else:
+                    st.markdown(f"""
+                    <div style="border-left:4px solid {color}; padding-left:8px; margin-bottom:5px;">
+                        <span style="font-weight:bold;">{nuisance_name}</span>
+                        <span style="color:{color}; font-size:12px; margin-left:5px;">{level_badge}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    label = " "
                 
-                if st.checkbox(f"選擇 {nuisance_name}", key=f"nuisance_{i}"):
+                if st.checkbox(label if compact else " ", key=f"nuisance_{i}_{compact}"):
                     selected.append(nuisance_name)
         
-        if selected:
+        if selected and not compact:
             st.success(f"✅ 已選擇 {len(selected)} 類嫌惡設施")
         
         return selected
@@ -697,9 +705,15 @@ class ComparisonAnalyzer:
                     "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
-                # 加入分析歷史
-                st.session_state.analysis_history.append(analysis_result)
-                st.session_state.current_analysis_index = len(st.session_state.analysis_history) - 1
+                # 儲存分析結果到側邊欄
+                if s["mode"] == "單一房屋分析":
+                    name = list(houses_data.keys())[0]
+                    analysis_name = f"{s.get('profile', '未知')}_{name}"
+                else:
+                    analysis_name = f"{s.get('profile', '未知')}_{s['mode']}_{len(houses_data)}間"
+                
+                st.session_state.saved_analyses[analysis_name] = analysis_result
+                st.session_state.current_analysis_name = analysis_name
                 
                 status.update(label="✅ 分析完成！", state="complete", expanded=False)
             
@@ -812,7 +826,7 @@ class ComparisonAnalyzer:
         """重設頁面"""
         keys = ['analysis_in_progress', 'analysis_results', 'gemini_result', 
                 'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes',
-                'analysis_completed', 'analysis_history', 'current_analysis_index']
+                'analysis_completed', 'saved_analyses', 'current_analysis_name']
         for k in keys:
             if k in st.session_state:
                 del st.session_state[k]
@@ -1062,7 +1076,7 @@ class ComparisonAnalyzer:
         keys = ['analysis_settings', 'analysis_results', 'analysis_in_progress', 'gemini_result',
                 'custom_prompt', 'used_prompt', 'selected_houses', 'buyer_profile',
                 'auto_selected_categories', 'auto_selected_subtypes', 'suggested_radius',
-                'analysis_completed', 'analysis_history', 'current_analysis_index']
+                'analysis_completed', 'saved_analyses', 'current_analysis_name']
         for k in keys:
             if k in st.session_state: del st.session_state[k]
     
@@ -1126,9 +1140,15 @@ class ComparisonAnalyzer:
                     "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
                 }
                 
-                # 加入分析歷史
-                st.session_state.analysis_history.append(analysis_result)
-                st.session_state.current_analysis_index = len(st.session_state.analysis_history) - 1
+                # 儲存分析結果到側邊欄
+                if s["mode"] == "單一房屋分析":
+                    name = list(houses_data.keys())[0]
+                    analysis_name = f"{s.get('profile', '未知')}_{name}"
+                else:
+                    analysis_name = f"{s.get('profile', '未知')}_{s['mode']}_{len(houses_data)}間"
+                
+                st.session_state.saved_analyses[analysis_name] = analysis_result
+                st.session_state.current_analysis_name = analysis_name
                 
                 status.update(label="✅ 分析完成！", state="complete", expanded=False)
             
