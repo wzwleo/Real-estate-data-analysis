@@ -51,7 +51,9 @@ class ComparisonAnalyzer:
             'auto_selected_categories': [],
             'auto_selected_subtypes': {},
             'analysis_type': '生活機能分析',
-            'analysis_completed': False  # 新增：標記分析是否完成
+            'analysis_completed': False,
+            'analysis_history': [],  # 儲存分析歷史
+            'current_analysis_index': -1  # 當前查看的分析索引
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -213,56 +215,80 @@ class ComparisonAnalyzer:
                 self._show_analysis_in_progress()
                 return
             
-            # 如果有分析結果，先顯示結果
-            if "analysis_results" in st.session_state:
-                self._display_analysis_results(st.session_state.analysis_results)
+            # 側邊欄：分析歷史
+            with st.sidebar:
+                st.markdown("### 📊 分析歷史")
                 
-                # 新增：清除結果的按鈕
-                col1, col2, col3 = st.columns([1, 1, 2])
-                with col1:
-                    if st.button("🆕 新分析", use_container_width=True):
-                        # 清除結果但保留買家類型
-                        keys_to_keep = ['buyer_profile', 'auto_selected_categories', 
-                                       'auto_selected_subtypes', 'suggested_radius']
-                        keys_to_remove = ['analysis_results', 'gemini_result', 'used_prompt']
+                # 顯示歷史分析列表
+                if st.session_state.analysis_history:
+                    for i, analysis in enumerate(st.session_state.analysis_history):
+                        # 建立按鈕標題
+                        timestamp = analysis.get('timestamp', '未知時間')
+                        profile = analysis.get('buyer_profile', '未知')
+                        analysis_type = analysis.get('analysis_type', '分析')
+                        mode = analysis.get('analysis_mode', '')
                         
-                        for key in keys_to_remove:
-                            if key in st.session_state:
-                                del st.session_state[key]
+                        # 簡短標題
+                        if mode == "單一房屋分析":
+                            houses = list(analysis.get('houses_data', {}).keys())
+                            title = f"{houses[0][:20]}..." if houses else "房屋"
+                        else:
+                            title = f"{analysis.get('num_houses', 0)}間房屋比較"
+                        
+                        btn_label = f"{i+1}. {profile} - {analysis_type} - {title}"
+                        
+                        # 如果是當前顯示的分析，加上標記
+                        if i == st.session_state.current_analysis_index:
+                            btn_label = f"👉 {btn_label}"
+                        
+                        if st.button(btn_label, key=f"history_{i}", use_container_width=True):
+                            st.session_state.current_analysis_index = i
+                            st.rerun()
+                    
+                    # 清除歷史按鈕
+                    if st.button("🗑️ 清除所有歷史", use_container_width=True):
+                        st.session_state.analysis_history = []
+                        st.session_state.current_analysis_index = -1
                         st.rerun()
+                else:
+                    st.info("尚無分析歷史")
+            
+            # 主內容區：顯示當前分析或設定界面
+            if st.session_state.analysis_history and st.session_state.current_analysis_index >= 0:
+                # 顯示選中的分析結果
+                current_analysis = st.session_state.analysis_history[st.session_state.current_analysis_index]
+                self._display_analysis_results(current_analysis)
                 
-                with col2:
-                    if st.button("🗑️ 全部清除", use_container_width=True):
-                        self._clear_all()
-                        st.rerun()
-                
-                return  # 顯示結果後就返回，不顯示設定界面
-            
-            # 沒有分析結果時，顯示分析類型選擇和設定界面
-            # 分析類型選擇
-            st.markdown("### 📊 選擇分析類型")
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("🏪 生活機能分析", 
-                           type="primary" if st.session_state.analysis_type == "生活機能分析" else "secondary",
-                           use_container_width=True):
-                    st.session_state.analysis_type = "生活機能分析"
+                # 返回設定按鈕
+                if st.button("🆕 進行新分析", use_container_width=True):
+                    st.session_state.current_analysis_index = -1
                     st.rerun()
-            with col2:
-                if st.button("⚠️ 嫌惡設施分析", 
-                           type="primary" if st.session_state.analysis_type == "嫌惡設施分析" else "secondary",
-                           use_container_width=True):
-                    st.session_state.analysis_type = "嫌惡設施分析"
-                    st.rerun()
-            
-            st.markdown("---")
-            
-            # 根據分析類型顯示對應的設定界面
-            if st.session_state.analysis_type == "生活機能分析":
-                self._render_life_function_analysis(fav_df)
             else:
-                self._render_nuisance_analysis(fav_df)
+                # 沒有選中分析時，顯示設定界面
+                # 分析類型選擇
+                st.markdown("### 📊 選擇分析類型")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("🏪 生活機能分析", 
+                               type="primary" if st.session_state.analysis_type == "生活機能分析" else "secondary",
+                               use_container_width=True):
+                        st.session_state.analysis_type = "生活機能分析"
+                        st.rerun()
+                with col2:
+                    if st.button("⚠️ 嫌惡設施分析", 
+                               type="primary" if st.session_state.analysis_type == "嫌惡設施分析" else "secondary",
+                               use_container_width=True):
+                        st.session_state.analysis_type = "嫌惡設施分析"
+                        st.rerun()
                 
+                st.markdown("---")
+                
+                # 根據分析類型顯示對應的設定界面
+                if st.session_state.analysis_type == "生活機能分析":
+                    self._render_life_function_analysis(fav_df)
+                else:
+                    self._render_nuisance_analysis(fav_df)
+            
         except Exception as e:
             st.error(f"❌ 渲染分析頁面時發生錯誤: {str(e)}")
             st.button("🔄 重新整理頁面", on_click=self._reset_page)
@@ -579,7 +605,7 @@ class ComparisonAnalyzer:
             st.session_state.analysis_in_progress = False
     
     def _execute_nuisance_analysis(self):
-        """執行嫌惡設施分析核心 - 修正版（不移除 rerun）"""
+        """執行嫌惡設施分析核心"""
         try:
             s = st.session_state.analysis_settings
             fav_df = pd.read_json(s["fav"], orient='split')
@@ -642,7 +668,9 @@ class ComparisonAnalyzer:
                 
                 # 步驟4: 儲存
                 st.write("💾 步驟 4/4: 儲存結果...")
-                st.session_state.analysis_results = {
+                
+                # 建立分析結果
+                analysis_result = {
                     "analysis_mode": s["mode"],
                     "analysis_type": "嫌惡設施",
                     "houses_data": houses_data,
@@ -653,14 +681,19 @@ class ComparisonAnalyzer:
                     "radius": s["radius"],
                     "num_houses": len(houses_data),
                     "facilities_table": table,
-                    "buyer_profile": s.get("profile", "未指定")
+                    "buyer_profile": s.get("profile", "未指定"),
+                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
                 }
+                
+                # 加入分析歷史
+                st.session_state.analysis_history.append(analysis_result)
+                st.session_state.current_analysis_index = len(st.session_state.analysis_history) - 1
                 
                 status.update(label="✅ 分析完成！", state="complete", expanded=False)
             
             st.session_state.analysis_in_progress = False
             st.session_state.analysis_completed = True
-            st.rerun()  # 保留 rerun 來顯示結果
+            st.rerun()
             
         except Exception as e:
             st.error(f"❌ 分析失敗: {e}")
@@ -767,7 +800,7 @@ class ComparisonAnalyzer:
         """重設頁面"""
         keys = ['analysis_in_progress', 'analysis_results', 'gemini_result', 
                 'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes',
-                'analysis_completed']
+                'analysis_completed', 'analysis_history', 'current_analysis_index']
         for k in keys:
             if k in st.session_state:
                 del st.session_state[k]
@@ -1017,12 +1050,12 @@ class ComparisonAnalyzer:
         keys = ['analysis_settings', 'analysis_results', 'analysis_in_progress', 'gemini_result',
                 'custom_prompt', 'used_prompt', 'selected_houses', 'buyer_profile',
                 'auto_selected_categories', 'auto_selected_subtypes', 'suggested_radius',
-                'analysis_completed']
+                'analysis_completed', 'analysis_history', 'current_analysis_index']
         for k in keys:
             if k in st.session_state: del st.session_state[k]
     
     def _execute_analysis(self):
-        """執行分析核心 - 修正版（使用 st.status）"""
+        """執行分析核心"""
         try:
             s = st.session_state.analysis_settings
             fav_df = pd.read_json(s["fav"], orient='split')
@@ -1064,7 +1097,9 @@ class ComparisonAnalyzer:
                 
                 # 步驟4: 儲存
                 st.write("💾 步驟 4/4: 儲存結果...")
-                st.session_state.analysis_results = {
+                
+                # 建立分析結果
+                analysis_result = {
                     "analysis_mode": s["mode"],
                     "analysis_type": s.get("analysis_type", "生活機能"),
                     "houses_data": houses_data,
@@ -1075,14 +1110,19 @@ class ComparisonAnalyzer:
                     "keyword": s["keyword"],
                     "num_houses": len(houses_data),
                     "facilities_table": table,
-                    "buyer_profile": s.get("profile", "未指定")
+                    "buyer_profile": s.get("profile", "未指定"),
+                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
                 }
+                
+                # 加入分析歷史
+                st.session_state.analysis_history.append(analysis_result)
+                st.session_state.current_analysis_index = len(st.session_state.analysis_history) - 1
                 
                 status.update(label="✅ 分析完成！", state="complete", expanded=False)
             
             st.session_state.analysis_in_progress = False
             st.session_state.analysis_completed = True
-            st.rerun()  # 保留 rerun 來顯示結果
+            st.rerun()
             
         except Exception as e:
             st.error(f"❌ 分析失敗: {e}")
@@ -1193,11 +1233,14 @@ class ComparisonAnalyzer:
         mode = res["analysis_mode"]
         profile = res.get("buyer_profile", "未指定")
         analysis_type = res.get("analysis_type", "生活機能")
+        timestamp = res.get("timestamp", "未知時間")
         profiles = self._get_buyer_profiles()
         pinfo = profiles.get(profile, {})
         icon = pinfo.get("icon", "👤")
         
+        st.markdown(f"### 分析時間：{timestamp}")
         st.markdown("---")
+        
         if analysis_type == "嫌惡設施":
             st.markdown(f"## {icon} {profile}視角 · 嫌惡設施分析")
         else:
@@ -1451,7 +1494,7 @@ class ComparisonAnalyzer:
                     )
     
     def _render_map_with_links(self, lat, lng, places, radius, title, house_info, browser_key):
-        """渲染地圖 - 修正版"""
+        """渲染地圖"""
         if not browser_key:
             st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
             return
