@@ -13,6 +13,7 @@ from collections import Counter
 import base64
 from datetime import datetime
 import io
+import re
 
 # 嘗試導入PDF相關庫
 try:
@@ -48,130 +49,46 @@ except ImportError as e:
     DEFAULT_RADIUS = 500
 
 
-class PDFReport(FPDF):
-    """自定義PDF報告類 - 使用系統內建字型"""
+class SimplePDF(FPDF):
+    """簡化版PDF類 - 只使用英文字型"""
     
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
-        self.chinese_font_loaded = False
-        
+    
     def header(self):
-        # 嘗試載入中文字型
-        self._load_chinese_font()
-        
-        if self.chinese_font_loaded:
-            self.set_font('chinese', '', 16)
-            self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
-        else:
-            self.set_font('helvetica', '', 16)
-            self.cell(0, 10, 'House Analysis Report', 0, 1, 'C')
-        self.ln(10)
+        self.set_font('helvetica', 'B', 16)
+        self.cell(0, 10, 'House Analysis Report', 0, 1, 'C')
+        self.ln(5)
     
     def footer(self):
         self.set_y(-15)
-        if self.chinese_font_loaded:
-            self.set_font('chinese', '', 8)
-        else:
-            self.set_font('helvetica', '', 8)
+        self.set_font('helvetica', 'I', 8)
         self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
     
-    def _load_chinese_font(self):
-        """根據作業系統載入對應的中文字型"""
-        try:
-            if os.name == 'nt':  # Windows
-                # 嘗試常見的Windows中文字型
-                font_paths = [
-                    'C:\\Windows\\Fonts\\msjh.ttc',  # 微軟正黑體
-                    'C:\\Windows\\Fonts\\msjhbd.ttc',  # 微軟正黑體粗體
-                    'C:\\Windows\\Fonts\\kaiu.ttf',  # 標楷體
-                    'C:\\Windows\\Fonts\\mingliu.ttc',  # 細明體
-                ]
-                for font_path in font_paths:
-                    if os.path.exists(font_path):
-                        self.add_font('chinese', '', font_path, uni=True)
-                        self.chinese_font_loaded = True
-                        break
-                        
-            elif os.name == 'posix':  # macOS/Linux
-                # macOS 字型路徑
-                mac_fonts = [
-                    '/System/Library/Fonts/PingFang.ttc',
-                    '/System/Library/Fonts/STHeiti Light.ttc',
-                    '/System/Library/Fonts/AppleGothic.ttf',
-                ]
-                # Linux 字型路徑
-                linux_fonts = [
-                    '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
-                    '/usr/share/fonts/truetype/arphic/uming.ttc',
-                    '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
-                ]
-                
-                all_fonts = mac_fonts + linux_fonts
-                for font_path in all_fonts:
-                    if os.path.exists(font_path):
-                        self.add_font('chinese', '', font_path, uni=True)
-                        self.chinese_font_loaded = True
-                        break
-        except:
-            # 字型載入失敗時，使用預設字型
-            pass
-    
     def chapter_title(self, title):
-        if self.chinese_font_loaded:
-            self.set_font('chinese', '', 14)
-        else:
-            self.set_font('helvetica', '', 14)
+        self.set_font('helvetica', 'B', 14)
         self.set_fill_color(200, 220, 255)
-        self.cell(0, 10, title, 0, 1, 'L', 1)
+        self.cell(0, 10, self._clean_text(title), 0, 1, 'L', 1)
         self.ln(5)
     
     def chapter_body(self, body):
-        if self.chinese_font_loaded:
-            self.set_font('chinese', '', 11)
-        else:
-            self.set_font('helvetica', '', 11)
-        
-        # 如果沒有中文字型，過濾掉中文
-        if not self.chinese_font_loaded:
-            # 簡單過濾：只保留英文、數字和基本符號
-            body = ''.join(c for c in body if ord(c) < 128)
-        
-        self.multi_cell(0, 8, body)
-        self.ln()
+        self.set_font('helvetica', '', 11)
+        # 分行處理
+        for line in body.split('\n'):
+            if line.strip():
+                self.cell(0, 8, self._clean_text(line), 0, 1)
+        self.ln(2)
     
-    def add_table(self, df, title):
-        """添加表格到PDF"""
-        self.chapter_title(title)
-        
-        # 表格列寬
-        col_width = self.w / (min(len(df.columns), 5) + 1) - 2
-        
-        # 表頭
-        if self.chinese_font_loaded:
-            self.set_font('chinese', '', 10)
-        else:
-            self.set_font('helvetica', '', 10)
-        self.set_fill_color(200, 200, 200)
-        
-        # 只顯示前5個欄位
-        display_cols = list(df.columns)[:5]
-        for col in display_cols:
-            col_name = str(col)[:10]
-            if not self.chinese_font_loaded:
-                col_name = col_name.encode('ascii', 'ignore').decode()
-            self.cell(col_width, 8, col_name, 1, 0, 'C', 1)
-        self.ln()
-        
-        # 表格內容（只顯示前5行）
-        self.set_fill_color(255, 255, 255)
-        for i, row in df.head(5).iterrows():
-            for col in display_cols:
-                value = str(row[col])[:15]
-                if not self.chinese_font_loaded:
-                    value = value.encode('ascii', 'ignore').decode()
-                self.cell(col_width, 8, value, 1, 0, 'C')
-            self.ln()
+    def _clean_text(self, text):
+        """移除或轉換非ASCII字符"""
+        if not text:
+            return ""
+        # 將常見的中文標點符號轉換為英文
+        text = text.replace('，', ', ').replace('。', '. ').replace('：', ': ').replace('；', '; ')
+        text = text.replace('「', '"').replace('」', '"').replace('『', "'").replace('』', "'")
+        # 移除其他非ASCII字符
+        return ''.join(c if ord(c) < 128 else ' ' for c in str(text))
 
 
 class ComparisonAnalyzer:
@@ -195,7 +112,8 @@ class ComparisonAnalyzer:
             'analysis_completed': False,
             'saved_analyses': {},  # 儲存的分析結果字典，key為房屋名稱
             'current_analysis_name': None,  # 當前顯示的分析名稱
-            'include_nuisance': False  # 是否包含嫌惡設施
+            'include_nuisance': False,  # 是否包含嫌惡設施
+            'selected_nuisances': []  # 選擇的嫌惡設施
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -343,78 +261,93 @@ class ComparisonAnalyzer:
     # ============= PDF 下載功能 =============
     
     def _generate_pdf_report(self):
-        """生成包含所有分析結果的PDF報告"""
+        """生成包含所有分析結果的PDF報告 - 簡化版"""
         if not PDF_AVAILABLE:
             return None
         
         if not st.session_state.saved_analyses:
             return None
         
-        pdf = PDFReport()
-        pdf.add_page()
-        
-        # 標題
-        pdf.chapter_title(f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}')
-        pdf.ln(5)
-        
-        # 目錄
-        pdf.chapter_title('分析清單')
-        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-            profile = analysis.get('buyer_profile', '未知')
-            pdf.chapter_body(f'{i+1}. {name} ({profile}視角)')
-        pdf.ln(5)
-        
-        # 逐個分析結果
-        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-            pdf.add_page()
-            pdf.chapter_title(f'{i+1}. {name}')
-            
-            # 基本資訊
-            profile = analysis.get('buyer_profile', '未知')
-            timestamp = analysis.get('timestamp', '未知時間')
-            mode = analysis.get('analysis_mode', '')
-            analysis_type = analysis.get('analysis_type', '生活機能')
-            
-            info = f"""
-分析類型：{analysis_type}
-買家類型：{profile}
-分析時間：{timestamp}
-分析模式：{mode}
-            """
-            pdf.chapter_body(info)
-            
-            # 房屋資訊
-            houses_data = analysis.get('houses_data', {})
-            pdf.chapter_title('房屋資訊')
-            for h_name, h_info in houses_data.items():
-                pdf.chapter_body(f"""
-{h_name}：
-標題：{h_info.get('title', '未知')}
-地址：{h_info.get('address', '未知')}
-                """)
-            
-            # 設施統計
-            counts = analysis.get('facility_counts', {})
-            pdf.chapter_title('設施統計')
-            for h_name, count in counts.items():
-                pdf.chapter_body(f"{h_name}：{count} 個設施")
-            
-            # 設施表格摘要
-            df = analysis.get('facilities_table', pd.DataFrame())
-            if not df.empty:
-                pdf.add_table(df, '設施清單（前5筆）')
-            
-            # AI 分析結果
-            if 'gemini_result' in analysis:
-                pdf.chapter_title('AI 分析報告')
-                pdf.chapter_body(analysis['gemini_result'])
-            
-            pdf.ln(5)
-        
-        # 生成PDF二進制數據
         try:
+            pdf = SimplePDF()
+            pdf.add_page()
+            
+            # 生成時間
+            pdf.set_font('helvetica', '', 11)
+            pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+            pdf.ln(5)
+            
+            # 目錄
+            pdf.chapter_title('Table of Contents')
+            for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
+                profile = analysis.get('buyer_profile', 'Unknown')
+                pdf.cell(0, 8, f"{i+1}. Analysis {i+1} - {profile}", 0, 1)
+            pdf.ln(5)
+            
+            # 逐個分析結果
+            for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
+                pdf.add_page()
+                pdf.chapter_title(f'Analysis {i+1}')
+                
+                # 基本資訊
+                profile = analysis.get('buyer_profile', 'Unknown')
+                timestamp = analysis.get('timestamp', 'Unknown')
+                mode = analysis.get('analysis_mode', '')
+                analysis_type = analysis.get('analysis_type', 'Life Function')
+                
+                info = f"""
+Basic Information:
+- Analysis Type: {analysis_type}
+- Buyer Profile: {profile}
+- Time: {timestamp}
+- Mode: {mode}
+                """
+                pdf.chapter_body(info)
+                
+                # 房屋資訊
+                houses_data = analysis.get('houses_data', {})
+                pdf.set_font('helvetica', 'B', 12)
+                pdf.cell(0, 8, 'Property Information:', 0, 1)
+                pdf.set_font('helvetica', '', 11)
+                for h_name, h_info in houses_data.items():
+                    pdf.cell(0, 8, f"{h_name}:", 0, 1)
+                    pdf.cell(0, 8, f"  Title: {h_info.get('title', 'Unknown')[:50]}", 0, 1)
+                    pdf.cell(0, 8, f"  Address: {h_info.get('address', 'Unknown')[:50]}", 0, 1)
+                pdf.ln(5)
+                
+                # 設施統計
+                counts = analysis.get('facility_counts', {})
+                pdf.set_font('helvetica', 'B', 12)
+                pdf.cell(0, 8, 'Facility Statistics:', 0, 1)
+                pdf.set_font('helvetica', '', 11)
+                for h_name, count in counts.items():
+                    pdf.cell(0, 8, f"{h_name}: {count} facilities", 0, 1)
+                pdf.ln(5)
+                
+                # AI 分析結果
+                if 'gemini_result' in analysis:
+                    pdf.set_font('helvetica', 'B', 12)
+                    pdf.cell(0, 8, 'AI Analysis Report:', 0, 1)
+                    pdf.set_font('helvetica', '', 10)
+                    
+                    # 將AI結果分段写入
+                    result_text = analysis['gemini_result']
+                    # 限制每行長度
+                    lines = result_text.split('\n')
+                    for line in lines:
+                        if line.strip():
+                            # 如果行太長，切分成多行
+                            while len(line) > 80:
+                                pdf.cell(0, 5, line[:80], 0, 1)
+                                line = line[80:]
+                            pdf.cell(0, 5, line, 0, 1)
+                    pdf.ln(5)
+            
+            # 生成PDF二進制數據
             return pdf.output(dest='S').encode('latin1')
-        except:
+            
+        except Exception as e:
+            st.error(f"PDF生成錯誤: {str(e)}")
             return None
     
     # ============= 主要渲染方法 =============
@@ -445,7 +378,7 @@ class ComparisonAnalyzer:
                         timestamp = analysis.get('timestamp', '未知時間')
                         
                         # 按鈕標題
-                        btn_label = f"{icon} {name}\n{profile} | {timestamp}"
+                        btn_label = f"{icon} {name[:20]}...\n{profile} | {timestamp}"
                         
                         # 如果是當前顯示的分析，加上標記
                         if name == st.session_state.current_analysis_name:
@@ -455,19 +388,20 @@ class ComparisonAnalyzer:
                             st.session_state.current_analysis_name = name
                             st.rerun()
                     
-                    # PDF下載按鈕（只有在套件可用時才顯示）
+                    # PDF下載按鈕
                     if PDF_AVAILABLE:
                         if st.button("📥 下載所有分析為PDF", use_container_width=True):
                             with st.spinner("生成PDF中..."):
                                 pdf_data = self._generate_pdf_report()
                                 if pdf_data:
                                     b64 = base64.b64encode(pdf_data).decode()
-                                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="房屋分析報告_{datetime.now().strftime("%Y%m%d_%H%M%S")}.pdf">點此下載PDF</a>'
+                                    filename = f"analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">點此下載PDF</a>'
                                     st.markdown(href, unsafe_allow_html=True)
                                 else:
                                     st.error("PDF生成失敗")
                     else:
-                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf matplotlib`")
+                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf`")
                     
                     # 清除所有按鈕
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
