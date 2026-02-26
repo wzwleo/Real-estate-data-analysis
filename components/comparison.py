@@ -24,7 +24,6 @@ try:
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
-    # 不安裝套件時不顯示錯誤，只是不能用PDF功能
     pass
 
 # 修正匯入路徑
@@ -41,7 +40,6 @@ try:
 except ImportError as e:
     CONFIG_LOADED = False
     st.warning(f"無法載入設定: {e}")
-    # 避免後續錯誤
     PLACE_TYPES = {}
     NUISANCE_TYPES = {}
     CHINESE_TO_CATEGORY = {}
@@ -74,7 +72,6 @@ class SimplePDF(FPDF):
     
     def chapter_body(self, body):
         self.set_font('helvetica', '', 11)
-        # 分行處理
         for line in body.split('\n'):
             if line.strip():
                 cleaned_line = self._clean_text(line)
@@ -87,7 +84,6 @@ class SimplePDF(FPDF):
         if not text:
             return ""
         text = str(text)
-        # 只保留ASCII字符
         result = []
         for c in text:
             if ord(c) < 128:
@@ -114,22 +110,18 @@ class ComparisonAnalyzer:
             'current_page': 1,
             'last_gemini_call': 0,
             'buyer_profile': None,
-            'auto_selected_categories': [],
             'auto_selected_subtypes': {},
             'analysis_type': '生活機能分析',
             'analysis_completed': False,
-            'saved_analyses': {},  # 儲存的分析結果字典，key為房屋名稱
-            'current_analysis_name': None,  # 當前顯示的分析名稱
-            'include_nuisance': False,  # 是否包含嫌惡設施
-            'selected_nuisances': [],  # 選擇的嫌惡設施
-            'last_selected_categories': [],  # 上一次選擇的大類別
-            'last_selected_subtypes': {}  # 上一次選擇的小類別
+            'saved_analyses': {},
+            'current_analysis_name': None,
+            'include_nuisance': False,
+            'selected_nuisances': [],
+            'last_selected_subtypes': {}
         }
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
-    
-    # ============= 買家類型定義 =============
     
     def _get_buyer_profiles(self):
         """定義買家類型"""
@@ -223,23 +215,20 @@ class ComparisonAnalyzer:
             }
         }
     
-    def _auto_select_categories(self, profile_name):
+    def _auto_select_subtypes(self, profile_name):
         """根據買家類型自動選擇設施"""
         profiles = self._get_buyer_profiles()
         if profile_name not in profiles:
-            return [], {}
+            return {}
         
         profile = profiles[profile_name]
-        auto_categories = []
         auto_subtypes = {}
         
         # 處理優先類別
         for cat, subtypes in profile.get("priority_categories", {}).items():
             if cat in PLACE_TYPES:
-                auto_categories.append(cat)
                 if cat not in auto_subtypes:
                     auto_subtypes[cat] = []
-                # 只加入存在於 PLACE_TYPES[cat] 的有效子類別，並去除重複
                 valid_subtypes = []
                 seen = set()
                 for s in subtypes:
@@ -251,8 +240,6 @@ class ComparisonAnalyzer:
         # 處理次要類別
         for cat, subtypes in profile.get("secondary_categories", {}).items():
             if cat in PLACE_TYPES:
-                if cat not in auto_categories:
-                    auto_categories.append(cat)
                 if cat not in auto_subtypes:
                     auto_subtypes[cat] = []
                 valid_subtypes = []
@@ -263,19 +250,13 @@ class ComparisonAnalyzer:
                         seen.add(s)
                 auto_subtypes[cat].extend(valid_subtypes)
         
-        # 移除重複的類別
-        auto_categories = list(dict.fromkeys(auto_categories))
-        
         # 儲存上次的選擇
-        st.session_state.last_selected_categories = auto_categories.copy()
         st.session_state.last_selected_subtypes = {k: v.copy() for k, v in auto_subtypes.items()}
         
-        return auto_categories, auto_subtypes
-    
-    # ============= PDF 下載功能 =============
+        return auto_subtypes
     
     def _generate_pdf_report(self):
-        """生成包含所有分析結果的PDF報告 - 完全清理中文"""
+        """生成包含所有分析結果的PDF報告"""
         if not PDF_AVAILABLE:
             return None
         
@@ -286,12 +267,10 @@ class ComparisonAnalyzer:
             pdf = SimplePDF()
             pdf.add_page()
             
-            # 生成時間
             pdf.set_font('helvetica', '', 11)
             pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
             pdf.ln(5)
             
-            # 目錄
             pdf.chapter_title('Table of Contents')
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 profile = analysis.get('buyer_profile', 'Unknown')
@@ -299,12 +278,10 @@ class ComparisonAnalyzer:
                 pdf.cell(0, 8, clean_name, 0, 1)
             pdf.ln(5)
             
-            # 逐個分析結果
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 pdf.add_page()
                 pdf.chapter_title(f'Analysis {i+1}')
                 
-                # 基本資訊
                 profile = analysis.get('buyer_profile', 'Unknown')
                 timestamp = analysis.get('timestamp', 'Unknown')
                 mode = analysis.get('analysis_mode', '')
@@ -323,7 +300,6 @@ Basic Information:
                 """
                 pdf.chapter_body(info)
                 
-                # 房屋資訊
                 houses_data = analysis.get('houses_data', {})
                 pdf.set_font('helvetica', 'B', 12)
                 pdf.cell(0, 8, 'Property Information:', 0, 1)
@@ -337,7 +313,6 @@ Basic Information:
                     pdf.cell(0, 8, f"  Address: {clean_address}", 0, 1)
                 pdf.ln(5)
                 
-                # 設施統計
                 counts = analysis.get('facility_counts', {})
                 pdf.set_font('helvetica', 'B', 12)
                 pdf.cell(0, 8, 'Facility Statistics:', 0, 1)
@@ -347,7 +322,6 @@ Basic Information:
                     pdf.cell(0, 8, f"{clean_h_name}: {count} facilities", 0, 1)
                 pdf.ln(5)
                 
-                # 設施表格摘要
                 df = analysis.get('facilities_table', pd.DataFrame())
                 if not df.empty:
                     pdf.set_font('helvetica', 'B', 12)
@@ -366,7 +340,6 @@ Basic Information:
                             pdf.cell(0, 6, ' - '.join(line), 0, 1)
                     pdf.ln(5)
                 
-                # AI 分析結果
                 if 'gemini_result' in analysis:
                     pdf.set_font('helvetica', 'B', 12)
                     pdf.cell(0, 8, 'AI Analysis Report:', 0, 1)
@@ -397,7 +370,6 @@ Basic Information:
         
         text = str(text)
         
-        # 替換常見的中文標點符號
         replacements = {
             '，': ', ', '。': '. ', '：': ': ', '；': '; ',
             '「': '"', '」': '"', '『': "'", '』': "'",
@@ -407,7 +379,6 @@ Basic Information:
         for ch, repl in replacements.items():
             text = text.replace(ch, repl)
         
-        # 只保留ASCII字符
         result = []
         for c in text:
             if ord(c) < 128:
@@ -419,8 +390,6 @@ Basic Information:
         cleaned = ' '.join(cleaned.split())
         return cleaned
     
-    # ============= 主要渲染方法 =============
-    
     def render_comparison_tab(self):
         """渲染分析頁面"""
         try:
@@ -431,12 +400,10 @@ Basic Information:
                 st.info("⭐ 尚未有收藏房產，無法分析")
                 return
             
-            # 檢查是否在分析中
             if st.session_state.get('analysis_in_progress', False):
                 self._show_analysis_in_progress()
                 return
             
-            # 側邊欄：已儲存的分析
             with st.sidebar:
                 st.markdown("### 📊 已儲存分析")
                 
@@ -476,7 +443,6 @@ Basic Information:
                 else:
                     st.info("尚無儲存的分析")
             
-            # 主內容區：顯示當前分析或設定界面
             if st.session_state.current_analysis_name and st.session_state.current_analysis_name in st.session_state.saved_analyses:
                 current_analysis = st.session_state.saved_analyses[st.session_state.current_analysis_name]
                 self._display_analysis_results(current_analysis)
@@ -492,7 +458,6 @@ Basic Information:
                         st.session_state.current_analysis_name = None
                         st.rerun()
             else:
-                # 分析類型選擇
                 st.markdown("### 📊 選擇分析類型")
                 col1, col2 = st.columns(2)
                 with col1:
@@ -520,8 +485,9 @@ Basic Information:
             st.button("🔄 重新整理頁面", on_click=self._reset_page)
     
     def _render_life_function_analysis(self, fav_df):
-        """渲染生活機能分析"""
-        # ============= 步驟1: 買家類型選擇 =============
+        """渲染生活機能分析 - 直接顯示所有設施，沒有大類別選擇"""
+        
+        # 步驟1: 買家類型選擇
         st.markdown("### 👤 步驟1：誰要住這裡？")
         st.markdown("選擇買家類型，系統將**自動推薦**最適合的生活機能")
         
@@ -548,14 +514,9 @@ Basic Information:
                 if st.button(f"選擇 {profile_name}", key=f"select_{profile_name}", 
                            type=btn_type, use_container_width=True):
                     st.session_state.buyer_profile = profile_name
-                    cats, subs = self._auto_select_categories(profile_name)
-                    st.session_state.auto_selected_categories = cats
+                    subs = self._auto_select_subtypes(profile_name)
                     st.session_state.auto_selected_subtypes = subs
                     st.session_state.suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
-                    # 重置大類別選擇狀態
-                    for cat in PLACE_TYPES.keys():
-                        if f"main_{cat}" in st.session_state:
-                            del st.session_state[f"main_{cat}"]
                     st.rerun()
         
         current_profile = st.session_state.get('buyer_profile')
@@ -568,7 +529,7 @@ Basic Information:
         
         st.markdown("---")
         
-        # ============= 步驟2: 房屋選擇 =============
+        # 步驟2: 房屋選擇
         st.markdown("### 🏠 步驟2：選擇要分析的房屋")
         
         mode = st.radio("選擇分析模式", ["單一房屋分析", "多房屋比較"], horizontal=True, key="life_mode")
@@ -597,14 +558,8 @@ Basic Information:
         st.session_state.selected_houses = selected
         st.markdown("---")
         
-        # ============= 步驟3: 分析設定 =============
-        st.markdown("### ⚙️ 步驟3：進階分析設定")
-        
-        # API 檢查
-        k1, k2, k3 = st.columns(3)
-        with k1: st.metric("Server Key", "✅" if self._get_server_key() else "❌")
-        with k2: st.metric("Gemini Key", "✅" if self._get_gemini_key() else "❌")
-        with k3: st.metric("Browser Key", "✅" if self._get_browser_key() else "❌")
+        # 步驟3: 分析設定
+        st.markdown("### ⚙️ 步驟3：分析設定")
         
         suggest_r = st.session_state.get('suggested_radius', DEFAULT_RADIUS)
         radius = st.slider(f"搜尋半徑（{profiles[current_profile]['icon']} 建議：{suggest_r}公尺）", 
@@ -614,24 +569,24 @@ Basic Information:
         
         st.markdown("---")
         
-        # ============= 步驟4: 生活機能選擇 =============
-        st.subheader("🔍 步驟4：確認生活機能類別")
+        # 步驟4: 直接顯示所有設施選擇（沒有大類別）
+        st.subheader("🔍 步驟4：選擇生活機能設施")
         
-        auto_cats = st.session_state.get('auto_selected_categories', [])
         auto_subs = st.session_state.get('auto_selected_subtypes', {})
         
-        if auto_cats:
+        # 計算總推薦數量
+        if auto_subs:
             total = sum(len(set(v)) for v in auto_subs.values())
-            st.info(f"📌 **{current_profile} 推薦設施**：已自動選擇 {len(auto_cats)} 大類、{total} 種設施，可手動調整")
+            st.info(f"📌 **{current_profile} 推薦設施**：已自動選擇 {total} 種設施，可手動調整")
         
-        selected_cats, selected_subs = self._render_category_selection(auto_cats, auto_subs)
+        # 直接渲染所有設施選擇
+        selected_subs = self._render_all_facilities_selection(auto_subs)
         
-        if not selected_cats:
-            st.warning("⚠️ 請至少選擇一個生活機能類別")
+        if not selected_subs:
+            st.warning("⚠️ 請至少選擇一個生活機能設施")
             return
         
         # 更新最後選擇
-        st.session_state.last_selected_categories = selected_cats
         st.session_state.last_selected_subtypes = selected_subs
         
         # 進階選項：是否加入嫌惡設施分析
@@ -646,14 +601,13 @@ Basic Information:
                 selected_nuisances = self._render_nuisance_selection(compact=True)
                 st.session_state.selected_nuisances = selected_nuisances
         
-        self._render_selection_summary(selected_cats, selected_subs, current_profile)
-        st.markdown("---")
-        
-        # ============= 開始分析 =============
+        # 開始分析
         col1, col2 = st.columns([3, 1])
         with col1:
             btn_text = "🚀 開始分析" if mode == "單一房屋分析" else "🚀 開始比較"
             if st.button(btn_text, type="primary", use_container_width=True, key="life_start"):
+                # 取得所有選擇的設施類別
+                selected_cats = list(selected_subs.keys())
                 valid = self._validate_inputs(selected, selected_cats)
                 if valid == "OK":
                     self._start_analysis(mode, selected, radius, keyword, 
@@ -665,9 +619,128 @@ Basic Information:
                 self._clear_all()
                 st.rerun()
     
+    def _render_all_facilities_selection(self, preset_subtypes=None):
+        """渲染所有設施選擇 - 直接顯示所有設施，按類別分組"""
+        selected_subs = {}
+        preset_subs = preset_subtypes or {}
+        
+        st.markdown("#### 選擇設施類型")
+        
+        # 取得所有類別
+        all_cats = list(PLACE_TYPES.keys())
+        current_profile = st.session_state.get('buyer_profile', '')
+        profiles = self._get_buyer_profiles()
+        
+        # 為每個類別建立一個展開區塊
+        for cat in all_cats:
+            with st.expander(f"📁 {cat}", expanded=True):
+                # 快速全選/清除按鈕
+                cc1, cc2, cc3 = st.columns([1, 1, 2])
+                with cc1:
+                    if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
+                        st.session_state[f"all_{cat}"] = True
+                        st.rerun()
+                with cc2:
+                    if st.button(f"清除 {cat}", key=f"clear_{cat}", use_container_width=True):
+                        st.session_state[f"clear_{cat}"] = True
+                        st.rerun()
+                with cc3:
+                    if current_profile:
+                        st.markdown(f"💡 **{current_profile}推薦**")
+                
+                # 取得此類別所有設施（去除重複）
+                items = []
+                seen = set()
+                for item in PLACE_TYPES[cat]:
+                    if item not in seen:
+                        items.append(item)
+                        seen.add(item)
+                
+                # 取得優先/次要推薦清單
+                priority_list = []
+                secondary_list = []
+                if current_profile and current_profile in profiles:
+                    p = profiles[current_profile]
+                    priority_list = p.get("priority_categories", {}).get(cat, [])
+                    secondary_list = p.get("secondary_categories", {}).get(cat, [])
+                
+                # 處理全選/清除
+                force_all = st.session_state.get(f"all_{cat}", False)
+                force_clear = st.session_state.get(f"clear_{cat}", False)
+                
+                if force_clear:
+                    default_list = []
+                else:
+                    # 優先使用上次選擇，如果沒有則使用預設推薦
+                    if cat in st.session_state.last_selected_subtypes:
+                        default_list = st.session_state.last_selected_subtypes.get(cat, [])
+                    else:
+                        default_list = preset_subs.get(cat, []) if cat in preset_subs else []
+                
+                # 3欄布局
+                per_row = (len(items) + 2) // 3
+                for row in range(per_row):
+                    cols = st.columns(3)
+                    for ci in range(3):
+                        idx = row + ci * per_row
+                        if idx < len(items):
+                            name = items[idx]
+                            
+                            # 判斷推薦等級
+                            rec_text = ""
+                            rec_color = ""
+                            if name in priority_list:
+                                rec_text = "⭐ 優先"
+                                rec_color = "#FFD700"
+                            elif name in secondary_list:
+                                rec_text = "📌 次要"
+                                rec_color = "#87CEEB"
+                            
+                            # 預設值
+                            default_val = False
+                            if force_all:
+                                default_val = True
+                            elif name in default_list:
+                                default_val = True
+                            elif name in priority_list and not force_clear:
+                                default_val = True
+                            
+                            with cols[ci]:
+                                if rec_text:
+                                    st.markdown(f"""
+                                    <div style="border-left:4px solid {rec_color}; padding-left:6px; margin-bottom:2px;">
+                                        <span style="font-weight:bold;">{name}</span>
+                                        <span style="background-color:{rec_color}; color:black; padding:2px 6px; border-radius:12px; font-size:10px; margin-left:5px;">
+                                            {rec_text}
+                                        </span>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    cb = st.checkbox(" ", key=f"sub_{cat}_{idx}", label_visibility="collapsed", value=default_val)
+                                else:
+                                    cb = st.checkbox(name, key=f"sub_{cat}_{idx}", value=default_val)
+                                
+                                if cb:
+                                    if cat not in selected_subs:
+                                        selected_subs[cat] = []
+                                    selected_subs[cat].append(name)
+                
+                # 清除標記
+                if f"all_{cat}" in st.session_state:
+                    del st.session_state[f"all_{cat}"]
+                if f"clear_{cat}" in st.session_state:
+                    del st.session_state[f"clear_{cat}"]
+                
+                if cat in selected_subs:
+                    st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
+        
+        # 移除重複的選擇
+        for cat in selected_subs:
+            selected_subs[cat] = list(dict.fromkeys(selected_subs[cat]))
+        
+        return selected_subs
+    
     def _render_nuisance_analysis(self, fav_df):
         """渲染嫌惡設施分析"""
-        # 步驟1: 買家類型選擇
         st.markdown("### 👤 步驟1：誰要住這裡？")
         st.markdown("選擇買家類型，系統將**自動推薦**最需注意的嫌惡設施")
         
@@ -716,7 +789,6 @@ Basic Information:
         
         st.markdown("---")
         
-        # 步驟2: 房屋選擇
         st.markdown("### 🏠 步驟2：選擇要分析的房屋")
         
         mode = st.radio("選擇分析模式", ["單一房屋分析", "多房屋比較"], horizontal=True, key="nuisance_mode")
@@ -745,13 +817,7 @@ Basic Information:
         st.session_state.selected_houses = selected
         st.markdown("---")
         
-        # 步驟3: 嫌惡設施選擇
         st.markdown("### ⚙️ 步驟3：選擇要分析的嫌惡設施")
-        
-        k1, k2, k3 = st.columns(3)
-        with k1: st.metric("Server Key", "✅" if self._get_server_key() else "❌")
-        with k2: st.metric("Gemini Key", "✅" if self._get_gemini_key() else "❌")
-        with k3: st.metric("Browser Key", "✅" if self._get_browser_key() else "❌")
         
         selected_nuisances = self._render_nuisance_selection()
         
@@ -763,7 +829,6 @@ Basic Information:
         
         st.markdown("---")
         
-        # 開始分析
         col1, col2 = st.columns([3, 1])
         with col1:
             btn_text = "🚀 開始分析" if mode == "單一房屋分析" else "🚀 開始比較"
@@ -823,7 +888,6 @@ Basic Information:
     
     def _validate_nuisance_inputs(self, houses, nuisances):
         """驗證嫌惡設施輸入"""
-        if not self._get_browser_key(): return "❌ 請填寫 Google Maps Browser Key"
         if not self._get_server_key(): return "❌ 請填寫 Server Key"
         if not self._get_gemini_key(): return "❌ 請填寫 Gemini Key"
         if not nuisances: return "⚠️ 請至少選擇一個嫌惡設施類別"
@@ -1043,199 +1107,12 @@ Basic Information:
     def _reset_page(self):
         """重設頁面"""
         keys = ['analysis_in_progress', 'analysis_results', 'gemini_result', 
-                'buyer_profile', 'auto_selected_categories', 'auto_selected_subtypes',
-                'analysis_completed', 'saved_analyses', 'current_analysis_name']
+                'buyer_profile', 'auto_selected_subtypes',
+                'analysis_completed', 'saved_analyses', 'current_analysis_name',
+                'last_selected_subtypes']
         for k in keys:
             if k in st.session_state:
                 del st.session_state[k]
-    
-    def _render_category_selection(self, preset_categories=None, preset_subtypes=None):
-        """渲染類別選擇 - 修正同步問題"""
-        selected_cats = []
-        selected_subs = {}
-        
-        preset_cats = preset_categories or []
-        preset_subs = preset_subtypes or {}
-        
-        # 大類別選擇
-        st.markdown("#### 選擇大類別")
-        all_cats = list(PLACE_TYPES.keys())
-        cols = st.columns(len(all_cats))
-        
-        cat_selection = {}
-        for i, cat in enumerate(all_cats):
-            with cols[i]:
-                color = CATEGORY_COLORS.get(cat, "#666")
-                is_rec = cat in preset_cats
-                tag = "⭐ 推薦 " if is_rec else ""
-                
-                st.markdown(f"""
-                <div style="text-align:center; margin-bottom:5px;">
-                    <span style="background-color:{color}; color:white; padding:5px 10px; border-radius:5px;">
-                        {tag}{cat}
-                    </span>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                # 檢查是否有儲存的上次選擇
-                if cat in st.session_state.last_selected_categories:
-                    default = True
-                else:
-                    default = cat in preset_cats
-                
-                cat_selection[cat] = st.checkbox(f"選擇{cat}", key=f"main_{cat}", value=default)
-        
-        # 細項選擇
-        selected_main = [c for c, s in cat_selection.items() if s]
-        current_profile = st.session_state.get('buyer_profile', '')
-        profiles = self._get_buyer_profiles()
-        
-        if selected_main:
-            st.markdown("#### 選擇細分設施")
-            
-            for cat in selected_main:
-                with st.expander(f"📁 {cat} 類別細選", expanded=True):
-                    # 快速全選/清除
-                    cc1, cc2, cc3 = st.columns([1, 1, 2])
-                    with cc1:
-                        if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
-                            st.session_state[f"all_{cat}"] = True
-                            st.rerun()
-                    with cc2:
-                        if st.button(f"清除 {cat}", key=f"clear_{cat}", use_container_width=True):
-                            st.session_state[f"clear_{cat}"] = True
-                            st.rerun()
-                    with cc3:
-                        if current_profile:
-                            st.markdown(f"💡 **{current_profile}推薦**")
-                    
-                    # 取得此類別所有設施（去除重複）
-                    items = []
-                    seen = set()
-                    for item in PLACE_TYPES[cat]:
-                        if item not in seen:
-                            items.append(item)
-                            seen.add(item)
-                    
-                    # 取得優先/次要推薦清單
-                    priority_list = []
-                    secondary_list = []
-                    if current_profile and current_profile in profiles:
-                        p = profiles[current_profile]
-                        priority_list = p.get("priority_categories", {}).get(cat, [])
-                        secondary_list = p.get("secondary_categories", {}).get(cat, [])
-                    
-                    # 處理全選/清除
-                    force_all = st.session_state.get(f"all_{cat}", False)
-                    force_clear = st.session_state.get(f"clear_{cat}", False)
-                    
-                    if force_clear:
-                        default_list = []
-                    else:
-                        # 優先使用上次選擇
-                        if cat in st.session_state.last_selected_subtypes:
-                            default_list = st.session_state.last_selected_subtypes.get(cat, [])
-                        else:
-                            default_list = preset_subs.get(cat, []) if cat in preset_subs else []
-                    
-                    # 3欄布局
-                    per_row = (len(items) + 2) // 3
-                    for row in range(per_row):
-                        cols = st.columns(3)
-                        for ci in range(3):
-                            idx = row + ci * per_row
-                            if idx < len(items):
-                                name = items[idx]
-                                
-                                # 判斷推薦等級
-                                rec_text = ""
-                                rec_color = ""
-                                if name in priority_list:
-                                    rec_text = "⭐ 優先"
-                                    rec_color = "#FFD700"
-                                elif name in secondary_list:
-                                    rec_text = "📌 次要"
-                                    rec_color = "#87CEEB"
-                                
-                                # 預設值
-                                default_val = False
-                                if force_all:
-                                    default_val = True
-                                elif name in default_list:
-                                    default_val = True
-                                elif name in priority_list and not force_clear:
-                                    default_val = True
-                                
-                                with cols[ci]:
-                                    if rec_text:
-                                        st.markdown(f"""
-                                        <div style="border-left:4px solid {rec_color}; padding-left:6px; margin-bottom:2px;">
-                                            <span style="font-weight:bold;">{name}</span>
-                                            <span style="background-color:{rec_color}; color:black; padding:2px 6px; border-radius:12px; font-size:10px; margin-left:5px;">
-                                                {rec_text}
-                                            </span>
-                                        </div>
-                                        """, unsafe_allow_html=True)
-                                        cb = st.checkbox(" ", key=f"sub_{cat}_{idx}", label_visibility="collapsed", value=default_val)
-                                    else:
-                                        cb = st.checkbox(name, key=f"sub_{cat}_{idx}", value=default_val)
-                                    
-                                    if cb:
-                                        if cat not in selected_subs:
-                                            selected_subs[cat] = []
-                                        selected_subs[cat].append(name)
-                    
-                    # 清除標記
-                    if f"all_{cat}" in st.session_state:
-                        del st.session_state[f"all_{cat}"]
-                    if f"clear_{cat}" in st.session_state:
-                        del st.session_state[f"clear_{cat}"]
-                    
-                    if cat in selected_subs:
-                        st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
-                
-                if cat in selected_subs and selected_subs[cat]:
-                    selected_cats.append(cat)
-        
-        # 移除重複的選擇
-        for cat in selected_subs:
-            selected_subs[cat] = list(dict.fromkeys(selected_subs[cat]))
-        
-        # 更新最後選擇
-        st.session_state.last_selected_categories = selected_cats
-        st.session_state.last_selected_subtypes = selected_subs
-        
-        return selected_cats, selected_subs
-    
-    def _render_selection_summary(self, categories, subtypes, profile=""):
-        """顯示選擇摘要"""
-        st.markdown("---")
-        st.subheader("📋 已選擇設施摘要")
-        
-        if not categories:
-            return
-        
-        cols = st.columns(min(4, len(categories)))
-        profiles = self._get_buyer_profiles()
-        
-        for i, cat in enumerate(categories):
-            with cols[i % len(cols)]:
-                if cat in subtypes:
-                    cnt = len(set(subtypes[cat]))
-                    color = CATEGORY_COLORS.get(cat, "#666")
-                    
-                    is_rec = False
-                    if profile and profile in profiles:
-                        p = profiles[profile]
-                        is_rec = cat in p.get("priority_categories", {}) or cat in p.get("secondary_categories", {})
-                    
-                    badge = "⭐ 推薦" if is_rec else ""
-                    st.markdown(f"""
-                    <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color};">
-                        <h4 style="color:{color}; margin:0;">{cat} {badge}</h4>
-                        <p style="margin:5px 0 0;">已選擇 {cnt} 種設施</p>
-                    </div>
-                    """, unsafe_allow_html=True)
     
     def _show_house_preview_single(self, house):
         """單一房屋預覽"""
@@ -1272,7 +1149,6 @@ Basic Information:
     
     def _validate_inputs(self, houses, cats):
         """驗證輸入"""
-        if not self._get_browser_key(): return "❌ 請填寫 Google Maps Browser Key"
         if not self._get_server_key(): return "❌ 請填寫 Server Key"
         if not self._get_gemini_key(): return "❌ 請填寫 Gemini Key"
         if not cats: return "⚠️ 請至少選擇一個生活機能類別"
@@ -1306,9 +1182,9 @@ Basic Information:
         """全部清除"""
         keys = ['analysis_settings', 'analysis_results', 'analysis_in_progress', 'gemini_result',
                 'custom_prompt', 'used_prompt', 'selected_houses', 'buyer_profile',
-                'auto_selected_categories', 'auto_selected_subtypes', 'suggested_radius',
+                'auto_selected_subtypes', 'suggested_radius',
                 'analysis_completed', 'saved_analyses', 'current_analysis_name',
-                'last_selected_categories', 'last_selected_subtypes']
+                'last_selected_subtypes']
         for k in keys:
             if k in st.session_state: del st.session_state[k]
     
@@ -1509,7 +1385,6 @@ Basic Information:
                 for pt in pinfo.get("prompt_focus", []):
                     st.markdown(f"- {pt}")
         
-        # 設施表格
         st.markdown("---")
         if analysis_type == "嫌惡設施":
             st.subheader("⚠️ 嫌惡設施詳細資料表格")
@@ -1549,7 +1424,6 @@ Basic Information:
                 key="download_facilities_csv"
             )
         
-        # 統計
         st.markdown("---")
         if analysis_type == "嫌惡設施":
             st.subheader("⚠️ 風險評分與統計")
@@ -1561,13 +1435,8 @@ Basic Information:
             else:
                 self._show_multi_stats(res)
         
-        # 地圖
         self._display_maps(res)
-        
-        # 設施列表
         self._display_facilities_list_with_links(res)
-        
-        # AI 分析
         self._display_ai_analysis(res)
     
     def _show_nuisance_stats(self, res):
@@ -2021,7 +1890,7 @@ Basic Information:
                 st.info(f"📭 {house_name} 周圍未找到{'嫌惡設施' if analysis_type=='嫌惡設施' else '設施'}")
     
     def _display_ai_analysis(self, res):
-        """AI 分析 - 根據買家類型自動選擇模板"""
+        """AI 分析"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
@@ -2032,7 +1901,6 @@ Basic Information:
         
         suggested_template = pinfo.get("prompt_template", "analysis")
         
-        # 建立詳細的設施表格文字
         facilities_text = self._format_facilities_for_prompt(res)
         
         prompt = self._build_prompt(
@@ -2131,20 +1999,17 @@ Basic Information:
         
         result = "\n【詳細設施清單】\n"
         
-        # 按房屋分組
         for house_name in df['房屋'].unique():
             house_df = df[df['房屋'] == house_name]
             result += f"\n{house_name}周邊設施：\n"
             result += "-" * 50 + "\n"
             
-            # 列出前20個設施
             for i, row in house_df.head(20).iterrows():
                 result += f"  • {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
             
             if len(house_df) > 20:
                 result += f"  ... 還有 {len(house_df) - 20} 個設施\n"
             
-            # 統計摘要
             result += f"\n  統計摘要：\n"
             cat_summary = house_df.groupby('設施子類別').size().sort_values(ascending=False).head(5)
             for cat, count in cat_summary.items():
@@ -2153,12 +2018,11 @@ Basic Information:
         return result
     
     def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, facilities_text, profile, analysis_type):
-        """建立提示詞 - 包含詳細設施資料"""
+        """建立提示詞"""
         pinfo = self._get_buyer_profiles().get(profile, {})
         icon = pinfo.get("icon", "👤")
         focus = pinfo.get("prompt_focus", [])
         
-        # 建立設施摘要
         facilities_summary = []
         for cat in cats:
             if cat in places:
@@ -2394,7 +2258,7 @@ Basic Information:
 """
     
     def _get_prompt_templates(self, profile="", analysis_type="生活機能"):
-        """提示詞模板 - 新的分析型模板"""
+        """提示詞模板"""
         base_templates = {
             "analysis": {
                 "name": "📊 分析預測模板", 
@@ -2516,8 +2380,6 @@ Basic Information:
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Gemini API 錯誤: {e}")
-    
-    # ============= 輔助方法 =============
     
     def _get_favorites_data(self):
         """取得收藏"""
