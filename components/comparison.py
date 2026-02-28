@@ -245,9 +245,6 @@ class ComparisonAnalyzer:
                         seen.add(s)
                 auto_subtypes[cat].extend(valid_subtypes)
         
-        # 儲存上次的選擇
-        st.session_state.last_selected_subtypes = {k: v.copy() for k, v in auto_subtypes.items()}
-        
         return auto_subtypes
     
     def _generate_pdf_report(self):
@@ -511,7 +508,20 @@ Basic Information:
                     st.session_state.buyer_profile = profile_name
                     subs = self._auto_select_subtypes(profile_name)
                     st.session_state.auto_selected_subtypes = subs
+                    st.session_state.last_selected_subtypes = subs.copy()
                     st.session_state.suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
+                    
+                    # 清除所有類別的選擇狀態
+                    for cat in PLACE_TYPES.keys():
+                        if f"all_{cat}" in st.session_state:
+                            del st.session_state[f"all_{cat}"]
+                        if f"clear_{cat}" in st.session_state:
+                            del st.session_state[f"clear_{cat}"]
+                        # 清除所有 checkbox 狀態
+                        items = PLACE_TYPES[cat]
+                        for idx, item in enumerate(items):
+                            if f"sub_{cat}_{idx}" in st.session_state:
+                                del st.session_state[f"sub_{cat}_{idx}"]
                     st.rerun()
         
         current_profile = st.session_state.get('buyer_profile')
@@ -573,6 +583,27 @@ Basic Information:
             total = sum(len(set(v)) for v in auto_subs.values())
             st.info(f"📌 **{current_profile} 推薦設施**：已自動選擇 {total} 種設施，可手動調整")
         
+        # 顯示當前選擇摘要
+        if st.session_state.last_selected_subtypes:
+            st.markdown("### 📋 當前選擇摘要")
+            total_selected = sum(len(v) for v in st.session_state.last_selected_subtypes.values())
+            st.info(f"📌 當前已選擇 **{total_selected}** 種設施")
+            
+            cols = st.columns(3)
+            col_idx = 0
+            for cat, items in st.session_state.last_selected_subtypes.items():
+                if items:
+                    with cols[col_idx % 3]:
+                        color = CATEGORY_COLORS.get(cat, "#666")
+                        st.markdown(f"""
+                        <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color}; margin-bottom:10px;">
+                            <h5 style="color:{color}; margin:0;">{cat}</h5>
+                            <p style="margin:5px 0 0; font-size:12px;">{', '.join(items[:3])}{'...' if len(items) > 3 else ''}</p>
+                            <p style="margin:2px 0 0; font-size:11px; color:#666;">共 {len(items)} 種</p>
+                        </div>
+                        """, unsafe_allow_html=True)
+                    col_idx += 1
+        
         selected_subs = self._render_all_facilities_selection(auto_subs)
         
         if not selected_subs:
@@ -612,7 +643,7 @@ Basic Information:
                 st.rerun()
     
     def _render_all_facilities_selection(self, preset_subtypes=None):
-        """渲染所有設施選擇"""
+        """渲染所有設施選擇 - 即時顯示選擇內容"""
         selected_subs = {}
         preset_subs = preset_subtypes or {}
         
@@ -624,6 +655,11 @@ Basic Information:
         
         for cat in all_cats:
             with st.expander(f"📁 {cat}", expanded=True):
+                # 顯示此類別已選擇數量
+                current_selected_count = len(st.session_state.last_selected_subtypes.get(cat, []))
+                if current_selected_count > 0:
+                    st.caption(f"✅ 此類別已選擇 {current_selected_count} 種")
+                
                 cc1, cc2, cc3 = st.columns([1, 1, 2])
                 with cc1:
                     if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
