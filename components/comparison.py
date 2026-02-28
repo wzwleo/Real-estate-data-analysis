@@ -140,8 +140,7 @@ class ComparisonAnalyzer:
                     "生活服務": ["公園", "電影院"]
                 },
                 "radius": 500,
-                "prompt_focus": ["通勤便利性", "日常採買效率", "預算內最高CP值", "夜間生活便利性"],
-                "prompt_template": "analysis"
+                "prompt_focus": ["通勤便利性", "日常採買效率", "預算內最高CP值", "夜間生活便利性"]
             },
             "家庭": {
                 "icon": "👨‍👩‍👧‍👦",
@@ -158,8 +157,7 @@ class ComparisonAnalyzer:
                     "生活服務": ["社區中心", "運動中心"]
                 },
                 "radius": 800,
-                "prompt_focus": ["學區品質與距離", "親子友善環境", "社區安全性", "假日家庭活動空間"],
-                "prompt_template": "analysis"
+                "prompt_focus": ["學區品質與距離", "親子友善環境", "社區安全性", "假日家庭活動空間"]
             },
             "長輩退休族": {
                 "icon": "🧓",
@@ -176,8 +174,7 @@ class ComparisonAnalyzer:
                     "餐飲美食": ["素食餐廳", "傳統小吃"]
                 },
                 "radius": 600,
-                "prompt_focus": ["醫療資源可及性", "散步運動空間", "傳統市場便利性", "安靜宜居環境"],
-                "prompt_template": "analysis"
+                "prompt_focus": ["醫療資源可及性", "散步運動空間", "傳統市場便利性", "安靜宜居環境"]
             },
             "外地工作": {
                 "icon": "🚄",
@@ -193,8 +190,7 @@ class ComparisonAnalyzer:
                     "生活服務": ["洗衣店", "電影院"]
                 },
                 "radius": 400,
-                "prompt_focus": ["交通樞紐距離", "南北往來便利性", "高效率生活圈", "短暫停留採買便利性"],
-                "prompt_template": "analysis"
+                "prompt_focus": ["交通樞紐距離", "南北往來便利性", "高效率生活圈", "短暫停留採買便利性"]
             },
             "投資客": {
                 "icon": "💰",
@@ -210,8 +206,7 @@ class ComparisonAnalyzer:
                     "健康與保健": ["醫院", "診所"]
                 },
                 "radius": 700,
-                "prompt_focus": ["區域發展潛力", "未來轉手性", "租金投報率", "增值空間"],
-                "prompt_template": "analysis"
+                "prompt_focus": ["區域發展潛力", "未來轉手性", "租金投報率", "增值空間"]
             }
         }
     
@@ -485,7 +480,7 @@ Basic Information:
             st.button("🔄 重新整理頁面", on_click=self._reset_page)
     
     def _render_life_function_analysis(self, fav_df):
-        """渲染生活機能分析 - 直接顯示所有設施，沒有大類別選擇"""
+        """渲染生活機能分析"""
         
         # 步驟1: 買家類型選擇
         st.markdown("### 👤 步驟1：誰要住這裡？")
@@ -569,17 +564,15 @@ Basic Information:
         
         st.markdown("---")
         
-        # 步驟4: 直接顯示所有設施選擇（沒有大類別）
+        # 步驟4: 生活機能選擇
         st.subheader("🔍 步驟4：選擇生活機能設施")
         
         auto_subs = st.session_state.get('auto_selected_subtypes', {})
         
-        # 計算總推薦數量
         if auto_subs:
             total = sum(len(set(v)) for v in auto_subs.values())
             st.info(f"📌 **{current_profile} 推薦設施**：已自動選擇 {total} 種設施，可手動調整")
         
-        # 直接渲染所有設施選擇
         selected_subs = self._render_all_facilities_selection(auto_subs)
         
         if not selected_subs:
@@ -606,7 +599,6 @@ Basic Information:
         with col1:
             btn_text = "🚀 開始分析" if mode == "單一房屋分析" else "🚀 開始比較"
             if st.button(btn_text, type="primary", use_container_width=True, key="life_start"):
-                # 取得所有選擇的設施類別
                 selected_cats = list(selected_subs.keys())
                 valid = self._validate_inputs(selected, selected_cats)
                 if valid == "OK":
@@ -620,21 +612,18 @@ Basic Information:
                 st.rerun()
     
     def _render_all_facilities_selection(self, preset_subtypes=None):
-        """渲染所有設施選擇 - 直接顯示所有設施，按類別分組"""
+        """渲染所有設施選擇"""
         selected_subs = {}
         preset_subs = preset_subtypes or {}
         
         st.markdown("#### 選擇設施類型")
         
-        # 取得所有類別
         all_cats = list(PLACE_TYPES.keys())
         current_profile = st.session_state.get('buyer_profile', '')
         profiles = self._get_buyer_profiles()
         
-        # 為每個類別建立一個展開區塊
         for cat in all_cats:
             with st.expander(f"📁 {cat}", expanded=True):
-                # 快速全選/清除按鈕
                 cc1, cc2, cc3 = st.columns([1, 1, 2])
                 with cc1:
                     if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
@@ -648,7 +637,6 @@ Basic Information:
                     if current_profile:
                         st.markdown(f"💡 **{current_profile}推薦**")
                 
-                # 取得此類別所有設施（去除重複）
                 items = []
                 seen = set()
                 for item in PLACE_TYPES[cat]:
@@ -656,7 +644,6 @@ Basic Information:
                         items.append(item)
                         seen.add(item)
                 
-                # 取得優先/次要推薦清單
                 priority_list = []
                 secondary_list = []
                 if current_profile and current_profile in profiles:
@@ -664,20 +651,17 @@ Basic Information:
                     priority_list = p.get("priority_categories", {}).get(cat, [])
                     secondary_list = p.get("secondary_categories", {}).get(cat, [])
                 
-                # 處理全選/清除
                 force_all = st.session_state.get(f"all_{cat}", False)
                 force_clear = st.session_state.get(f"clear_{cat}", False)
                 
                 if force_clear:
                     default_list = []
                 else:
-                    # 優先使用上次選擇，如果沒有則使用預設推薦
                     if cat in st.session_state.last_selected_subtypes:
                         default_list = st.session_state.last_selected_subtypes.get(cat, [])
                     else:
                         default_list = preset_subs.get(cat, []) if cat in preset_subs else []
                 
-                # 3欄布局
                 per_row = (len(items) + 2) // 3
                 for row in range(per_row):
                     cols = st.columns(3)
@@ -686,7 +670,6 @@ Basic Information:
                         if idx < len(items):
                             name = items[idx]
                             
-                            # 判斷推薦等級
                             rec_text = ""
                             rec_color = ""
                             if name in priority_list:
@@ -696,7 +679,6 @@ Basic Information:
                                 rec_text = "📌 次要"
                                 rec_color = "#87CEEB"
                             
-                            # 預設值
                             default_val = False
                             if force_all:
                                 default_val = True
@@ -724,7 +706,6 @@ Basic Information:
                                         selected_subs[cat] = []
                                     selected_subs[cat].append(name)
                 
-                # 清除標記
                 if f"all_{cat}" in st.session_state:
                     del st.session_state[f"all_{cat}"]
                 if f"clear_{cat}" in st.session_state:
@@ -733,7 +714,6 @@ Basic Information:
                 if cat in selected_subs:
                     st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
         
-        # 移除重複的選擇
         for cat in selected_subs:
             selected_subs[cat] = list(dict.fromkeys(selected_subs[cat]))
         
@@ -1065,7 +1045,7 @@ Basic Information:
             "飛機場": 8,
             "焚化爐": 9,
             "汙水處理廠": 8,
-            "畜牧業": 7
+            "屠宰場/畜牧業": 7
         }
         return weights.get(nuisance_type, 5)
     
@@ -1890,7 +1870,7 @@ Basic Information:
                 st.info(f"📭 {house_name} 周圍未找到{'嫌惡設施' if analysis_type=='嫌惡設施' else '設施'}")
     
     def _display_ai_analysis(self, res):
-        """AI 分析"""
+        """AI 分析 - 只有一個模板"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
@@ -1898,10 +1878,10 @@ Basic Information:
         analysis_type = res.get("analysis_type", "生活機能")
         profiles = self._get_buyer_profiles()
         pinfo = profiles.get(profile, {})
+        icon = pinfo.get("icon", "👤")
         
-        suggested_template = pinfo.get("prompt_template", "analysis")
-        
-        facilities_text = self._format_facilities_for_prompt(res)
+        # 產生詳細的設施清單（全部列出）
+        facilities_text = self._format_all_facilities_for_prompt(res)
         
         prompt = self._build_prompt(
             res["houses_data"], res["places_data"], res["facility_counts"],
@@ -1913,29 +1893,9 @@ Basic Information:
         if "custom_prompt" not in st.session_state:
             st.session_state.custom_prompt = prompt
         
-        templates = self._get_prompt_templates(profile, analysis_type)
-        
-        opt = {k: f"{v['name']} - {v['description']}" for k, v in templates.items()}
-        template_keys = list(templates.keys())
-        
-        default_idx = template_keys.index("analysis") if "analysis" in template_keys else 0
-        
-        sel = st.selectbox(
-            "📋 提示詞模板選擇", 
-            template_keys,
-            format_func=lambda x: opt.get(x, x), 
-            key="tmpl",
-            index=default_idx
-        )
-        
-        if sel == "analysis":
-            st.session_state.custom_prompt = prompt
-        elif "content" in templates.get(sel, {}):
-            st.session_state.custom_prompt = templates[sel]["content"]
-        
         c1, c2 = st.columns([3, 1])
         with c1:
-            edited = st.text_area("📝 AI 分析提示詞設定", st.session_state.custom_prompt, height=350, key="pedit")
+            edited = st.text_area("📝 AI 分析提示詞設定（可編輯）", st.session_state.custom_prompt, height=350, key="pedit")
             if st.button("💾 儲存提示詞修改", use_container_width=True, key="save_prompt"):
                 st.session_state.custom_prompt = edited
                 st.success("✅ 提示詞已儲存！")
@@ -1944,10 +1904,8 @@ Basic Information:
             for pt in pinfo.get("prompt_focus", [])[:4]:
                 st.markdown(f"- {pt}")
             st.markdown("---")
-            st.markdown("**您可以：**")
-            st.markdown("1. 調整分析重點")
-            st.markdown("2. 添加特定問題")
-            st.markdown("3. 修改評分標準")
+            st.markdown("**提示：**")
+            st.markdown("您可以編輯左側的提示詞，讓AI更符合您的需求")
             if st.button("🔄 恢復預設提示詞", use_container_width=True, key="reset_prompt"):
                 st.session_state.custom_prompt = prompt
                 st.rerun()
@@ -1991,38 +1949,49 @@ Basic Information:
                     key="download_report"
                 )
     
-    def _format_facilities_for_prompt(self, res):
-        """格式化設施表格資料供提示詞使用"""
+    def _format_all_facilities_for_prompt(self, res):
+        """格式化所有設施資料供提示詞使用（全部列出，無省略）"""
         df = res.get("facilities_table", pd.DataFrame())
         if df.empty:
             return "無周邊設施資料"
         
-        result = "\n【詳細設施清單】\n"
+        result = "\n【完整周邊設施清單】\n"
+        result += "=" * 60 + "\n"
         
+        # 按房屋分組
         for house_name in df['房屋'].unique():
             house_df = df[df['房屋'] == house_name]
-            result += f"\n{house_name}周邊設施：\n"
+            result += f"\n🏠 {house_name} 周邊設施（共 {len(house_df)} 個）：\n"
             result += "-" * 50 + "\n"
             
-            for i, row in house_df.head(20).iterrows():
-                result += f"  • {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
+            # 按距離排序
+            house_df_sorted = house_df.sort_values('距離(公尺)')
             
-            if len(house_df) > 20:
-                result += f"  ... 還有 {len(house_df) - 20} 個設施\n"
+            # 列出所有設施
+            for i, row in house_df_sorted.iterrows():
+                result += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
             
-            result += f"\n  統計摘要：\n"
-            cat_summary = house_df.groupby('設施子類別').size().sort_values(ascending=False).head(5)
+            # 統計摘要
+            result += f"\n  📊 統計摘要：\n"
+            cat_summary = house_df.groupby('設施子類別').size().sort_values(ascending=False)
             for cat, count in cat_summary.items():
-                result += f"    - {cat}: {count}個\n"
+                result += f"     - {cat}: {count}個\n"
+            
+            result += "\n"
         
         return result
     
+    def _format_facilities_for_prompt(self, res):
+        """為了向後兼容，呼叫新的方法"""
+        return self._format_all_facilities_for_prompt(res)
+    
     def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, facilities_text, profile, analysis_type):
-        """建立提示詞"""
+        """建立提示詞 - 只有一個模板"""
         pinfo = self._get_buyer_profiles().get(profile, {})
         icon = pinfo.get("icon", "👤")
         focus = pinfo.get("prompt_focus", [])
         
+        # 建立設施摘要
         facilities_summary = []
         for cat in cats:
             if cat in places:
@@ -2061,6 +2030,7 @@ Basic Information:
 - 總數量：{cnt} 個設施
 {summary_text}
 
+【完整設施清單】
 {facilities_text}
 
 請提供以下分析：
@@ -2112,6 +2082,7 @@ Basic Information:
 【各房屋設施數量】
 {comparison_text}
 
+【完整設施清單】
 {facilities_text}
 
 請提供以下分析：
@@ -2153,7 +2124,7 @@ Basic Information:
             cnt = counts.get(name, 0)
             
             nuisance_list = []
-            for p in places.get(name, [])[:10]:
+            for p in places.get(name, []):
                 nuisance_list.append(f"- {p[2]}（{p[1]}）：距離 {p[5]} 公尺")
             
             nuisance_text = "\n".join(nuisance_list) if nuisance_list else "無"
@@ -2173,7 +2144,7 @@ Basic Information:
 - 搜尋半徑：{radius} 公尺
 - 共找到 {cnt} 處嫌惡設施
 
-【附近嫌惡設施列表（前10個）】
+【附近嫌惡設施列表（全部）】
 {nuisance_text}
 
 請提供以下分析：
@@ -2212,6 +2183,13 @@ Basic Information:
             
             risk_text = "\n".join(risk_summary)
             
+            # 建立每個房屋的詳細嫌惡設施列表
+            detailed_nuisance = ""
+            for name, nuisance_list in places.items():
+                detailed_nuisance += f"\n【{name} 嫌惡設施詳情】\n"
+                for p in nuisance_list:
+                    detailed_nuisance += f"- {p[2]}（{p[1]}）：距離 {p[5]} 公尺\n"
+            
             return f"""
 你是一位專業的房地產分析師，請以「{icon} {profile}」的身份，對以下{len(houses)}間房屋進行**嫌惡設施風險比較**。
 
@@ -2224,6 +2202,9 @@ Basic Information:
 
 【嫌惡設施數量統計】
 {risk_text}
+
+【各房屋嫌惡設施詳情】
+{detailed_nuisance}
 
 請提供以下分析：
 
@@ -2256,130 +2237,6 @@ Basic Information:
 
 請根據{profile}的身份，給出量身定制的風險比較分析。
 """
-    
-    def _get_prompt_templates(self, profile="", analysis_type="生活機能"):
-        """提示詞模板"""
-        base_templates = {
-            "analysis": {
-                "name": "📊 分析預測模板", 
-                "description": "深度分析與未來預測"
-            },
-            "simple": {
-                "name": "📋 簡明報告模板", 
-                "description": "快速掌握重點"
-            },
-            "comparison": {
-                "name": "🔄 比較分析模板", 
-                "description": "詳細比較多個房屋"
-            },
-            "investment": {
-                "name": "💰 投資分析模板", 
-                "description": "專注投資價值分析"
-            }
-        }
-        
-        if analysis_type == "嫌惡設施":
-            base_templates["analysis"]["content"] = f"""
-請以{profile}視角，提供完整的嫌惡設施風險評估：
-
-1. **整體風險評分**（1-10分）
-2. **三大主要風險**
-3. **風險對生活的影響預測**
-4. **房價影響評估**
-5. **購買建議**
-
-請根據{profile}的身份特質，分析不同嫌惡設施的影響程度。
-"""
-            base_templates["simple"]["content"] = f"""
-請以{profile}視角，提供簡潔的風險評估：
-
-1. **風險評分**（1-10分）
-2. **三大風險點**
-3. **一句話總結**
-"""
-            base_templates["comparison"]["content"] = f"""
-請以{profile}視角，比較多個房屋的嫌惡設施風險：
-
-1. **風險排名**
-2. **各房屋風險評分**
-3. **風險比較表**
-4. **最安全選擇**
-5. **終極建議**
-"""
-        else:
-            base_templates["analysis"]["content"] = f"""
-請以{profile}視角，提供完整的分析與預測：
-
-1. **綜合評分**（1-10分）
-2. **主要優點**
-3. **主要缺點**
-4. **生活便利性預測**
-5. **未來發展潛力**
-6. **購買建議**
-
-請用專業、客觀的角度分析。
-"""
-            base_templates["simple"]["content"] = f"""
-請以{profile}視角，提供簡潔的房屋分析：
-
-1. **綜合評分**（1-10分）
-2. **三大優點**
-3. **三大缺點**
-4. **購買建議**
-
-請用要點式說明。
-"""
-            base_templates["comparison"]["content"] = f"""
-請以{profile}視角，比較多個房屋：
-
-1. **綜合排名**
-2. **各房屋評分**
-3. **優缺點比較表**
-4. **詳細分析**
-5. **最終推薦**
-
-請提供詳細的比較分析。
-"""
-            base_templates["investment"]["content"] = f"""
-請從{profile}的投資需求角度進行分析：
-
-1. **未來轉手難易度**評估
-2. **租金投報率**預估
-3. **區域發展潛力**分析
-4. **持有成本**與**增值空間**評估
-5. **風險因素**量化分析
-
-請提供具體的數字估計和市場比較。
-"""
-        
-        return base_templates
-    
-    def _call_gemini(self, prompt):
-        """呼叫 Gemini API"""
-        now = time.time()
-        if now - st.session_state.get("last_gemini_call", 0) < 30:
-            st.warning("⏳ AI 分析請等待30秒後再試")
-            return
-        
-        st.session_state.last_gemini_call = now
-        
-        with st.spinner("🧠 AI 分析中..."):
-            try:
-                import google.generativeai as genai
-                key = st.session_state.get("GEMINI_KEY", "")
-                if not key:
-                    st.error("❌ 請在側邊欄填入 Gemini Key")
-                    return
-                
-                genai.configure(api_key=key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
-                resp = model.generate_content(prompt)
-                
-                st.session_state.gemini_result = resp.text
-                st.session_state.used_prompt = prompt
-                st.rerun()
-            except Exception as e:
-                st.error(f"❌ Gemini API 錯誤: {e}")
     
     def _get_favorites_data(self):
         """取得收藏"""
