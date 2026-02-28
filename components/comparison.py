@@ -1949,6 +1949,33 @@ Basic Information:
                     key="download_report"
                 )
     
+    def _call_gemini(self, prompt):
+        """呼叫 Gemini API"""
+        now = time.time()
+        if now - st.session_state.get("last_gemini_call", 0) < 30:
+            st.warning("⏳ AI 分析請等待30秒後再試")
+            return
+        
+        st.session_state.last_gemini_call = now
+        
+        with st.spinner("🧠 AI 分析中..."):
+            try:
+                import google.generativeai as genai
+                key = st.session_state.get("GEMINI_KEY", "")
+                if not key:
+                    st.error("❌ 請在側邊欄填入 Gemini Key")
+                    return
+                
+                genai.configure(api_key=key)
+                model = genai.GenerativeModel("gemini-2.0-flash")
+                resp = model.generate_content(prompt)
+                
+                st.session_state.gemini_result = resp.text
+                st.session_state.used_prompt = prompt
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Gemini API 錯誤: {e}")
+    
     def _format_all_facilities_for_prompt(self, res):
         """格式化所有設施資料供提示詞使用（全部列出，無省略）"""
         df = res.get("facilities_table", pd.DataFrame())
