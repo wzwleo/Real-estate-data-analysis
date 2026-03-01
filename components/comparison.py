@@ -7,6 +7,7 @@ import sys
 import os
 import requests
 import math
+import urllib.request
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
 from collections import Counter
@@ -25,6 +26,30 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
     pass
+
+# 自動下載中文字型
+def download_fonts():
+    """下載 Noto Sans TC 字型"""
+    if not PDF_AVAILABLE:
+        return
+    
+    fonts = {
+        'NotoSansTC-Regular.ttf': 'https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSansTC/NotoSansTC-Regular.ttf',
+        'NotoSansTC-Bold.ttf': 'https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSansTC/NotoSansTC-Bold.ttf'
+    }
+    
+    for font_name, url in fonts.items():
+        if not os.path.exists(font_name):
+            try:
+                with st.spinner(f"📥 下載中文字型 {font_name}..."):
+                    urllib.request.urlretrieve(url, font_name)
+                st.success(f"✅ 字型 {font_name} 下載完成")
+            except Exception as e:
+                st.warning(f"⚠️ 字型 {font_name} 下載失敗：{e}")
+
+# 在 PDF_AVAILABLE 為 True 時下載字型
+if PDF_AVAILABLE:
+    download_fonts()
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -48,32 +73,58 @@ except ImportError as e:
 
 
 class ChinesePDF(FPDF):
-    """支援中文的PDF類"""
+    """支援中文的PDF類 - 使用 Noto Sans TC 字型"""
     
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
-        self.add_font('NotoSansTC', '', 'NotoSansTC-Regular.ttf', uni=True)
-        self.add_font('NotoSansTC', 'B', 'NotoSansTC-Bold.ttf', uni=True)
+        
+        # 檢查字型檔案是否存在
+        regular_font = 'NotoSansTC-Regular.ttf'
+        bold_font = 'NotoSansTC-Bold.ttf'
+        
+        if os.path.exists(regular_font):
+            self.add_font('NotoSansTC', '', regular_font, uni=True)
+        else:
+            st.warning(f"⚠️ 找不到字型檔案：{regular_font}，將使用英文替代")
+            self.font_available = False
+            
+        if os.path.exists(bold_font):
+            self.add_font('NotoSansTC', 'B', bold_font, uni=True)
         
     def header(self):
-        self.set_font('NotoSansTC', 'B', 16)
-        self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
+        if hasattr(self, 'font_available'):
+            self.set_font('helvetica', 'B', 16)
+            self.cell(0, 10, 'House Analysis Report', 0, 1, 'C')
+        else:
+            self.set_font('NotoSansTC', 'B', 16)
+            self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
         self.ln(5)
     
     def footer(self):
         self.set_y(-15)
-        self.set_font('NotoSansTC', '', 8)
-        self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
+        if hasattr(self, 'font_available'):
+            self.set_font('helvetica', '', 8)
+            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+        else:
+            self.set_font('NotoSansTC', '', 8)
+            self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
     
     def chapter_title(self, title):
-        self.set_font('NotoSansTC', 'B', 14)
+        if hasattr(self, 'font_available'):
+            self.set_font('helvetica', 'B', 14)
+        else:
+            self.set_font('NotoSansTC', 'B', 14)
         self.set_fill_color(200, 220, 255)
         self.cell(0, 10, title, 0, 1, 'L', 1)
         self.ln(5)
     
     def chapter_body(self, body):
-        self.set_font('NotoSansTC', '', 11)
+        if hasattr(self, 'font_available'):
+            self.set_font('helvetica', '', 11)
+        else:
+            self.set_font('NotoSansTC', '', 11)
+        
         for line in body.split('\n'):
             if line.strip():
                 self.multi_cell(0, 8, line)
@@ -81,31 +132,42 @@ class ChinesePDF(FPDF):
     
     def add_table(self, df, title, max_rows=10):
         """添加表格到PDF"""
-        self.set_font('NotoSansTC', 'B', 12)
-        self.cell(0, 10, title, 0, 1, 'L')
-        self.ln(2)
+        self.chapter_title(title)
         
         # 計算列寬
-        col_width = self.w / (len(df.columns) + 1) - 2
+        col_width = self.w / (min(len(df.columns), 5) + 1) - 2
         
         # 表頭
-        self.set_font('NotoSansTC', 'B', 10)
+        if hasattr(self, 'font_available'):
+            self.set_font('helvetica', 'B', 10)
+        else:
+            self.set_font('NotoSansTC', 'B', 10)
         self.set_fill_color(200, 200, 200)
-        for col in df.columns:
+        
+        # 只顯示前5個欄位
+        display_cols = list(df.columns)[:5]
+        for col in display_cols:
             self.cell(col_width, 8, str(col)[:10], 1, 0, 'C', 1)
         self.ln()
         
         # 表格內容
-        self.set_font('NotoSansTC', '', 9)
+        if hasattr(self, 'font_available'):
+            self.set_font('helvetica', '', 9)
+        else:
+            self.set_font('NotoSansTC', '', 9)
         self.set_fill_color(255, 255, 255)
+        
         for i, row in df.head(max_rows).iterrows():
-            for col in df.columns:
+            for col in display_cols:
                 value = str(row[col])[:15]
                 self.cell(col_width, 8, value, 1, 0, 'C')
             self.ln()
         
         if len(df) > max_rows:
-            self.set_font('NotoSansTC', 'I', 9)
+            if hasattr(self, 'font_available'):
+                self.set_font('helvetica', 'I', 9)
+            else:
+                self.set_font('NotoSansTC', 'I', 9)
             self.cell(0, 8, f'... 還有 {len(df) - max_rows} 筆資料', 0, 1, 'L')
         self.ln(5)
 
@@ -275,12 +337,16 @@ class ComparisonAnalyzer:
             pdf.add_page()
             
             # 生成時間
-            pdf.set_font('NotoSansTC', '', 11)
-            pdf.cell(0, 8, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+            if hasattr(pdf, 'font_available'):
+                pdf.set_font('helvetica', '', 11)
+                pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+            else:
+                pdf.set_font('NotoSansTC', '', 11)
+                pdf.cell(0, 8, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
             pdf.ln(5)
             
             # 目錄
-            pdf.chapter_title('目錄')
+            pdf.chapter_title('目錄' if not hasattr(pdf, 'font_available') else 'Table of Contents')
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 profile = analysis.get('buyer_profile', '未知')
                 pdf.cell(0, 8, f'{i+1}. {name[:30]}... - {profile}視角', 0, 1)
@@ -395,7 +461,7 @@ class ComparisonAnalyzer:
                                 else:
                                     st.error("PDF生成失敗")
                     else:
-                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf` 和下載中文字型")
+                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf`")
                     
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
                         st.session_state.saved_analyses = {}
