@@ -47,52 +47,67 @@ except ImportError as e:
     DEFAULT_RADIUS = 500
 
 
-class SimplePDF(FPDF):
-    """簡化版PDF類 - 只使用英文字型"""
+class ChinesePDF(FPDF):
+    """支援中文的PDF類"""
     
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
-    
+        self.add_font('NotoSansTC', '', 'NotoSansTC-Regular.ttf', uni=True)
+        self.add_font('NotoSansTC', 'B', 'NotoSansTC-Bold.ttf', uni=True)
+        
     def header(self):
-        self.set_font('helvetica', 'B', 16)
-        self.cell(0, 10, 'House Analysis Report', 0, 1, 'C')
+        self.set_font('NotoSansTC', 'B', 16)
+        self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
         self.ln(5)
     
     def footer(self):
         self.set_y(-15)
-        self.set_font('helvetica', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+        self.set_font('NotoSansTC', '', 8)
+        self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
     
     def chapter_title(self, title):
-        self.set_font('helvetica', 'B', 14)
+        self.set_font('NotoSansTC', 'B', 14)
         self.set_fill_color(200, 220, 255)
-        self.cell(0, 10, self._clean_text(title), 0, 1, 'L', 1)
+        self.cell(0, 10, title, 0, 1, 'L', 1)
         self.ln(5)
     
     def chapter_body(self, body):
-        self.set_font('helvetica', '', 11)
+        self.set_font('NotoSansTC', '', 11)
         for line in body.split('\n'):
             if line.strip():
-                cleaned_line = self._clean_text(line)
-                if cleaned_line.strip():
-                    self.cell(0, 8, cleaned_line, 0, 1)
+                self.multi_cell(0, 8, line)
         self.ln(2)
     
-    def _clean_text(self, text):
-        """移除或轉換非ASCII字符"""
-        if not text:
-            return ""
-        text = str(text)
-        result = []
-        for c in text:
-            if ord(c) < 128:
-                result.append(c)
-            else:
-                result.append(' ')
-        cleaned = ''.join(result)
-        cleaned = ' '.join(cleaned.split())
-        return cleaned
+    def add_table(self, df, title, max_rows=10):
+        """添加表格到PDF"""
+        self.set_font('NotoSansTC', 'B', 12)
+        self.cell(0, 10, title, 0, 1, 'L')
+        self.ln(2)
+        
+        # 計算列寬
+        col_width = self.w / (len(df.columns) + 1) - 2
+        
+        # 表頭
+        self.set_font('NotoSansTC', 'B', 10)
+        self.set_fill_color(200, 200, 200)
+        for col in df.columns:
+            self.cell(col_width, 8, str(col)[:10], 1, 0, 'C', 1)
+        self.ln()
+        
+        # 表格內容
+        self.set_font('NotoSansTC', '', 9)
+        self.set_fill_color(255, 255, 255)
+        for i, row in df.head(max_rows).iterrows():
+            for col in df.columns:
+                value = str(row[col])[:15]
+                self.cell(col_width, 8, value, 1, 0, 'C')
+            self.ln()
+        
+        if len(df) > max_rows:
+            self.set_font('NotoSansTC', 'I', 9)
+            self.cell(0, 8, f'... 還有 {len(df) - max_rows} 筆資料', 0, 1, 'L')
+        self.ln(5)
 
 
 class ComparisonAnalyzer:
@@ -248,7 +263,7 @@ class ComparisonAnalyzer:
         return auto_subtypes
     
     def _generate_pdf_report(self):
-        """生成包含所有分析結果的PDF報告"""
+        """生成包含所有分析結果的PDF報告 - 支援中文"""
         if not PDF_AVAILABLE:
             return None
         
@@ -256,131 +271,85 @@ class ComparisonAnalyzer:
             return None
         
         try:
-            pdf = SimplePDF()
+            pdf = ChinesePDF()
             pdf.add_page()
             
-            pdf.set_font('helvetica', '', 11)
-            pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+            # 生成時間
+            pdf.set_font('NotoSansTC', '', 11)
+            pdf.cell(0, 8, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
             pdf.ln(5)
             
-            pdf.chapter_title('Table of Contents')
+            # 目錄
+            pdf.chapter_title('目錄')
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-                profile = analysis.get('buyer_profile', 'Unknown')
-                clean_name = self._clean_text_for_pdf(f"Analysis {i+1} - {profile}")
-                pdf.cell(0, 8, clean_name, 0, 1)
+                profile = analysis.get('buyer_profile', '未知')
+                pdf.cell(0, 8, f'{i+1}. {name[:30]}... - {profile}視角', 0, 1)
             pdf.ln(5)
             
+            # 逐個分析結果
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 pdf.add_page()
-                pdf.chapter_title(f'Analysis {i+1}')
+                pdf.chapter_title(f'分析 {i+1}：{name[:30]}')
                 
-                profile = analysis.get('buyer_profile', 'Unknown')
-                timestamp = analysis.get('timestamp', 'Unknown')
+                # 基本資訊
+                profile = analysis.get('buyer_profile', '未知')
+                timestamp = analysis.get('timestamp', '未知時間')
                 mode = analysis.get('analysis_mode', '')
-                analysis_type = analysis.get('analysis_type', 'Life Function')
-                
-                clean_profile = self._clean_text_for_pdf(profile)
-                clean_mode = self._clean_text_for_pdf(mode)
-                clean_analysis_type = self._clean_text_for_pdf(analysis_type)
+                analysis_type = analysis.get('analysis_type', '生活機能')
                 
                 info = f"""
-Basic Information:
-- Analysis Type: {clean_analysis_type}
-- Buyer Profile: {clean_profile}
-- Time: {timestamp}
-- Mode: {clean_mode}
+基本資訊：
+- 分析類型：{analysis_type}
+- 買家類型：{profile}
+- 分析時間：{timestamp}
+- 分析模式：{mode}
                 """
                 pdf.chapter_body(info)
                 
+                # 房屋資訊
                 houses_data = analysis.get('houses_data', {})
-                pdf.set_font('helvetica', 'B', 12)
-                pdf.cell(0, 8, 'Property Information:', 0, 1)
-                pdf.set_font('helvetica', '', 11)
+                pdf.set_font('NotoSansTC', 'B', 12)
+                pdf.cell(0, 8, '房屋資訊：', 0, 1)
+                pdf.set_font('NotoSansTC', '', 11)
                 for h_name, h_info in houses_data.items():
-                    clean_h_name = self._clean_text_for_pdf(h_name)
-                    clean_title = self._clean_text_for_pdf(h_info.get('title', 'Unknown')[:50])
-                    clean_address = self._clean_text_for_pdf(h_info.get('address', 'Unknown')[:50])
-                    pdf.cell(0, 8, f"{clean_h_name}:", 0, 1)
-                    pdf.cell(0, 8, f"  Title: {clean_title}", 0, 1)
-                    pdf.cell(0, 8, f"  Address: {clean_address}", 0, 1)
+                    pdf.multi_cell(0, 8, f"{h_name}：")
+                    pdf.multi_cell(0, 8, f"  標題：{h_info.get('title', '未知')}")
+                    pdf.multi_cell(0, 8, f"  地址：{h_info.get('address', '未知')}")
                 pdf.ln(5)
                 
+                # 設施統計
                 counts = analysis.get('facility_counts', {})
-                pdf.set_font('helvetica', 'B', 12)
-                pdf.cell(0, 8, 'Facility Statistics:', 0, 1)
-                pdf.set_font('helvetica', '', 11)
+                pdf.set_font('NotoSansTC', 'B', 12)
+                pdf.cell(0, 8, '設施統計：', 0, 1)
+                pdf.set_font('NotoSansTC', '', 11)
                 for h_name, count in counts.items():
-                    clean_h_name = self._clean_text_for_pdf(h_name)
-                    pdf.cell(0, 8, f"{clean_h_name}: {count} facilities", 0, 1)
+                    pdf.cell(0, 8, f"{h_name}：{count} 個設施", 0, 1)
                 pdf.ln(5)
                 
+                # 設施表格
                 df = analysis.get('facilities_table', pd.DataFrame())
                 if not df.empty:
-                    pdf.set_font('helvetica', 'B', 12)
-                    pdf.cell(0, 8, 'Facility List (Top 5):', 0, 1)
-                    pdf.set_font('helvetica', '', 10)
-                    
-                    display_cols = ['房屋', '設施名稱', '距離(公尺)']
-                    for i, row in df.head(5).iterrows():
-                        line = []
-                        for col in display_cols:
-                            if col in row:
-                                value = str(row[col])
-                                clean_value = self._clean_text_for_pdf(value[:20])
-                                line.append(clean_value)
-                        if line:
-                            pdf.cell(0, 6, ' - '.join(line), 0, 1)
-                    pdf.ln(5)
+                    pdf.add_table(df, '設施清單（前20筆）', max_rows=20)
                 
+                # AI 分析結果
                 if 'gemini_result' in analysis:
-                    pdf.set_font('helvetica', 'B', 12)
-                    pdf.cell(0, 8, 'AI Analysis Report:', 0, 1)
-                    pdf.set_font('helvetica', '', 10)
+                    pdf.set_font('NotoSansTC', 'B', 12)
+                    pdf.cell(0, 8, 'AI 分析報告：', 0, 1)
+                    pdf.set_font('NotoSansTC', '', 10)
                     
                     result_text = analysis['gemini_result']
-                    clean_result = self._clean_text_for_pdf(result_text)
-                    
-                    lines = clean_result.split('\n')
-                    for line in lines:
+                    # 分段写入
+                    for line in result_text.split('\n'):
                         if line.strip():
-                            while len(line) > 80:
-                                pdf.cell(0, 5, line[:80], 0, 1)
-                                line = line[80:]
-                            pdf.cell(0, 5, line, 0, 1)
+                            pdf.multi_cell(0, 6, line)
                     pdf.ln(5)
             
-            return pdf.output(dest='S').encode('latin1', errors='ignore')
+            # 生成PDF二進制數據
+            return pdf.output(dest='S').encode('latin1')
             
         except Exception as e:
-            st.error(f"PDF生成錯誤: {str(e)}")
+            st.error(f"PDF生成錯誤：{str(e)}")
             return None
-
-    def _clean_text_for_pdf(self, text):
-        """清理文字以適應PDF latin-1編碼"""
-        if not text:
-            return ""
-        
-        text = str(text)
-        
-        replacements = {
-            '，': ', ', '。': '. ', '：': ': ', '；': '; ',
-            '「': '"', '」': '"', '『': "'", '』': "'",
-            '（': '(', '）': ')', '、': ', ', '？': '?',
-            '！': '!', '～': '~', '…': '...'
-        }
-        for ch, repl in replacements.items():
-            text = text.replace(ch, repl)
-        
-        result = []
-        for c in text:
-            if ord(c) < 128:
-                result.append(c)
-            else:
-                result.append(' ')
-        
-        cleaned = ''.join(result)
-        cleaned = ' '.join(cleaned.split())
-        return cleaned
     
     def render_comparison_tab(self):
         """渲染分析頁面"""
@@ -420,13 +389,13 @@ Basic Information:
                                 pdf_data = self._generate_pdf_report()
                                 if pdf_data:
                                     b64 = base64.b64encode(pdf_data).decode()
-                                    filename = f"analysis_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                                    filename = f"房屋分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
                                     href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">點此下載PDF</a>'
                                     st.markdown(href, unsafe_allow_html=True)
                                 else:
                                     st.error("PDF生成失敗")
                     else:
-                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf`")
+                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf` 和下載中文字型")
                     
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
                         st.session_state.saved_analyses = {}
@@ -473,13 +442,13 @@ Basic Information:
                     self._render_nuisance_analysis(fav_df)
             
         except Exception as e:
-            st.error(f"❌ 渲染分析頁面時發生錯誤: {str(e)}")
+            st.error(f"❌ 渲染分析頁面時發生錯誤：{str(e)}")
             st.button("🔄 重新整理頁面", on_click=self._reset_page)
     
     def _render_life_function_analysis(self, fav_df):
         """渲染生活機能分析"""
         
-        # 步驟1: 買家類型選擇
+        # 步驟1：買家類型選擇
         st.markdown("### 👤 步驟1：誰要住這裡？")
         st.markdown("選擇買家類型，系統將**自動推薦**最適合的生活機能")
         
@@ -505,23 +474,27 @@ Basic Information:
                 btn_type = "primary" if is_selected else "secondary"
                 if st.button(f"選擇 {profile_name}", key=f"select_{profile_name}", 
                            type=btn_type, use_container_width=True):
+                    
+                    # 更新買家類型
                     st.session_state.buyer_profile = profile_name
+                    
+                    # 根據新買家類型取得推薦設施
                     subs = self._auto_select_subtypes(profile_name)
                     st.session_state.auto_selected_subtypes = subs
+                    
+                    # 立即更新 UI 顯示的選擇狀態
                     st.session_state.last_selected_subtypes = subs.copy()
+                    
+                    # 更新建議半徑
                     st.session_state.suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
                     
-                    # 清除所有類別的選擇狀態
+                    # 清除所有類別的臨時標記
                     for cat in PLACE_TYPES.keys():
                         if f"all_{cat}" in st.session_state:
                             del st.session_state[f"all_{cat}"]
                         if f"clear_{cat}" in st.session_state:
                             del st.session_state[f"clear_{cat}"]
-                        # 清除所有 checkbox 狀態
-                        items = PLACE_TYPES[cat]
-                        for idx, item in enumerate(items):
-                            if f"sub_{cat}_{idx}" in st.session_state:
-                                del st.session_state[f"sub_{cat}_{idx}"]
+                    
                     st.rerun()
         
         current_profile = st.session_state.get('buyer_profile')
@@ -534,7 +507,7 @@ Basic Information:
         
         st.markdown("---")
         
-        # 步驟2: 房屋選擇
+        # 步驟2：房屋選擇
         st.markdown("### 🏠 步驟2：選擇要分析的房屋")
         
         mode = st.radio("選擇分析模式", ["單一房屋分析", "多房屋比較"], horizontal=True, key="life_mode")
@@ -563,7 +536,7 @@ Basic Information:
         st.session_state.selected_houses = selected
         st.markdown("---")
         
-        # 步驟3: 分析設定
+        # 步驟3：分析設定
         st.markdown("### ⚙️ 步驟3：分析設定")
         
         suggest_r = st.session_state.get('suggested_radius', DEFAULT_RADIUS)
@@ -574,7 +547,7 @@ Basic Information:
         
         st.markdown("---")
         
-        # 步驟4: 生活機能選擇
+        # 步驟4：生活機能選擇
         st.subheader("🔍 步驟4：選擇生活機能設施")
         
         auto_subs = st.session_state.get('auto_selected_subtypes', {})
@@ -585,24 +558,25 @@ Basic Information:
         
         # 顯示當前選擇摘要
         if st.session_state.last_selected_subtypes:
-            st.markdown("### 📋 當前選擇摘要")
             total_selected = sum(len(v) for v in st.session_state.last_selected_subtypes.values())
-            st.info(f"📌 當前已選擇 **{total_selected}** 種設施")
-            
-            cols = st.columns(3)
-            col_idx = 0
-            for cat, items in st.session_state.last_selected_subtypes.items():
-                if items:
-                    with cols[col_idx % 3]:
-                        color = CATEGORY_COLORS.get(cat, "#666")
-                        st.markdown(f"""
-                        <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color}; margin-bottom:10px;">
-                            <h5 style="color:{color}; margin:0;">{cat}</h5>
-                            <p style="margin:5px 0 0; font-size:12px;">{', '.join(items[:3])}{'...' if len(items) > 3 else ''}</p>
-                            <p style="margin:2px 0 0; font-size:11px; color:#666;">共 {len(items)} 種</p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    col_idx += 1
+            if total_selected > 0:
+                st.markdown("### 📋 當前選擇摘要")
+                st.info(f"📌 當前已選擇 **{total_selected}** 種設施")
+                
+                cols = st.columns(3)
+                col_idx = 0
+                for cat, items in st.session_state.last_selected_subtypes.items():
+                    if items:
+                        with cols[col_idx % 3]:
+                            color = CATEGORY_COLORS.get(cat, "#666")
+                            st.markdown(f"""
+                            <div style="background-color:{color}20; padding:10px; border-radius:5px; border-left:4px solid {color}; margin-bottom:10px;">
+                                <h5 style="color:{color}; margin:0;">{cat}</h5>
+                                <p style="margin:5px 0 0; font-size:12px;">{', '.join(items[:3])}{'...' if len(items) > 3 else ''}</p>
+                                <p style="margin:2px 0 0; font-size:11px; color:#666;">共 {len(items)} 種</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                        col_idx += 1
         
         selected_subs = self._render_all_facilities_selection(auto_subs)
         
@@ -673,6 +647,7 @@ Basic Information:
                     if current_profile:
                         st.markdown(f"💡 **{current_profile}推薦**")
                 
+                # 取得此類別所有設施（去除重複）
                 items = []
                 seen = set()
                 for item in PLACE_TYPES[cat]:
@@ -680,6 +655,7 @@ Basic Information:
                         items.append(item)
                         seen.add(item)
                 
+                # 取得優先/次要推薦清單
                 priority_list = []
                 secondary_list = []
                 if current_profile and current_profile in profiles:
@@ -687,17 +663,20 @@ Basic Information:
                     priority_list = p.get("priority_categories", {}).get(cat, [])
                     secondary_list = p.get("secondary_categories", {}).get(cat, [])
                 
+                # 處理全選/清除
                 force_all = st.session_state.get(f"all_{cat}", False)
                 force_clear = st.session_state.get(f"clear_{cat}", False)
                 
                 if force_clear:
                     default_list = []
                 else:
+                    # 優先使用上次選擇
                     if cat in st.session_state.last_selected_subtypes:
                         default_list = st.session_state.last_selected_subtypes.get(cat, [])
                     else:
                         default_list = preset_subs.get(cat, []) if cat in preset_subs else []
                 
+                # 3欄布局
                 per_row = (len(items) + 2) // 3
                 for row in range(per_row):
                     cols = st.columns(3)
@@ -706,6 +685,7 @@ Basic Information:
                         if idx < len(items):
                             name = items[idx]
                             
+                            # 判斷推薦等級
                             rec_text = ""
                             rec_color = ""
                             if name in priority_list:
@@ -715,6 +695,7 @@ Basic Information:
                                 rec_text = "📌 次要"
                                 rec_color = "#87CEEB"
                             
+                            # 預設值
                             default_val = False
                             if force_all:
                                 default_val = True
@@ -742,6 +723,7 @@ Basic Information:
                                         selected_subs[cat] = []
                                     selected_subs[cat].append(name)
                 
+                # 清除標記
                 if f"all_{cat}" in st.session_state:
                     del st.session_state[f"all_{cat}"]
                 if f"clear_{cat}" in st.session_state:
@@ -750,6 +732,7 @@ Basic Information:
                 if cat in selected_subs:
                     st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
         
+        # 移除重複的選擇
         for cat in selected_subs:
             selected_subs[cat] = list(dict.fromkeys(selected_subs[cat]))
         
@@ -930,7 +913,7 @@ Basic Information:
             st.session_state.analysis_completed = False
             self._execute_nuisance_analysis()
         except Exception as e:
-            st.error(f"❌ 啟動失敗: {e}")
+            st.error(f"❌ 啟動失敗：{e}")
             st.session_state.analysis_in_progress = False
     
     def _execute_nuisance_analysis(self):
@@ -940,7 +923,7 @@ Basic Information:
             fav_df = pd.read_json(s["fav"], orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
-                st.write("📌 步驟 1/4: 解析地址...")
+                st.write("📌 步驟 1/4：解析地址...")
                 houses_data = {}
                 for i, opt in enumerate(s["houses"]):
                     h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
@@ -955,9 +938,8 @@ Basic Information:
                         "lat": lat, "lng": lng
                     }
                 
-                st.write("🔍 步驟 2/4: 查詢周邊嫌惡設施...")
+                st.write("🔍 步驟 2/4：查詢周邊嫌惡設施...")
                 nuisances_data = {}
-                total = len(houses_data)
                 for idx, (name, info) in enumerate(houses_data.items()):
                     st.write(f"   - 查詢 {name} 周邊設施...")
                     nuisances = self._query_nuisances_no_progress(
@@ -966,7 +948,7 @@ Basic Information:
                     )
                     nuisances_data[name] = nuisances
                 
-                st.write("📊 步驟 3/4: 計算風險評分...")
+                st.write("📊 步驟 3/4：計算風險評分...")
                 counts = {n: len(p) for n, p in nuisances_data.items()}
                 
                 risk_scores = {}
@@ -989,7 +971,7 @@ Basic Information:
                 
                 table = self._create_nuisance_table(houses_data, nuisances_data)
                 
-                st.write("💾 步驟 4/4: 儲存結果...")
+                st.write("💾 步驟 4/4：儲存結果...")
                 
                 analysis_result = {
                     "analysis_mode": s["mode"],
@@ -1022,7 +1004,7 @@ Basic Information:
             st.rerun()
             
         except Exception as e:
-            st.error(f"❌ 分析失敗: {e}")
+            st.error(f"❌ 分析失敗：{e}")
             st.session_state.analysis_in_progress = False
     
     def _query_nuisances_no_progress(self, lat, lng, api_key, nuisances, radius):
@@ -1081,7 +1063,7 @@ Basic Information:
             "飛機場": 8,
             "焚化爐": 9,
             "汙水處理廠": 8,
-            "屠宰場/畜牧業": 7
+            "畜牧業": 7
         }
         return weights.get(nuisance_type, 5)
     
@@ -1186,7 +1168,7 @@ Basic Information:
             st.session_state.analysis_completed = False
             self._execute_analysis()
         except Exception as e:
-            st.error(f"❌ 啟動失敗: {e}")
+            st.error(f"❌ 啟動失敗：{e}")
             st.session_state.analysis_in_progress = False
     
     def _clear_old(self):
@@ -1211,7 +1193,7 @@ Basic Information:
             fav_df = pd.read_json(s["fav"], orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
-                st.write("📌 步驟 1/4: 解析地址...")
+                st.write("📌 步驟 1/4：解析地址...")
                 houses_data = {}
                 for i, opt in enumerate(s["houses"]):
                     h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
@@ -1226,9 +1208,8 @@ Basic Information:
                         "lat": lat, "lng": lng
                     }
                 
-                st.write("🔍 步驟 2/4: 查詢周邊設施...")
+                st.write("🔍 步驟 2/4：查詢周邊設施...")
                 places_data = {}
-                total = len(houses_data)
                 for idx, (name, info) in enumerate(houses_data.items()):
                     st.write(f"   - 查詢 {name} 周邊設施...")
                     places = self._query_places_chinese_no_progress(
@@ -1237,11 +1218,11 @@ Basic Information:
                     )
                     places_data[name] = places
                 
-                st.write("📊 步驟 3/4: 計算統計...")
+                st.write("📊 步驟 3/4：計算統計...")
                 counts = {n: len(p) for n, p in places_data.items()}
                 table = self._create_facilities_table(houses_data, places_data)
                 
-                st.write("💾 步驟 4/4: 儲存結果...")
+                st.write("💾 步驟 4/4：儲存結果...")
                 
                 analysis_result = {
                     "analysis_mode": s["mode"],
@@ -1274,7 +1255,7 @@ Basic Information:
             st.rerun()
             
         except Exception as e:
-            st.error(f"❌ 分析失敗: {e}")
+            st.error(f"❌ 分析失敗：{e}")
             st.session_state.analysis_in_progress = False
     
     def _query_places_chinese_no_progress(self, lat, lng, api_key, categories, subtypes, radius=500, extra=""):
@@ -1412,7 +1393,7 @@ Basic Information:
             st.info(f"📈 共找到 {len(df)} 筆資料")
             
             st.dataframe(
-                df.head(50),
+                df,
                 use_container_width=True,
                 column_config={
                     "房屋": st.column_config.TextColumn(width="small"),
@@ -1906,7 +1887,7 @@ Basic Information:
                 st.info(f"📭 {house_name} 周圍未找到{'嫌惡設施' if analysis_type=='嫌惡設施' else '設施'}")
     
     def _display_ai_analysis(self, res):
-        """AI 分析 - 只有一個模板"""
+        """AI 分析"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
@@ -2010,7 +1991,7 @@ Basic Information:
                 st.session_state.used_prompt = prompt
                 st.rerun()
             except Exception as e:
-                st.error(f"❌ Gemini API 錯誤: {e}")
+                st.error(f"❌ Gemini API 錯誤：{e}")
     
     def _format_all_facilities_for_prompt(self, res):
         """格式化所有設施資料供提示詞使用（全部列出，無省略）"""
@@ -2049,7 +2030,7 @@ Basic Information:
         return self._format_all_facilities_for_prompt(res)
     
     def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, facilities_text, profile, analysis_type):
-        """建立提示詞 - 只有一個模板"""
+        """建立提示詞"""
         pinfo = self._get_buyer_profiles().get(profile, {})
         icon = pinfo.get("icon", "👤")
         focus = pinfo.get("prompt_focus", [])
