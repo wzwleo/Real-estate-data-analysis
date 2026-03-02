@@ -7,7 +7,6 @@ import sys
 import os
 import requests
 import math
-import urllib.request
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
 from collections import Counter
@@ -26,30 +25,6 @@ try:
 except ImportError:
     PDF_AVAILABLE = False
     pass
-
-# 自動下載中文字型
-def download_fonts():
-    """下載 Noto Sans TC 字型"""
-    if not PDF_AVAILABLE:
-        return
-    
-    fonts = {
-        'NotoSansTC-Regular.ttf': 'https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSansTC/NotoSansTC-Regular.ttf',
-        'NotoSansTC-Bold.ttf': 'https://github.com/notofonts/noto-fonts/raw/main/hinted/ttf/NotoSansTC/NotoSansTC-Bold.ttf'
-    }
-    
-    for font_name, url in fonts.items():
-        if not os.path.exists(font_name):
-            try:
-                with st.spinner(f"📥 下載中文字型 {font_name}..."):
-                    urllib.request.urlretrieve(url, font_name)
-                st.success(f"✅ 字型 {font_name} 下載完成")
-            except Exception as e:
-                st.warning(f"⚠️ 字型 {font_name} 下載失敗：{e}")
-
-# 在 PDF_AVAILABLE 為 True 時下載字型
-if PDF_AVAILABLE:
-    download_fonts()
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -73,60 +48,91 @@ except ImportError as e:
 
 
 class ChinesePDF(FPDF):
-    """支援中文的PDF類 - 使用 Noto Sans TC 字型"""
+    """支援中文的PDF類 - 使用系統內建字型"""
     
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
+        self.font_loaded = False
         
-        # 檢查字型檔案是否存在
-        regular_font = 'NotoSansTC-Regular.ttf'
-        bold_font = 'NotoSansTC-Bold.ttf'
-        
-        if os.path.exists(regular_font):
-            self.add_font('NotoSansTC', '', regular_font, uni=True)
-        else:
-            st.warning(f"⚠️ 找不到字型檔案：{regular_font}，將使用英文替代")
-            self.font_available = False
-            
-        if os.path.exists(bold_font):
-            self.add_font('NotoSansTC', 'B', bold_font, uni=True)
-        
+        # 根據作業系統選擇中文字型
+        try:
+            if os.name == 'nt':  # Windows
+                # 嘗試常見的Windows中文字型
+                font_paths = [
+                    'C:\\Windows\\Fonts\\msjh.ttc',  # 微軟正黑體
+                    'C:\\Windows\\Fonts\\msjhbd.ttc',  # 微軟正黑體粗體
+                    'C:\\Windows\\Fonts\\kaiu.ttf',  # 標楷體
+                    'C:\\Windows\\Fonts\\mingliu.ttc',  # 細明體
+                ]
+                for font_path in font_paths:
+                    if os.path.exists(font_path):
+                        self.add_font('chinese', '', font_path, uni=True)
+                        self.add_font('chinese', 'B', font_path, uni=True)
+                        self.font_loaded = True
+                        break
+                        
+            elif os.name == 'posix':  # macOS/Linux
+                # macOS 字型路徑
+                mac_fonts = [
+                    '/System/Library/Fonts/PingFang.ttc',
+                    '/System/Library/Fonts/STHeiti Light.ttc',
+                    '/System/Library/Fonts/AppleGothic.ttf',
+                ]
+                # Linux 字型路徑
+                linux_fonts = [
+                    '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
+                    '/usr/share/fonts/truetype/arphic/uming.ttc',
+                ]
+                
+                all_fonts = mac_fonts + linux_fonts
+                for font_path in all_fonts:
+                    if os.path.exists(font_path):
+                        self.add_font('chinese', '', font_path, uni=True)
+                        self.add_font('chinese', 'B', font_path, uni=True)
+                        self.font_loaded = True
+                        break
+        except:
+            self.font_loaded = False
+    
     def header(self):
-        if hasattr(self, 'font_available'):
+        if self.font_loaded:
+            self.set_font('chinese', 'B', 16)
+            self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
+        else:
             self.set_font('helvetica', 'B', 16)
             self.cell(0, 10, 'House Analysis Report', 0, 1, 'C')
-        else:
-            self.set_font('NotoSansTC', 'B', 16)
-            self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
         self.ln(5)
     
     def footer(self):
         self.set_y(-15)
-        if hasattr(self, 'font_available'):
+        if self.font_loaded:
+            self.set_font('chinese', '', 8)
+            self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
+        else:
             self.set_font('helvetica', '', 8)
             self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-        else:
-            self.set_font('NotoSansTC', '', 8)
-            self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
     
     def chapter_title(self, title):
-        if hasattr(self, 'font_available'):
-            self.set_font('helvetica', 'B', 14)
+        if self.font_loaded:
+            self.set_font('chinese', 'B', 14)
         else:
-            self.set_font('NotoSansTC', 'B', 14)
+            self.set_font('helvetica', 'B', 14)
         self.set_fill_color(200, 220, 255)
         self.cell(0, 10, title, 0, 1, 'L', 1)
         self.ln(5)
     
     def chapter_body(self, body):
-        if hasattr(self, 'font_available'):
-            self.set_font('helvetica', '', 11)
+        if self.font_loaded:
+            self.set_font('chinese', '', 11)
         else:
-            self.set_font('NotoSansTC', '', 11)
+            self.set_font('helvetica', '', 11)
         
         for line in body.split('\n'):
             if line.strip():
+                # 如果沒有中文字型，過濾掉非ASCII字符
+                if not self.font_loaded:
+                    line = ''.join(c for c in line if ord(c) < 128)
                 self.multi_cell(0, 8, line)
         self.ln(2)
     
@@ -138,10 +144,10 @@ class ChinesePDF(FPDF):
         col_width = self.w / (min(len(df.columns), 5) + 1) - 2
         
         # 表頭
-        if hasattr(self, 'font_available'):
-            self.set_font('helvetica', 'B', 10)
+        if self.font_loaded:
+            self.set_font('chinese', 'B', 10)
         else:
-            self.set_font('NotoSansTC', 'B', 10)
+            self.set_font('helvetica', 'B', 10)
         self.set_fill_color(200, 200, 200)
         
         # 只顯示前5個欄位
@@ -151,24 +157,27 @@ class ChinesePDF(FPDF):
         self.ln()
         
         # 表格內容
-        if hasattr(self, 'font_available'):
-            self.set_font('helvetica', '', 9)
+        if self.font_loaded:
+            self.set_font('chinese', '', 9)
         else:
-            self.set_font('NotoSansTC', '', 9)
+            self.set_font('helvetica', '', 9)
         self.set_fill_color(255, 255, 255)
         
         for i, row in df.head(max_rows).iterrows():
             for col in display_cols:
                 value = str(row[col])[:15]
+                if not self.font_loaded:
+                    value = ''.join(c for c in value if ord(c) < 128)
                 self.cell(col_width, 8, value, 1, 0, 'C')
             self.ln()
         
         if len(df) > max_rows:
-            if hasattr(self, 'font_available'):
-                self.set_font('helvetica', 'I', 9)
+            if self.font_loaded:
+                self.set_font('chinese', 'I', 9)
+                self.cell(0, 8, f'... 還有 {len(df) - max_rows} 筆資料', 0, 1, 'L')
             else:
-                self.set_font('NotoSansTC', 'I', 9)
-            self.cell(0, 8, f'... 還有 {len(df) - max_rows} 筆資料', 0, 1, 'L')
+                self.set_font('helvetica', 'I', 9)
+                self.cell(0, 8, f'... and {len(df) - max_rows} more items', 0, 1, 'L')
         self.ln(5)
 
 
@@ -325,7 +334,7 @@ class ComparisonAnalyzer:
         return auto_subtypes
     
     def _generate_pdf_report(self):
-        """生成包含所有分析結果的PDF報告 - 支援中文"""
+        """生成包含所有分析結果的PDF報告 - 使用系統字型"""
         if not PDF_AVAILABLE:
             return None
         
@@ -337,19 +346,23 @@ class ComparisonAnalyzer:
             pdf.add_page()
             
             # 生成時間
-            if hasattr(pdf, 'font_available'):
+            if pdf.font_loaded:
+                pdf.set_font('chinese', '', 11)
+                pdf.cell(0, 8, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
+            else:
                 pdf.set_font('helvetica', '', 11)
                 pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
-            else:
-                pdf.set_font('NotoSansTC', '', 11)
-                pdf.cell(0, 8, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
             pdf.ln(5)
             
             # 目錄
-            pdf.chapter_title('目錄' if not hasattr(pdf, 'font_available') else 'Table of Contents')
+            pdf.chapter_title('目錄' if pdf.font_loaded else 'Table of Contents')
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 profile = analysis.get('buyer_profile', '未知')
-                pdf.cell(0, 8, f'{i+1}. {name[:30]}... - {profile}視角', 0, 1)
+                display_name = name[:30] + '...' if len(name) > 30 else name
+                if not pdf.font_loaded:
+                    display_name = ''.join(c for c in display_name if ord(c) < 128)
+                    profile = ''.join(c for c in profile if ord(c) < 128)
+                pdf.cell(0, 8, f'{i+1}. {display_name} - {profile}視角', 0, 1)
             pdf.ln(5)
             
             # 逐個分析結果
@@ -362,10 +375,11 @@ class ComparisonAnalyzer:
                 timestamp = analysis.get('timestamp', '未知時間')
                 mode = analysis.get('analysis_mode', '')
                 analysis_type = analysis.get('analysis_type', '生活機能')
+                include_nuisance = analysis.get('include_nuisance', False)
                 
                 info = f"""
 基本資訊：
-- 分析類型：{analysis_type}
+- 分析類型：{analysis_type}{' (含嫌惡設施)' if include_nuisance else ''}
 - 買家類型：{profile}
 - 分析時間：{timestamp}
 - 分析模式：{mode}
@@ -374,9 +388,9 @@ class ComparisonAnalyzer:
                 
                 # 房屋資訊
                 houses_data = analysis.get('houses_data', {})
-                pdf.set_font('NotoSansTC', 'B', 12)
+                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
                 pdf.cell(0, 8, '房屋資訊：', 0, 1)
-                pdf.set_font('NotoSansTC', '', 11)
+                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 11)
                 for h_name, h_info in houses_data.items():
                     pdf.multi_cell(0, 8, f"{h_name}：")
                     pdf.multi_cell(0, 8, f"  標題：{h_info.get('title', '未知')}")
@@ -385,9 +399,9 @@ class ComparisonAnalyzer:
                 
                 # 設施統計
                 counts = analysis.get('facility_counts', {})
-                pdf.set_font('NotoSansTC', 'B', 12)
+                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
                 pdf.cell(0, 8, '設施統計：', 0, 1)
-                pdf.set_font('NotoSansTC', '', 11)
+                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 11)
                 for h_name, count in counts.items():
                     pdf.cell(0, 8, f"{h_name}：{count} 個設施", 0, 1)
                 pdf.ln(5)
@@ -399,18 +413,18 @@ class ComparisonAnalyzer:
                 
                 # AI 分析結果
                 if 'gemini_result' in analysis:
-                    pdf.set_font('NotoSansTC', 'B', 12)
+                    pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
                     pdf.cell(0, 8, 'AI 分析報告：', 0, 1)
-                    pdf.set_font('NotoSansTC', '', 10)
+                    pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 10)
                     
                     result_text = analysis['gemini_result']
-                    # 分段写入
                     for line in result_text.split('\n'):
                         if line.strip():
+                            if not pdf.font_loaded:
+                                line = ''.join(c for c in line if ord(c) < 128)
                             pdf.multi_cell(0, 6, line)
                     pdf.ln(5)
             
-            # 生成PDF二進制數據
             return pdf.output(dest='S').encode('latin1')
             
         except Exception as e:
@@ -439,8 +453,11 @@ class ComparisonAnalyzer:
                         profile = analysis.get('buyer_profile', '未知')
                         icon = self._get_buyer_profiles().get(profile, {}).get('icon', '🏠')
                         timestamp = analysis.get('timestamp', '未知時間')
+                        include_nuisance = analysis.get('include_nuisance', False)
                         
                         btn_label = f"{icon} {name[:20]}...\n{profile} | {timestamp}"
+                        if include_nuisance:
+                            btn_label = "⚠️ " + btn_label
                         
                         if name == st.session_state.current_analysis_name:
                             btn_label = f"👉 {btn_label}"
@@ -659,6 +676,7 @@ class ComparisonAnalyzer:
         include_nuisance = st.checkbox("加入嫌惡設施分析", value=False, 
                                       help="勾選後將同時分析周邊嫌惡設施")
         
+        selected_nuisances = []
         if include_nuisance:
             st.info("系統將同時分析周邊的嫌惡設施，如宮廟、加油站、工業區等")
             with st.expander("選擇要分析的嫌惡設施類型", expanded=False):
@@ -673,8 +691,11 @@ class ComparisonAnalyzer:
                 selected_cats = list(selected_subs.keys())
                 valid = self._validate_inputs(selected, selected_cats)
                 if valid == "OK":
-                    self._start_analysis(mode, selected, radius, keyword, 
-                                        selected_cats, selected_subs, fav_df, current_profile, "生活機能")
+                    self._start_analysis(
+                        mode, selected, radius, keyword, 
+                        selected_cats, selected_subs, fav_df, current_profile, "生活機能",
+                        include_nuisance, selected_nuisances
+                    )
                 else:
                     st.error(valid)
         with col2:
@@ -1220,14 +1241,23 @@ class ComparisonAnalyzer:
         if not st.session_state.get('buyer_profile'): return "⚠️ 請先選擇買家類型"
         return "OK"
     
-    def _start_analysis(self, mode, houses, radius, keyword, cats, subs, fav_df, profile, analysis_type):
-        """開始分析"""
+    def _start_analysis(self, mode, houses, radius, keyword, cats, subs, fav_df, profile, analysis_type, include_nuisance=False, selected_nuisances=None):
+        """開始分析 - 新增嫌惡設施參數"""
         try:
             st.session_state.analysis_settings = {
-                "mode": mode, "houses": houses, "radius": radius, "keyword": keyword,
-                "cats": cats, "subs": subs, "server": self._get_server_key(),
-                "gemini": self._get_gemini_key(), "fav": fav_df.to_json(orient='split'),
-                "profile": profile, "analysis_type": analysis_type
+                "mode": mode, 
+                "houses": houses, 
+                "radius": radius, 
+                "keyword": keyword,
+                "cats": cats, 
+                "subs": subs, 
+                "server": self._get_server_key(),
+                "gemini": self._get_gemini_key(), 
+                "fav": fav_df.to_json(orient='split'),
+                "profile": profile, 
+                "analysis_type": analysis_type,
+                "include_nuisance": include_nuisance,
+                "selected_nuisances": selected_nuisances or []
             }
             self._clear_old()
             st.session_state.analysis_in_progress = True
@@ -1253,12 +1283,13 @@ class ComparisonAnalyzer:
             if k in st.session_state: del st.session_state[k]
     
     def _execute_analysis(self):
-        """執行分析核心"""
+        """執行分析核心 - 加入嫌惡設施查詢"""
         try:
             s = st.session_state.analysis_settings
             fav_df = pd.read_json(s["fav"], orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
+                # 步驟1：解析地址
                 st.write("📌 步驟 1/4：解析地址...")
                 houses_data = {}
                 for i, opt in enumerate(s["houses"]):
@@ -1274,7 +1305,8 @@ class ComparisonAnalyzer:
                         "lat": lat, "lng": lng
                     }
                 
-                st.write("🔍 步驟 2/4：查詢周邊設施...")
+                # 步驟2：查詢生活機能設施
+                st.write("🔍 步驟 2/4：查詢周邊生活機能設施...")
                 places_data = {}
                 for idx, (name, info) in enumerate(houses_data.items()):
                     st.write(f"   - 查詢 {name} 周邊設施...")
@@ -1284,10 +1316,29 @@ class ComparisonAnalyzer:
                     )
                     places_data[name] = places
                 
+                # 步驟2.5：如果需要，查詢嫌惡設施
+                nuisance_data = {}
+                if s.get("include_nuisance", False) and s.get("selected_nuisances"):
+                    st.write("🔍 步驟 2.5/4：查詢周邊嫌惡設施...")
+                    for idx, (name, info) in enumerate(houses_data.items()):
+                        st.write(f"   - 查詢 {name} 周邊嫌惡設施...")
+                        nuisances = self._query_nuisances_no_progress(
+                            info["lat"], info["lng"], s["server"],
+                            s["selected_nuisances"], s["radius"]
+                        )
+                        nuisance_data[name] = nuisances
+                        
+                        # 將嫌惡設施也加入 places_data（用不同的類別標示）
+                        for n in nuisances:
+                            # n 的格式：(found_nuisance, keyword, name, lat, lng, dist, pid)
+                            places_data[name].append(("嫌惡設施", n[1], n[2], n[3], n[4], n[5], n[6]))
+                
+                # 步驟3：計算統計
                 st.write("📊 步驟 3/4：計算統計...")
                 counts = {n: len(p) for n, p in places_data.items()}
                 table = self._create_facilities_table(houses_data, places_data)
                 
+                # 步驟4：儲存結果
                 st.write("💾 步驟 4/4：儲存結果...")
                 
                 analysis_result = {
@@ -1302,7 +1353,9 @@ class ComparisonAnalyzer:
                     "num_houses": len(houses_data),
                     "facilities_table": table,
                     "buyer_profile": s.get("profile", "未指定"),
-                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "include_nuisance": s.get("include_nuisance", False),
+                    "nuisance_data": nuisance_data if s.get("include_nuisance", False) else None
                 }
                 
                 if s["mode"] == "單一房屋分析":
@@ -1428,20 +1481,23 @@ class ComparisonAnalyzer:
         profile = res.get("buyer_profile", "未指定")
         analysis_type = res.get("analysis_type", "生活機能")
         timestamp = res.get("timestamp", "未知時間")
+        include_nuisance = res.get("include_nuisance", False)
         profiles = self._get_buyer_profiles()
         pinfo = profiles.get(profile, {})
         icon = pinfo.get("icon", "👤")
         
         st.markdown(f"### 分析時間：{timestamp}")
+        if include_nuisance:
+            st.info("⚠️ 此分析包含嫌惡設施評估")
         st.markdown("---")
         
         if analysis_type == "嫌惡設施":
             st.markdown(f"## {icon} {profile}視角 · 嫌惡設施分析")
         else:
             if mode == "單一房屋分析":
-                st.markdown(f"## {icon} {profile}視角 · 單一房屋分析")
+                st.markdown(f"## {icon} {profile}視角 · 單一房屋分析" + (" (含嫌惡設施)" if include_nuisance else ""))
             else:
-                st.markdown(f"## {icon} {profile}視角 · {res['num_houses']}間房屋比較")
+                st.markdown(f"## {icon} {profile}視角 · {res['num_houses']}間房屋比較" + (" (含嫌惡設施)" if include_nuisance else ""))
         
         if pinfo:
             with st.expander(f"📌 {profile} 分析重點", expanded=False):
@@ -1452,11 +1508,18 @@ class ComparisonAnalyzer:
         if analysis_type == "嫌惡設施":
             st.subheader("⚠️ 嫌惡設施詳細資料表格")
         else:
-            st.subheader("📋 設施詳細資料表格")
+            st.subheader("📋 設施詳細資料表格" + (" (包含嫌惡設施)" if include_nuisance else ""))
         
         df = res.get("facilities_table", pd.DataFrame())
         if not df.empty:
-            st.info(f"📈 共找到 {len(df)} 筆資料")
+            nuisance_count = 0
+            if include_nuisance and res.get('nuisance_data'):
+                for house_name in res['houses_data'].keys():
+                    nuisance_count = len(res['nuisance_data'].get(house_name, []))
+                    if nuisance_count > 0:
+                        break
+            
+            st.info(f"📈 共找到 {len(df)} 筆資料" + (f"（包含 {nuisance_count} 處嫌惡設施）" if nuisance_count > 0 else ""))
             
             st.dataframe(
                 df,
@@ -1684,7 +1747,12 @@ class ComparisonAnalyzer:
         
         facilities_data = []
         for p in places:
-            color = CATEGORY_COLORS.get(p[0], "#666")
+            # 判斷是否為嫌惡設施
+            if p[0] == "嫌惡設施":
+                color = "#dc3545"  # 紅色
+            else:
+                color = CATEGORY_COLORS.get(p[0], "#666")
+            
             facilities_data.append({
                 "name": p[2],
                 "category": p[0],
@@ -1909,28 +1977,38 @@ class ComparisonAnalyzer:
         """顯示設施列表"""
         st.markdown("---")
         analysis_type = res.get("analysis_type", "生活機能")
+        include_nuisance = res.get("include_nuisance", False)
+        
         if analysis_type == "嫌惡設施":
             st.subheader("📍 全部嫌惡設施列表")
         else:
-            st.subheader("📍 全部設施列表")
+            st.subheader("📍 全部設施列表" + (" (包含嫌惡設施)" if include_nuisance else ""))
         
         for house_name, places in res["places_data"].items():
             if places:
                 with st.expander(f"🏠 {house_name} - 共 {len(places)} 個{'嫌惡設施' if analysis_type=='嫌惡設施' else '設施'}", expanded=False):
                     for i, p in enumerate(places, 1):
                         cat, subtype, name, lat, lng, dist, pid = p
-                        color = CATEGORY_COLORS.get(cat, "#666") if analysis_type != "嫌惡設施" else "#dc3545"
+                        
+                        # 判斷是否為嫌惡設施
+                        if cat == "嫌惡設施":
+                            color = "#dc3545"
+                            is_nuisance = True
+                        else:
+                            color = CATEGORY_COLORS.get(cat, "#666")
+                            is_nuisance = False
+                        
                         maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
                         
                         if dist <= 300:
-                            dist_color = "#dc3545" if analysis_type == "嫌惡設施" else "#28a745"
-                            dist_badge = "很近" if analysis_type != "嫌惡設施" else "⚠️ 危險近"
+                            dist_color = "#dc3545" if (analysis_type == "嫌惡設施" or is_nuisance) else "#28a745"
+                            dist_badge = "很近" if not is_nuisance else "⚠️ 危險近"
                         elif dist <= 600:
-                            dist_color = "#fd7e14" if analysis_type == "嫌惡設施" else "#ffc107"
-                            dist_badge = "中等" if analysis_type != "嫌惡設施" else "⚠️ 需注意"
+                            dist_color = "#fd7e14" if (analysis_type == "嫌惡設施" or is_nuisance) else "#ffc107"
+                            dist_badge = "中等" if not is_nuisance else "⚠️ 需注意"
                         else:
-                            dist_color = "#ffc107" if analysis_type == "嫌惡設施" else "#dc3545"
-                            dist_badge = "較遠" if analysis_type != "嫌惡設施" else "🟢 尚可"
+                            dist_color = "#ffc107" if (analysis_type == "嫌惡設施" or is_nuisance) else "#dc3545"
+                            dist_badge = "較遠" if not is_nuisance else "🟢 尚可"
                         
                         col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
                         
@@ -1959,6 +2037,7 @@ class ComparisonAnalyzer:
         
         profile = res.get("buyer_profile", "未指定")
         analysis_type = res.get("analysis_type", "生活機能")
+        include_nuisance = res.get("include_nuisance", False)
         profiles = self._get_buyer_profiles()
         pinfo = profiles.get(profile, {})
         icon = pinfo.get("icon", "👤")
@@ -1970,7 +2049,7 @@ class ComparisonAnalyzer:
             res["houses_data"], res["places_data"], res["facility_counts"],
             res.get("selected_categories", []), res["radius"], res.get("keyword", ""),
             res["analysis_mode"], facilities_text, 
-            profile, analysis_type
+            profile, analysis_type, include_nuisance
         )
         
         if "custom_prompt" not in st.session_state:
@@ -1986,6 +2065,9 @@ class ComparisonAnalyzer:
             st.markdown(f"#### 💡 {profile} 分析重點")
             for pt in pinfo.get("prompt_focus", [])[:4]:
                 st.markdown(f"- {pt}")
+            if include_nuisance:
+                st.markdown("---")
+                st.markdown("⚠️ **此分析包含嫌惡設施評估**")
             st.markdown("---")
             st.markdown("**提示：**")
             st.markdown("您可以編輯左側的提示詞，讓AI更符合您的需求")
@@ -2079,13 +2161,16 @@ class ComparisonAnalyzer:
             
             # 列出所有設施
             for i, row in house_df_sorted.iterrows():
-                result += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
+                # 標記嫌惡設施
+                is_nuisance = " ⚠️" if row['設施子類別'] in [n for n in NUISANCE_TYPES.keys()] else ""
+                result += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}){is_nuisance} - {row['距離(公尺)']}公尺\n"
             
             # 統計摘要
             result += f"\n  📊 統計摘要：\n"
             cat_summary = house_df.groupby('設施子類別').size().sort_values(ascending=False)
             for cat, count in cat_summary.items():
-                result += f"     - {cat}: {count}個\n"
+                is_nuisance_cat = " ⚠️" if cat in [n for n in NUISANCE_TYPES.keys()] else ""
+                result += f"     - {cat}{is_nuisance_cat}: {count}個\n"
             
             result += "\n"
         
@@ -2095,14 +2180,16 @@ class ComparisonAnalyzer:
         """為了向後兼容，呼叫新的方法"""
         return self._format_all_facilities_for_prompt(res)
     
-    def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, facilities_text, profile, analysis_type):
-        """建立提示詞"""
+    def _build_prompt(self, houses, places, counts, cats, radius, keyword, mode, facilities_text, profile, analysis_type, include_nuisance=False):
+        """建立提示詞 - 加入嫌惡設施判斷"""
         pinfo = self._get_buyer_profiles().get(profile, {})
         icon = pinfo.get("icon", "👤")
         focus = pinfo.get("prompt_focus", [])
         
         # 建立設施摘要
         facilities_summary = []
+        nuisance_count = 0
+        
         for cat in cats:
             if cat in places:
                 cat_places = places.get(list(houses.keys())[0], []) if mode == "單一房屋分析" else places
@@ -2110,7 +2197,34 @@ class ComparisonAnalyzer:
                 if cat_count > 0:
                     facilities_summary.append(f"- {cat}：{cat_count} 個設施")
         
+        # 計算嫌惡設施數量
+        if include_nuisance:
+            for house_name in houses.keys():
+                if house_name in places:
+                    nuisance_count = len([p for p in places[house_name] if p[0] == "嫌惡設施"])
+                    if nuisance_count > 0:
+                        break
+        
         summary_text = "\n".join(facilities_summary) if facilities_summary else "無周邊設施"
+        
+        # 根據是否包含嫌惡設施，加入不同的提示
+        nuisance_note = ""
+        if include_nuisance and nuisance_count > 0:
+            nuisance_note = f"""
+【⚠️ 嫌惡設施提醒】
+本次分析包含 {nuisance_count} 處嫌惡設施（已用 ⚠️ 標記）。
+請特別注意這些設施對居住品質、房價、生活安寧的潛在影響。
+不同類型的嫌惡設施對不同買家的影響程度不同，請根據 {profile} 的身份特質給予適當的權重。
+
+在分析優缺點時，請務必考慮這些嫌惡設施的影響：
+- 距離 300 公尺內的嫌惡設施：嚴重影響，應列為主要缺點
+- 距離 300-600 公尺的嫌惡設施：中度影響，應在分析中提及
+- 距離 600 公尺以上的嫌惡設施：輕微影響，可視情況提及
+
+在給出購買建議時，請根據嫌惡設施的數量和距離，適當調整評分和建議。
+"""
+        elif include_nuisance and nuisance_count == 0:
+            nuisance_note = "\n【注意】本次分析雖有勾選嫌惡設施分析，但周邊未發現嫌惡設施，這是一項優點。\n"
         
         if analysis_type == "嫌惡設施":
             return self._build_nuisance_prompt(houses, places, counts, radius, mode, profile, icon, focus)
@@ -2139,33 +2253,38 @@ class ComparisonAnalyzer:
 【周邊設施統計】
 - 總數量：{cnt} 個設施
 {summary_text}
-
+{nuisance_note}
 【完整設施清單】
 {facilities_text}
 
 請提供以下分析：
 
 1. **綜合評分**（1-10分）
-   根據{profile}的需求，給出一個具體的分數，並簡述原因。
+   根據{profile}的需求，給出一個具體的分數，並簡述原因。{ '（注意：由於有嫌惡設施，評分應適當調降）' if include_nuisance and nuisance_count > 0 else '' }
 
 2. **主要優點**（3-5點）
    對{profile}來說最實用的設施和生活機能，請具體說明每個優點如何提升生活品質，並引用具體的設施名稱和距離。
+   { '請注意避開嫌惡設施附近的地點來談優點。' if include_nuisance and nuisance_count > 0 else '' }
 
 3. **主要缺點**（3-5點）
    對{profile}來說的不足之處或潛在問題，請具體說明每個缺點的影響程度，並指出缺少哪些重要設施。
+   { '如果附近有嫌惡設施，請務必將其列為缺點，並說明對不同時間段（白天/夜晚）的影響。' if include_nuisance and nuisance_count > 0 else '' }
 
 4. **生活便利性預測**
    - 平日通勤/上班日：預測平日的生活便利性
    - 假日生活：預測週末的生活樣貌
    - 緊急情況（醫療、採買）：評估緊急情況下的應變能力
+   { '（請考慮嫌惡設施對這些場景的影響）' if include_nuisance and nuisance_count > 0 else '' }
 
 5. **未來發展潛力**
    根據周邊設施和區域特性，預測這個地點未來3-5年的發展潛力。
+   { '（請評估嫌惡設施是否可能搬遷或改善，以及對房價的影響）' if include_nuisance and nuisance_count > 0 else '' }
 
 6. **購買建議**
    - 是否適合{profile}購買？
    - 合理的價格區間建議
    - 什麼時候是最佳購買時機？
+   { '（請根據嫌惡設施的影響，給出價格折讓的建議）' if include_nuisance and nuisance_count > 0 else '' }
 
 請用專業、客觀的角度分析，給出實用的建議，並盡量引用具體的設施名稱和距離來支持你的觀點。
 """
@@ -2173,11 +2292,21 @@ class ComparisonAnalyzer:
                 house_list = "\n".join([f"- {n}：{h['title'][:30]}..." for n, h in houses.items()])
                 
                 comparison_rows = []
+                nuisance_counts = {}
                 for name, h_info in houses.items():
                     cnt = counts.get(name, 0)
                     comparison_rows.append(f"  {name}：{cnt} 個設施")
+                    if include_nuisance and name in places:
+                        nuisance_counts[name] = len([p for p in places[name] if p[0] == "嫌惡設施"])
                 
                 comparison_text = "\n".join(comparison_rows)
+                
+                # 建立各房屋嫌惡設施比較
+                nuisance_comparison = ""
+                if include_nuisance and nuisance_counts:
+                    nuisance_comparison = "\n【各房屋嫌惡設施數量】\n"
+                    for name, count in nuisance_counts.items():
+                        nuisance_comparison += f"- {name}：{count} 處嫌惡設施\n"
                 
                 return f"""
 你是一位專業的房地產分析師，請比較以下{len(houses)}間房屋，並以「{icon} {profile}」的身份給出建議。
@@ -2191,7 +2320,8 @@ class ComparisonAnalyzer:
 
 【各房屋設施數量】
 {comparison_text}
-
+{nuisance_comparison}
+{nuisance_note}
 【完整設施清單】
 {facilities_text}
 
@@ -2199,9 +2329,10 @@ class ComparisonAnalyzer:
 
 1. **綜合排名**（1-{len(houses)}名）
    請將這{len(houses)}間房屋從最適合到最不適合排序，並簡述原因。
+   { '（請將嫌惡設施較少的房屋排在前面）' if include_nuisance and nuisance_counts else '' }
 
 2. **各房屋評分**（1-10分）
-   {chr(10).join([f'   - {name}：___分 - 評分原因（引用具體設施）' for name in houses.keys()])}
+   {chr(10).join([f'   - {name}：___分 - 評分原因（引用具體設施）' + ('（注意嫌惡設施）' if include_nuisance and nuisance_counts.get(name, 0) > 0 else '') for name in houses.keys()])}
 
 3. **優缺點比較表**
    | 項目 | {' | '.join(houses.keys())} |
@@ -2211,17 +2342,20 @@ class ComparisonAnalyzer:
    | 生活品質 | |{' |'.join([' ' for _ in houses])}|
    | 價格效益 | |{' |'.join([' ' for _ in houses])}|
    | 未來潛力 | |{' |'.join([' ' for _ in houses])}|
+   { '| 嫌惡設施影響 |' + '|'.join([' ⚠️' + str(nuisance_counts.get(name, 0)) + '處' for name in houses.keys()]) + '|' if include_nuisance and nuisance_counts else '' }
 
 4. **詳細分析**
-   {chr(10).join([f'   **{name}**：\n   - 優勢（引用具體設施）：\n   - 劣勢（缺少的設施）：\n   - 適合{profile}的程度：' for name in houses.keys()])}
+   {chr(10).join([f'   **{name}**：\n   - 優勢（引用具體設施）：\n   - 劣勢（缺少的設施）：\n   - 適合{profile}的程度：' + ('\n   - 嫌惡設施影響：' + str(nuisance_counts.get(name, 0)) + '處' if include_nuisance and nuisance_counts.get(name, 0) > 0 else '') for name in houses.keys()])}
 
 5. **最終推薦**
    - **首選**：房屋___，因為...
    - **備選**：房屋___，當首選有問題時
    - **不建議**：房屋___，因為...
+   { '（請優先考慮嫌惡設施較少的房屋）' if include_nuisance and nuisance_counts else '' }
 
 6. **購買時機建議**
    現在是否適合購買？應該等待還是立即行動？預期的價格趨勢如何？
+   { '（請考慮嫌惡設施對房價的長期影響）' if include_nuisance and nuisance_counts else '' }
 
 請用專業、客觀的角度分析，給出實用的比較建議，並盡量引用具體的設施名稱和距離來支持你的觀點。
 """
