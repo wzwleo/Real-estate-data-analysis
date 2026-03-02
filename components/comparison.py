@@ -5,7 +5,7 @@ import time
 import json
 import sys
 import os
-import requests
+import requestsa
 import math
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
