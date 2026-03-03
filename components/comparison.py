@@ -48,7 +48,7 @@ except ImportError as e:
 
 
 class ChinesePDF(FPDF):
-    """支援中文的PDF類 - 使用系統內建字型"""
+    """支援中文的PDF類 - 修正編碼問題"""
     
     def __init__(self):
         super().__init__()
@@ -119,7 +119,9 @@ class ChinesePDF(FPDF):
         else:
             self.set_font('helvetica', 'B', 14)
         self.set_fill_color(200, 220, 255)
-        self.cell(0, 10, title, 0, 1, 'L', 1)
+        # 確保標題是字串且使用正確編碼
+        safe_title = str(title) if title else ""
+        self.cell(0, 10, safe_title, 0, 1, 'L', 1)
         self.ln(5)
     
     def chapter_body(self, body):
@@ -128,17 +130,21 @@ class ChinesePDF(FPDF):
         else:
             self.set_font('helvetica', '', 11)
         
-        for line in body.split('\n'):
-            if line.strip():
-                # 如果沒有中文字型，過濾掉非ASCII字符
-                if not self.font_loaded:
-                    line = ''.join(c for c in line if ord(c) < 128)
-                self.multi_cell(0, 8, line)
+        if body:
+            for line in str(body).split('\n'):
+                if line.strip():
+                    # 如果沒有中文字型，過濾掉非ASCII字符
+                    if not self.font_loaded:
+                        line = ''.join(c for c in line if ord(c) < 128)
+                    self.multi_cell(0, 8, line)
         self.ln(2)
     
     def add_table(self, df, title, max_rows=10):
         """添加表格到PDF"""
         self.chapter_title(title)
+        
+        if df.empty:
+            return
         
         # 計算列寬
         col_width = self.w / (min(len(df.columns), 5) + 1) - 2
@@ -153,7 +159,10 @@ class ChinesePDF(FPDF):
         # 只顯示前5個欄位
         display_cols = list(df.columns)[:5]
         for col in display_cols:
-            self.cell(col_width, 8, str(col)[:10], 1, 0, 'C', 1)
+            safe_col = str(col)[:10] if col else ""
+            if not self.font_loaded:
+                safe_col = ''.join(c for c in safe_col if ord(c) < 128)
+            self.cell(col_width, 8, safe_col, 1, 0, 'C', 1)
         self.ln()
         
         # 表格內容
@@ -165,7 +174,7 @@ class ChinesePDF(FPDF):
         
         for i, row in df.head(max_rows).iterrows():
             for col in display_cols:
-                value = str(row[col])[:15]
+                value = str(row[col])[:15] if col in row else ""
                 if not self.font_loaded:
                     value = ''.join(c for c in value if ord(c) < 128)
                 self.cell(col_width, 8, value, 1, 0, 'C')
@@ -333,7 +342,7 @@ class ComparisonAnalyzer:
         return auto_subtypes
     
     def _generate_pdf_report(self):
-        """生成包含所有分析結果的PDF報告 - 使用系統字型"""
+        """生成包含所有分析結果的PDF報告 - 修正編碼問題"""
         if not PDF_AVAILABLE:
             return None
         
@@ -357,17 +366,23 @@ class ComparisonAnalyzer:
             pdf.chapter_title('目錄' if pdf.font_loaded else 'Table of Contents')
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 profile = analysis.get('buyer_profile', '未知')
-                display_name = name[:30] + '...' if len(name) > 30 else name
+                include_nuisance = analysis.get('include_nuisance', False)
+                
+                display_name = str(name)[:30] + '...' if len(str(name)) > 30 else str(name)
+                display_profile = str(profile)
+                
                 if not pdf.font_loaded:
                     display_name = ''.join(c for c in display_name if ord(c) < 128)
-                    profile = ''.join(c for c in profile if ord(c) < 128)
-                pdf.cell(0, 8, f'{i+1}. {display_name} - {profile}視角', 0, 1)
+                    display_profile = ''.join(c for c in display_profile if ord(c) < 128)
+                
+                nuisance_tag = " [含嫌惡]" if include_nuisance else ""
+                pdf.cell(0, 8, f'{i+1}. {display_name} - {display_profile}視角{nuisance_tag}', 0, 1)
             pdf.ln(5)
             
             # 逐個分析結果
             for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
                 pdf.add_page()
-                pdf.chapter_title(f'分析 {i+1}：{name[:30]}')
+                pdf.chapter_title(f'分析 {i+1}')
                 
                 # 基本資訊
                 profile = analysis.get('buyer_profile', '未知')
@@ -375,12 +390,19 @@ class ComparisonAnalyzer:
                 mode = analysis.get('analysis_mode', '')
                 include_nuisance = analysis.get('include_nuisance', False)
                 
+                safe_profile = str(profile)
+                safe_mode = str(mode)
+                
+                if not pdf.font_loaded:
+                    safe_profile = ''.join(c for c in safe_profile if ord(c) < 128)
+                    safe_mode = ''.join(c for c in safe_mode if ord(c) < 128)
+                
                 info = f"""
 基本資訊：
-- 買家類型：{profile}
+- 買家類型：{safe_profile}
 - 分析時間：{timestamp}
-- 分析模式：{mode}
-{' - 包含嫌惡設施分析' if include_nuisance else ''}
+- 分析模式：{safe_mode}
+{f'- 包含嫌惡設施分析' if include_nuisance else ''}
                 """
                 pdf.chapter_body(info)
                 
@@ -389,10 +411,20 @@ class ComparisonAnalyzer:
                 pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
                 pdf.cell(0, 8, '房屋資訊：', 0, 1)
                 pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 11)
+                
                 for h_name, h_info in houses_data.items():
-                    pdf.multi_cell(0, 8, f"{h_name}：")
-                    pdf.multi_cell(0, 8, f"  標題：{h_info.get('title', '未知')}")
-                    pdf.multi_cell(0, 8, f"  地址：{h_info.get('address', '未知')}")
+                    safe_h_name = str(h_name)
+                    safe_title = str(h_info.get('title', '未知'))
+                    safe_address = str(h_info.get('address', '未知'))
+                    
+                    if not pdf.font_loaded:
+                        safe_h_name = ''.join(c for c in safe_h_name if ord(c) < 128)
+                        safe_title = ''.join(c for c in safe_title if ord(c) < 128)
+                        safe_address = ''.join(c for c in safe_address if ord(c) < 128)
+                    
+                    pdf.multi_cell(0, 8, f"{safe_h_name}：")
+                    pdf.multi_cell(0, 8, f"  標題：{safe_title}")
+                    pdf.multi_cell(0, 8, f"  地址：{safe_address}")
                 pdf.ln(5)
                 
                 # 設施統計
@@ -400,8 +432,12 @@ class ComparisonAnalyzer:
                 pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
                 pdf.cell(0, 8, '設施統計：', 0, 1)
                 pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 11)
+                
                 for h_name, count in counts.items():
-                    pdf.cell(0, 8, f"{h_name}：{count} 個設施", 0, 1)
+                    safe_h_name = str(h_name)
+                    if not pdf.font_loaded:
+                        safe_h_name = ''.join(c for c in safe_h_name if ord(c) < 128)
+                    pdf.cell(0, 8, f"{safe_h_name}：{count} 個設施", 0, 1)
                 pdf.ln(5)
                 
                 # 設施表格
@@ -415,15 +451,18 @@ class ComparisonAnalyzer:
                     pdf.cell(0, 8, 'AI 分析報告：', 0, 1)
                     pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 10)
                     
-                    result_text = analysis['gemini_result']
+                    result_text = str(analysis['gemini_result'])
                     for line in result_text.split('\n'):
                         if line.strip():
+                            safe_line = line
                             if not pdf.font_loaded:
-                                line = ''.join(c for c in line if ord(c) < 128)
-                            pdf.multi_cell(0, 6, line)
+                                safe_line = ''.join(c for c in line if ord(c) < 128)
+                            if safe_line.strip():
+                                pdf.multi_cell(0, 6, safe_line)
                     pdf.ln(5)
             
-            return pdf.output(dest='S').encode('latin1')
+            # 使用 utf-8 編碼輸出
+            return pdf.output(dest='S').encode('utf-8', errors='ignore')
             
         except Exception as e:
             st.error(f"PDF生成錯誤：{str(e)}")
@@ -651,7 +690,7 @@ class ComparisonAnalyzer:
         # 步驟5：嫌惡設施選擇（進階選項）
         st.markdown("---")
         st.subheader("⚠️ 嫌惡設施分析（選填）")
-        st.markdown("勾選後將分析周邊的嫌惡設施，可自由選擇要分析的類型")
+        st.markdown("勾選後可自由選擇要分析的嫌惡設施類型")
         
         include_nuisance = st.checkbox("加入嫌惡設施分析", value=False, 
                                       help="勾選後可選擇要分析的嫌惡設施類型")
