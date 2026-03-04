@@ -14,15 +14,7 @@ import base64
 from datetime import datetime
 import io
 import re
-
-# 嘗試導入PDF相關庫 - 使用 weasyprint
-try:
-    from weasyprint import HTML
-    from weasyprint.fonts import FontConfiguration
-    PDF_AVAILABLE = True
-except ImportError:
-    PDF_AVAILABLE = False
-    st.warning("⚠️ PDF功能需要安裝 weasyprint：pip install weasyprint")
+import zipfile
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -196,322 +188,150 @@ class ComparisonAnalyzer:
         
         return auto_subtypes
     
-    def _generate_pdf_report(self):
-        """使用 weasyprint 生成 PDF 報告"""
-        if not PDF_AVAILABLE:
-            return None
+    def _generate_report_zip(self):
+        """生成包含 Excel 和 TXT 的 ZIP 壓縮檔"""
         
         if not st.session_state.saved_analyses:
             return None
         
-        try:
-            # 建立 HTML 內容
-            html_content = self._create_html_report()
+        # 建立記憶體中的 ZIP 檔案
+        zip_buffer = io.BytesIO()
+        
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             
-            # 使用 weasyprint 生成 PDF
-            font_config = FontConfiguration()
-            pdf_data = HTML(string=html_content).write_pdf(font_config=font_config)
+            # 1. 合併所有分析的設施表格
+            all_facilities = []
+            all_analyses_summary = []
             
-            return pdf_data
+            for name, analysis in st.session_state.saved_analyses.items():
+                df = analysis.get('facilities_table', pd.DataFrame())
+                if not df.empty:
+                    # 加入分析名稱欄位
+                    df_copy = df.copy()
+                    df_copy['分析名稱'] = name
+                    df_copy['買家類型'] = analysis.get('buyer_profile', '未知')
+                    df_copy['分析時間'] = analysis.get('timestamp', '未知')
+                    all_facilities.append(df_copy)
+                
+                # 收集分析摘要
+                summary = {
+                    '分析名稱': name,
+                    '買家類型': analysis.get('buyer_profile', '未知'),
+                    '分析時間': analysis.get('timestamp', '未知'),
+                    '分析模式': analysis.get('analysis_mode', ''),
+                    '搜尋半徑(公尺)': analysis.get('radius', 0),
+                    '總設施數': len(df) if not df.empty else 0,
+                    '包含嫌惡設施': '是' if analysis.get('include_nuisance', False) else '否'
+                }
+                all_analyses_summary.append(summary)
             
-        except Exception as e:
-            st.error(f"PDF生成錯誤：{str(e)}")
-            return None
+            # 2. 建立 Excel 檔案（所有設施清單）
+            if all_facilities:
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
+                    # 工作表1：所有設施清單
+                    combined_df = pd.concat(all_facilities, ignore_index=True)
+                    # 重新排列欄位順序
+                    column_order = ['分析名稱', '買家類型', '分析時間', '房屋', '設施名稱', '設施子類別', '距離(公尺)']
+                    available_cols = [col for col in column_order if col in combined_df.columns]
+                    combined_df = combined_df[available_cols]
+                    combined_df.to_excel(writer, sheet_name='所有設施清單', index=False)
+                    
+                    # 工作表2：分析摘要
+                    summary_df = pd.DataFrame(all_analyses_summary)
+                    summary_df.to_excel(writer, sheet_name='分析摘要', index=False)
+                    
+                    # 工作表3：依分析分頁（每個分析一個工作表）
+                    for name, analysis in st.session_state.saved_analyses.items():
+                        df = analysis.get('facilities_table', pd.DataFrame())
+                        if not df.empty:
+                            # 移除不必要的欄位
+                            display_cols = ['房屋', '設施名稱', '設施子類別', '距離(公尺)']
+                            df_display = df[display_cols].copy()
+                            sheet_name = name[:20]  # Excel 工作表名稱限制31字符
+                            df_display.to_excel(writer, sheet_name=sheet_name, index=False)
+                
+                excel_buffer.seek(0)
+                zip_file.writestr(f"設施清單總表_{time.strftime('%Y%m%d_%H%M%S')}.xlsx", excel_buffer.getvalue())
+            
+            # 3. 加入 TXT 檔案（完整分析報告）
+            txt_content = self._generate_txt_report()
+            zip_file.writestr(f"分析報告_{time.strftime('%Y%m%d_%H%M%S')}.txt", txt_content.encode('utf-8'))
+        
+        zip_buffer.seek(0)
+        return zip_buffer.getvalue()
     
-    def _create_html_report(self):
-        """建立 HTML 報告內容"""
-        html = []
+    def _generate_txt_report(self):
+        """生成 TXT 格式的完整分析報告"""
+        txt_lines = []
         
-        # CSS 樣式
-        html.append("""
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <style>
-                @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
-                
-                * {
-                    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
-                }
-                
-                body {
-                    margin: 40px;
-                    padding: 0;
-                    color: #333;
-                    line-height: 1.6;
-                }
-                
-                h1 {
-                    color: #2c3e50;
-                    font-size: 28px;
-                    border-bottom: 3px solid #3498db;
-                    padding-bottom: 10px;
-                    margin-top: 30px;
-                }
-                
-                h2 {
-                    color: #34495e;
-                    font-size: 22px;
-                    border-left: 5px solid #3498db;
-                    padding-left: 15px;
-                    margin: 25px 0 15px;
-                }
-                
-                h3 {
-                    color: #2c3e50;
-                    font-size: 18px;
-                    margin: 20px 0 10px;
-                }
-                
-                .info-box {
-                    background-color: #f8f9fa;
-                    border: 1px solid #e9ecef;
-                    border-radius: 8px;
-                    padding: 20px;
-                    margin: 20px 0;
-                }
-                
-                .info-item {
-                    margin: 10px 0;
-                    font-size: 14px;
-                }
-                
-                .info-label {
-                    font-weight: 700;
-                    color: #2c3e50;
-                    display: inline-block;
-                    width: 100px;
-                }
-                
-                table {
-                    width: 100%;
-                    border-collapse: collapse;
-                    margin: 20px 0;
-                    font-size: 13px;
-                }
-                
-                th {
-                    background-color: #3498db;
-                    color: white;
-                    font-weight: 500;
-                    padding: 12px 8px;
-                    text-align: left;
-                }
-                
-                td {
-                    border: 1px solid #ddd;
-                    padding: 8px;
-                }
-                
-                tr:nth-child(even) {
-                    background-color: #f8f9fa;
-                }
-                
-                .nuisance-tag {
-                    background-color: #dc3545;
-                    color: white;
-                    padding: 2px 8px;
-                    border-radius: 12px;
-                    font-size: 11px;
-                    font-weight: 500;
-                    margin-left: 8px;
-                }
-                
-                .stats-grid {
-                    display: grid;
-                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-                    gap: 20px;
-                    margin: 20px 0;
-                }
-                
-                .stat-card {
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    color: white;
-                    padding: 20px;
-                    border-radius: 10px;
-                    text-align: center;
-                }
-                
-                .stat-number {
-                    font-size: 32px;
-                    font-weight: 700;
-                }
-                
-                .stat-label {
-                    font-size: 14px;
-                    opacity: 0.9;
-                }
-                
-                .ai-report {
-                    background-color: #f0f7ff;
-                    border-left: 5px solid #3498db;
-                    padding: 20px;
-                    margin: 20px 0;
-                    border-radius: 0 8px 8px 0;
-                    white-space: pre-wrap;
-                    font-size: 14px;
-                }
-                
-                .footer {
-                    text-align: center;
-                    margin-top: 50px;
-                    padding-top: 20px;
-                    border-top: 1px solid #dee2e6;
-                    color: #6c757d;
-                    font-size: 12px;
-                }
-                
-                .page-break {
-                    page-break-before: always;
-                }
-                
-                .badge {
-                    display: inline-block;
-                    padding: 3px 10px;
-                    border-radius: 20px;
-                    font-size: 12px;
-                    font-weight: 500;
-                }
-                
-                .badge-red {
-                    background-color: #dc3545;
-                    color: white;
-                }
-                
-                .badge-yellow {
-                    background-color: #ffc107;
-                    color: #333;
-                }
-                
-                .badge-green {
-                    background-color: #28a745;
-                    color: white;
-                }
-            </style>
-        </head>
-        <body>
-        """)
+        txt_lines.append("=" * 60)
+        txt_lines.append("房屋分析報告")
+        txt_lines.append(f"生成時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        txt_lines.append(f"總分析數：{len(st.session_state.saved_analyses)} 筆")
+        txt_lines.append("=" * 60)
+        txt_lines.append("")
         
-        # 標題
-        html.append(f"""
-        <h1>🏠 房屋分析報告</h1>
-        <div class="info-box">
-            <div class="info-item"><span class="info-label">生成時間：</span>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>
-            <div class="info-item"><span class="info-label">總分析數：</span>{len(st.session_state.saved_analyses)} 筆</div>
-        </div>
-        """)
-        
-        # 目錄
-        html.append("<h2>📋 目錄</h2>")
-        html.append("<ul>")
         for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-            profile = analysis.get('buyer_profile', '未知')
-            include_nuisance = analysis.get('include_nuisance', False)
-            nuisance_tag = " ⚠️" if include_nuisance else ""
-            html.append(f"<li><a href='#analysis-{i}'>{i+1}. {name} - {profile}視角{nuisance_tag}</a></li>")
-        html.append("</ul>")
-        
-        # 逐個分析結果
-        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-            html.append(f"<div class='page-break' id='analysis-{i}'></div>")
-            
-            profile = analysis.get('buyer_profile', '未知')
-            timestamp = analysis.get('timestamp', '未知時間')
-            mode = analysis.get('analysis_mode', '')
-            include_nuisance = analysis.get('include_nuisance', False)
-            
-            # 標題
-            title = f"{i+1}. {name}"
-            html.append(f"<h1>{title}</h1>")
+            txt_lines.append(f"【分析 {i+1}】{name}")
+            txt_lines.append("-" * 40)
             
             # 基本資訊
-            html.append("<h2>📌 基本資訊</h2>")
-            html.append("<div class='info-box'>")
-            html.append(f"<div class='info-item'><span class='info-label'>買家類型：</span>{profile}</div>")
-            html.append(f"<div class='info-item'><span class='info-label'>分析時間：</span>{timestamp}</div>")
-            html.append(f"<div class='info-item'><span class='info-label'>分析模式：</span>{mode}</div>")
+            profile = analysis.get('buyer_profile', '未知')
+            timestamp = analysis.get('timestamp', '未知')
+            mode = analysis.get('analysis_mode', '')
+            include_nuisance = analysis.get('include_nuisance', False)
+            radius = analysis.get('radius', 0)
+            
+            txt_lines.append(f"買家類型：{profile}")
+            txt_lines.append(f"分析時間：{timestamp}")
+            txt_lines.append(f"分析模式：{mode}")
+            txt_lines.append(f"搜尋半徑：{radius} 公尺")
             if include_nuisance:
-                html.append(f"<div class='info-item'><span class='badge badge-red'>⚠️ 包含嫌惡設施分析</span></div>")
-            html.append("</div>")
+                txt_lines.append("包含嫌惡設施分析：是")
+            txt_lines.append("")
             
             # 房屋資訊
             houses_data = analysis.get('houses_data', {})
-            html.append("<h2>🏠 房屋資訊</h2>")
             for h_name, h_info in houses_data.items():
-                html.append("<div class='info-box'>")
-                html.append(f"<h3>{h_name}</h3>")
-                html.append(f"<div class='info-item'><span class='info-label'>標題：</span>{h_info.get('title', '未知')}</div>")
-                html.append(f"<div class='info-item'><span class='info-label'>地址：</span>{h_info.get('address', '未知')}</div>")
-                html.append("</div>")
+                txt_lines.append(f"房屋：{h_name}")
+                txt_lines.append(f"  標題：{h_info.get('title', '未知')}")
+                txt_lines.append(f"  地址：{h_info.get('address', '未知')}")
+            txt_lines.append("")
             
             # 設施統計
             counts = analysis.get('facility_counts', {})
-            html.append("<h2>📊 設施統計</h2>")
-            html.append("<div class='stats-grid'>")
+            txt_lines.append("設施統計：")
             for h_name, count in counts.items():
-                html.append(f"""
-                <div class='stat-card'>
-                    <div class='stat-number'>{count}</div>
-                    <div class='stat-label'>{h_name}</div>
-                </div>
-                """)
-            html.append("</div>")
+                txt_lines.append(f"  {h_name}：{count} 個設施")
+            txt_lines.append("")
             
-            # 設施表格
+            # 設施清單
             df = analysis.get('facilities_table', pd.DataFrame())
             if not df.empty:
-                html.append("<h2>📋 設施清單</h2>")
+                txt_lines.append("設施清單：")
+                txt_lines.append("-" * 50)
                 
-                # 計算嫌惡設施數量
-                nuisance_count = 0
-                if include_nuisance and analysis.get('nuisance_data'):
-                    for house_name in houses_data.keys():
-                        nuisance_count = len(analysis['nuisance_data'].get(house_name, []))
-                        if nuisance_count > 0:
-                            break
+                # 按距離排序
+                df_sorted = df.sort_values('距離(公尺)')
+                for idx, row in df_sorted.iterrows():
+                    # 標記嫌惡設施
+                    is_nuisance = " ⚠️" if row['設施子類別'] in NUISANCE_TYPES.keys() else ""
+                    txt_lines.append(f"  • {row['設施名稱']} ({row['設施子類別']}){is_nuisance} - {row['距離(公尺)']}公尺")
                 
-                if nuisance_count > 0:
-                    html.append(f"<p><span class='badge badge-red'>⚠️ 包含 {nuisance_count} 處嫌惡設施</span></p>")
-                
-                # 建立表格
-                html.append("<table>")
-                html.append("<thead><tr><th>房屋</th><th>設施名稱</th><th>類型</th><th>距離(公尺)</th></tr></thead>")
-                html.append("<tbody>")
-                
-                for _, row in df.iterrows():
-                    # 判斷是否為嫌惡設施
-                    is_nuisance = row['設施子類別'] in NUISANCE_TYPES.keys()
-                    nuisance_mark = " <span class='nuisance-tag'>嫌惡</span>" if is_nuisance else ""
-                    
-                    html.append(f"""
-                    <tr>
-                        <td>{row['房屋']}</td>
-                        <td>{row['設施名稱']}{nuisance_mark}</td>
-                        <td>{row['設施子類別']}</td>
-                        <td>{row['距離(公尺)']}</td>
-                    </tr>
-                    """)
-                
-                html.append("</tbody></table>")
+                txt_lines.append("")
             
             # AI 分析結果
             if 'gemini_result' in analysis:
-                html.append("<h2>🤖 AI 分析報告</h2>")
-                html.append(f"<div class='ai-report'>{analysis['gemini_result']}</div>")
+                txt_lines.append("AI 分析報告：")
+                txt_lines.append("-" * 40)
+                txt_lines.append(analysis['gemini_result'])
+                txt_lines.append("")
             
-            html.append("<hr>")
+            txt_lines.append("=" * 60)
+            txt_lines.append("")
         
-        # 頁尾
-        html.append(f"""
-        <div class='footer'>
-            房屋分析報告 | 生成時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 共 {len(st.session_state.saved_analyses)} 筆分析
-        </div>
-        </body>
-        </html>
-        """)
-        
-        return "".join(html)
+        return "\n".join(txt_lines)
     
     def render_comparison_tab(self):
         """渲染分析頁面"""
@@ -548,19 +368,17 @@ class ComparisonAnalyzer:
                             st.session_state.current_analysis_name = name
                             st.rerun()
                     
-                    if PDF_AVAILABLE:
-                        if st.button("📥 下載所有分析為PDF", use_container_width=True):
-                            with st.spinner("生成PDF中..."):
-                                pdf_data = self._generate_pdf_report()
-                                if pdf_data:
-                                    b64 = base64.b64encode(pdf_data).decode()
-                                    filename = f"房屋分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-                                    href = f'<a href="data:application/octet-stream;base64,{b64}" download="{filename}">點此下載PDF</a>'
-                                    st.markdown(href, unsafe_allow_html=True)
-                                else:
-                                    st.error("PDF生成失敗")
-                    else:
-                        st.caption("📌 PDF下載功能需要安裝：`pip install weasyprint`")
+                    # 下載報告按鈕 - 取代原來的 PDF 下載
+                    if st.button("📥 下載報告 (Excel + TXT)", use_container_width=True):
+                        with st.spinner("生成報告中..."):
+                            zip_data = self._generate_report_zip()
+                            if zip_data:
+                                b64 = base64.b64encode(zip_data).decode()
+                                filename = f"房屋分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                                href = f'<a href="data:application/zip;base64,{b64}" download="{filename}">✅ 點此下載</a>'
+                                st.markdown(href, unsafe_allow_html=True)
+                            else:
+                                st.error("報告生成失敗")
                     
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
                         st.session_state.saved_analyses = {}
@@ -973,6 +791,7 @@ class ComparisonAnalyzer:
             fav_df = pd.read_json(s["fav"], orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
+                # 步驟1：解析地址
                 st.write("📌 步驟 1/4：解析地址...")
                 houses_data = {}
                 for i, opt in enumerate(s["houses"]):
@@ -988,6 +807,7 @@ class ComparisonAnalyzer:
                         "lat": lat, "lng": lng
                     }
                 
+                # 步驟2：查詢嫌惡設施
                 st.write("🔍 步驟 2/4：查詢周邊嫌惡設施...")
                 nuisances_data = {}
                 for idx, (name, info) in enumerate(houses_data.items()):
@@ -1091,7 +911,6 @@ class ComparisonAnalyzer:
                 
                 time.sleep(0.3)
             except Exception as e:
-                st.warning(f"查詢 {keyword} 時發生錯誤：{e}")
                 continue
         
         results.sort(key=lambda x: x[5])
@@ -1251,7 +1070,7 @@ class ComparisonAnalyzer:
             if k in st.session_state: del st.session_state[k]
     
     def _execute_analysis(self):
-        """執行分析核心 - 修正嫌惡設施查詢"""
+        """執行分析核心 - 加入嫌惡設施查詢"""
         try:
             s = st.session_state.analysis_settings
             fav_df = pd.read_json(s["fav"], orient='split')
@@ -1503,15 +1322,6 @@ class ComparisonAnalyzer:
                 },
                 column_order=["房屋", "房屋標題", "房屋地址", "設施名稱", "設施子類別", "距離(公尺)", "place_id"],
                 hide_index=True
-            )
-            
-            csv = df.to_csv(index=False, encoding='utf-8-sig')
-            st.download_button(
-                label="📥 下載完整設施資料 (CSV)",
-                data=csv,
-                file_name=f"設施資料_{time.strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv",
-                key="download_facilities_csv"
             )
         
         st.markdown("---")
