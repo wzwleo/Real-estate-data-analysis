@@ -175,7 +175,7 @@ def plot_layout_distribution(target_row, df):
     
     # ========== 雙軸設定 ==========
     fig.update_layout(
-        title=f"{target_district} 包含「{target_type_main}」的房型 前五熱門格局分布與平均單價 (共 {len(df_valid)} 筆)",
+        title=f"{target_district} 包含「{target_type_main}」的房型 前五格局供給與平均單價 (共 {len(df_valid)} 筆)",
         xaxis_title='格局',
         yaxis=dict(
             title='物件數量',
@@ -1733,17 +1733,18 @@ def tab1_module():
                         
                         請用繁體中文完成以下分析（每項不超過 50 字）：
                         
-                        1️⃣ **格局評估**：評價該房屋的格局（{layout_analysis_payload['目標房屋']['格局分類']}）在市場中的熱門度
+                        1️⃣ **格局市場定位**：
+                           - 說明該房屋格局（{layout_analysis_payload['目標房屋']['格局分類']}）在目前待售市場中的供給排序
                            - 目標格局「{target_layout}」排名第 {target_layout_rank if target_layout_rank else '未知'} 位
-                           - {'在前五大熱門格局中' if target_in_top5 else '不在前五大熱門格局中'}
+                           - {'屬於前五大主要供給類型' if target_in_top5 else '不屬於前五大主要供給類型'}
                         
                         2️⃣ **空間效率分析**：
                            - 說明每房平均坪數（{target_per_room_area:.2f} 坪/房）與市場平均（{avg_per_room_area:.2f} 坪/房）的比較
                            - 評估空間配置的合理性
                         
                         3️⃣ **單價分析**：
-                           - 說明該房屋單價與相同格局平均的比較
-                           - 解釋前五大熱門格局的單價差異（範圍 {top5_price_range:.2f} 萬/坪）
+                           - 說明該房屋單價與相同格局平均單價的差異情形
+                           - 解釋前五大主要供給類型之間的單價差距（範圍 {top5_price_range:.2f} 萬/坪）
                         
                         4️⃣ **購屋建議**：
                            - 格局帶來的優缺點（房數、衛數配置）
