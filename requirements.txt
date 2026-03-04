@@ -14,3 +14,4 @@ plotly
 streamlit_echarts
 fpdf
 matplotlib
+weasyprint==60.2
