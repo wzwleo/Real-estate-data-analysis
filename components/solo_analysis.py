@@ -15,16 +15,201 @@ name_map = {
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
+def plot_layout_distribution(target_row, df):
+    """
+    繪製同區同類型格局分布與平均單價圖
+    顯示前五大熱門格局，若目標房型在其中則標示紅星
+    
+    Parameters:
+    -----------
+    target_row : pd.Series
+        目標房型的資料列
+    df : pd.DataFrame
+        包含所有房產資料的 DataFrame
+    """
+    
+    if isinstance(df, pd.Series):
+        df = pd.DataFrame([df])
+    
+    df = df.copy()
+    
+    # 統一使用 '類型' 欄位處理
+    if '類型' in df.columns:
+        df['類型'] = df['類型'].astype(str).str.strip()
+    
+    target_district = target_row.get('行政區', None)
+    target_type = target_row.get('類型', None)
+    
+    if target_type and isinstance(target_type, str):
+        target_type = target_type.strip()
+        # 處理混合類型
+        if '/' in target_type:
+            target_type_main = target_type.split('/')[0].strip()
+        else:
+            target_type_main = target_type
+    else:
+        st.warning("⚠️ 無法取得目標房型的類型資訊")
+        return
+    
+    if not target_district:
+        st.warning("⚠️ 無法取得目標房型的行政區資訊")
+        return
+    
+    # 使用模糊比對篩選
+    df_filtered = df[
+        (df['行政區'] == target_district) & 
+        (df['類型'].astype(str).str.contains(target_type_main, case=False, na=False))
+    ].copy()
+    
+    if len(df_filtered) == 0:
+        st.info(f"ℹ️ 找不到 {target_district} 包含「{target_type_main}」的房屋")
+        return
+    
+    # ========== 解析格局 ==========
+    def parse_layout(text):
+        text = str(text)
+        result = {
+            '房數': 0,
+            '廳數': 0,
+            '衛數': 0,
+            '室數': 0
+        }
+        for key in result.keys():
+            match = re.search(rf'(\d+){key[0]}', text)
+            if match:
+                result[key] = int(match.group(1))
+        return pd.Series(result)
+    
+    df_layout = df_filtered.copy()
+    df_layout[['房數', '廳數', '衛數', '室數']] = df_layout['格局'].apply(parse_layout)
+    
+    # 確保有總價和建坪欄位
+    if '總價(萬)' in df_layout.columns:
+        df_layout['總價'] = pd.to_numeric(df_layout['總價(萬)'], errors='coerce')
+    elif '總價' in df_layout.columns:
+        df_layout['總價'] = pd.to_numeric(df_layout['總價'], errors='coerce')
+    else:
+        df_layout['總價'] = 0
+    
+    if '建坪' in df_layout.columns:
+        df_layout['建坪數值'] = pd.to_numeric(df_layout['建坪'], errors='coerce')
+    elif '建物面積' in df_layout.columns:
+        df_layout['建坪數值'] = pd.to_numeric(df_layout['建物面積'], errors='coerce')
+    else:
+        df_layout['建坪數值'] = 0
+    
+    # 計算單價
+    df_valid = df_layout[(df_layout['總價'] > 0) & (df_layout['建坪數值'] > 0)].copy()
+    
+    if len(df_valid) == 0:
+        st.info("ℹ️ 無足夠有效價格資料進行分析")
+        return
+    
+    df_valid['單價'] = df_valid['總價'] / df_valid['建坪數值']
+    
+    # ========== 計算每個格局出現次數 ==========
+    layout_counts = df_valid['格局'].value_counts()
+    
+    # 前五名格局
+    top5_layouts = layout_counts.head(5).index.tolist()
+    
+    if len(top5_layouts) == 0:
+        st.info("ℹ️ 無足夠格局資料進行分析")
+        return
+    
+    # 過濾只保留前五名
+    df_top5 = df_valid[df_valid['格局'].isin(top5_layouts)]
+    
+    # 計算統計：數量 + 平均單價
+    layout_stats = df_top5.groupby('格局').agg(
+        數量=('標題', 'count'),
+        平均單價=('單價', 'mean')
+    ).reset_index()
+    
+    # 排序（按數量由多到少）
+    layout_stats = layout_stats.sort_values('數量', ascending=False)
+    
+    # ========== 取得目標格局 ==========
+    target_layout = target_row.get('格局', None)
+    target_in_top5 = target_layout in top5_layouts if target_layout else False
+    
+    # ========== 繪製圖表 ==========
+    fig = go.Figure()
+    
+    # 長條圖：數量
+    fig.add_trace(go.Bar(
+        x=layout_stats['格局'],
+        y=layout_stats['數量'],
+        name='物件數量',
+        marker=dict(color='lightblue', line=dict(color='black', width=1)),
+        yaxis='y'
+    ))
+    
+    # 🔴 如果目標格局在前五名，標示紅星
+    if target_in_top5:
+        target_layout_data = layout_stats[layout_stats['格局'] == target_layout].iloc[0]
+        
+        fig.add_trace(go.Scatter(
+            x=[target_layout],
+            y=[target_layout_data['數量']],
+            mode="markers+text",
+            marker=dict(symbol="star", size=16, color="red"),
+            text=["目標房屋"],
+            textposition="top center",
+            name="目標房屋",
+            yaxis='y',
+            showlegend=True
+        ))
+    
+    # 折線圖：平均單價
+    fig.add_trace(go.Scatter(
+        x=layout_stats['格局'],
+        y=layout_stats['平均單價'],
+        name='平均單價',
+        yaxis='y2',
+        mode='lines+markers',
+        line=dict(color='orange', width=2),
+        marker=dict(size=10, color='orange'),
+        hovertemplate='<b>%{x}</b><br>平均單價: %{y:.2f} 萬/坪<extra></extra>'
+    ))
+    
+    # ========== 雙軸設定 ==========
+    fig.update_layout(
+        title=f"{target_district} 包含「{target_type_main}」的房型 前五熱門格局分布與平均單價 (共 {len(df_valid)} 筆)",
+        xaxis_title='格局',
+        yaxis=dict(
+            title='物件數量',
+            side='left',
+            showgrid=True,
+            gridcolor='whitesmoke'
+        ),
+        yaxis2=dict(
+            title='平均單價 (萬/坪)',
+            overlaying='y',
+            side='right',
+            showgrid=False
+        ),
+        template='plotly_white',
+        width=600,
+        height=500,
+        hovermode='x unified',
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        ),
+        bargap=0.3
+    )
+    
+    st.plotly_chart(fig, use_container_width=True)
+
 def plot_floor_distribution(target_row, df):
     """
     繪製同區同類型樓層分布直方圖（含平均單價趨勢線）
     與 plot_age_distribution 架構完全一致
     """
-
-    import numpy as np
-    import pandas as pd
-    import plotly.graph_objects as go
-    import streamlit as st
 
     if isinstance(df, pd.Series):
         df = pd.DataFrame([df])
@@ -1422,10 +1607,19 @@ def tab1_module():
                 st.markdown("---")
                 
                 st.subheader("格局 🛋")
+                # 取得比較資料
+                compare_base_df = pd.DataFrame()
+                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+                    compare_base_df = st.session_state.all_properties_df
+                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+                    compare_base_df = st.session_state.filtered_df
+                
+                if not compare_base_df.empty:
+                    plot_layout_distribution(selected_row, compare_base_df)
+                else:
+                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
                 
-                st.subheader("地段 🗺")
-                st.markdown("---")
                 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
