@@ -15,16 +15,14 @@ from datetime import datetime
 import io
 import re
 
-# 嘗試導入PDF相關庫
+# 嘗試導入PDF相關庫 - 使用 weasyprint
 try:
-    from fpdf import FPDF
-    import matplotlib.pyplot as plt
-    import matplotlib
-    matplotlib.use('Agg')
+    from weasyprint import HTML
+    from weasyprint.fonts import FontConfiguration
     PDF_AVAILABLE = True
 except ImportError:
     PDF_AVAILABLE = False
-    pass
+    st.warning("⚠️ PDF功能需要安裝 weasyprint：pip install weasyprint")
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -45,149 +43,6 @@ except ImportError as e:
     CHINESE_TO_CATEGORY = {}
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
-
-
-class ChinesePDF(FPDF):
-    """支援中文的PDF類 - 修正編碼問題"""
-    
-    def __init__(self):
-        super().__init__()
-        self.set_auto_page_break(auto=True, margin=15)
-        self.font_loaded = False
-        
-        # 根據作業系統選擇中文字型
-        try:
-            if os.name == 'nt':  # Windows
-                # 嘗試常見的Windows中文字型
-                font_paths = [
-                    'C:\\Windows\\Fonts\\msjh.ttc',  # 微軟正黑體
-                    'C:\\Windows\\Fonts\\msjhbd.ttc',  # 微軟正黑體粗體
-                    'C:\\Windows\\Fonts\\kaiu.ttf',  # 標楷體
-                    'C:\\Windows\\Fonts\\mingliu.ttc',  # 細明體
-                ]
-                for font_path in font_paths:
-                    if os.path.exists(font_path):
-                        self.add_font('chinese', '', font_path, uni=True)
-                        self.add_font('chinese', 'B', font_path, uni=True)
-                        self.font_loaded = True
-                        break
-                        
-            elif os.name == 'posix':  # macOS/Linux
-                # macOS 字型路徑
-                mac_fonts = [
-                    '/System/Library/Fonts/PingFang.ttc',
-                    '/System/Library/Fonts/STHeiti Light.ttc',
-                    '/System/Library/Fonts/AppleGothic.ttf',
-                ]
-                # Linux 字型路徑
-                linux_fonts = [
-                    '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',
-                    '/usr/share/fonts/truetype/arphic/uming.ttc',
-                ]
-                
-                all_fonts = mac_fonts + linux_fonts
-                for font_path in all_fonts:
-                    if os.path.exists(font_path):
-                        self.add_font('chinese', '', font_path, uni=True)
-                        self.add_font('chinese', 'B', font_path, uni=True)
-                        self.font_loaded = True
-                        break
-        except:
-            self.font_loaded = False
-    
-    def header(self):
-        if self.font_loaded:
-            self.set_font('chinese', 'B', 16)
-            self.cell(0, 10, '房屋分析報告', 0, 1, 'C')
-        else:
-            self.set_font('helvetica', 'B', 16)
-            self.cell(0, 10, 'House Analysis Report', 0, 1, 'C')
-        self.ln(5)
-    
-    def footer(self):
-        self.set_y(-15)
-        if self.font_loaded:
-            self.set_font('chinese', '', 8)
-            self.cell(0, 10, f'第 {self.page_no()} 頁', 0, 0, 'C')
-        else:
-            self.set_font('helvetica', '', 8)
-            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
-    
-    def chapter_title(self, title):
-        if self.font_loaded:
-            self.set_font('chinese', 'B', 14)
-        else:
-            self.set_font('helvetica', 'B', 14)
-        self.set_fill_color(200, 220, 255)
-        # 確保標題是字串且使用正確編碼
-        safe_title = str(title) if title else ""
-        self.cell(0, 10, safe_title, 0, 1, 'L', 1)
-        self.ln(5)
-    
-    def chapter_body(self, body):
-        if self.font_loaded:
-            self.set_font('chinese', '', 11)
-        else:
-            self.set_font('helvetica', '', 11)
-        
-        if body:
-            for line in str(body).split('\n'):
-                if line.strip():
-                    # 如果沒有中文字型，過濾掉非ASCII字符
-                    if not self.font_loaded:
-                        line = ''.join(c for c in line if ord(c) < 128)
-                    self.multi_cell(0, 8, line)
-        self.ln(2)
-    
-    def add_table(self, df, title, max_rows=10):
-        """添加表格到PDF"""
-        self.chapter_title(title)
-        
-        if df.empty:
-            return
-        
-        # 計算列寬
-        col_width = self.w / (min(len(df.columns), 5) + 1) - 2
-        
-        # 表頭
-        if self.font_loaded:
-            self.set_font('chinese', 'B', 10)
-        else:
-            self.set_font('helvetica', 'B', 10)
-        self.set_fill_color(200, 200, 200)
-        
-        # 只顯示前5個欄位
-        display_cols = list(df.columns)[:5]
-        for col in display_cols:
-            safe_col = str(col)[:10] if col else ""
-            if not self.font_loaded:
-                safe_col = ''.join(c for c in safe_col if ord(c) < 128)
-            self.cell(col_width, 8, safe_col, 1, 0, 'C', 1)
-        self.ln()
-        
-        # 表格內容
-        if self.font_loaded:
-            self.set_font('chinese', '', 9)
-        else:
-            self.set_font('helvetica', '', 9)
-        self.set_fill_color(255, 255, 255)
-        
-        for i, row in df.head(max_rows).iterrows():
-            for col in display_cols:
-                value = str(row[col])[:15] if col in row else ""
-                if not self.font_loaded:
-                    value = ''.join(c for c in value if ord(c) < 128)
-                self.cell(col_width, 8, value, 1, 0, 'C')
-            self.ln()
-        
-        if len(df) > max_rows:
-            if self.font_loaded:
-                self.set_font('chinese', 'I', 9)
-                self.cell(0, 8, f'... 還有 {len(df) - max_rows} 筆資料', 0, 1, 'L')
-            else:
-                self.set_font('helvetica', 'I', 9)
-                self.cell(0, 8, f'... and {len(df) - max_rows} more items', 0, 1, 'L')
-        self.ln(5)
 
 
 class ComparisonAnalyzer:
@@ -342,7 +197,7 @@ class ComparisonAnalyzer:
         return auto_subtypes
     
     def _generate_pdf_report(self):
-        """生成包含所有分析結果的PDF報告 - 修正編碼問題"""
+        """使用 weasyprint 生成 PDF 報告"""
         if not PDF_AVAILABLE:
             return None
         
@@ -350,123 +205,313 @@ class ComparisonAnalyzer:
             return None
         
         try:
-            pdf = ChinesePDF()
-            pdf.add_page()
+            # 建立 HTML 內容
+            html_content = self._create_html_report()
             
-            # 生成時間
-            if pdf.font_loaded:
-                pdf.set_font('chinese', '', 11)
-                pdf.cell(0, 8, f'生成時間：{datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
-            else:
-                pdf.set_font('helvetica', '', 11)
-                pdf.cell(0, 8, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}', 0, 1, 'C')
-            pdf.ln(5)
+            # 使用 weasyprint 生成 PDF
+            font_config = FontConfiguration()
+            pdf_data = HTML(string=html_content).write_pdf(font_config=font_config)
             
-            # 目錄
-            pdf.chapter_title('目錄' if pdf.font_loaded else 'Table of Contents')
-            for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-                profile = analysis.get('buyer_profile', '未知')
-                include_nuisance = analysis.get('include_nuisance', False)
-                
-                display_name = str(name)[:30] + '...' if len(str(name)) > 30 else str(name)
-                display_profile = str(profile)
-                
-                if not pdf.font_loaded:
-                    display_name = ''.join(c for c in display_name if ord(c) < 128)
-                    display_profile = ''.join(c for c in display_profile if ord(c) < 128)
-                
-                nuisance_tag = " [含嫌惡]" if include_nuisance else ""
-                pdf.cell(0, 8, f'{i+1}. {display_name} - {display_profile}視角{nuisance_tag}', 0, 1)
-            pdf.ln(5)
-            
-            # 逐個分析結果
-            for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-                pdf.add_page()
-                pdf.chapter_title(f'分析 {i+1}')
-                
-                # 基本資訊
-                profile = analysis.get('buyer_profile', '未知')
-                timestamp = analysis.get('timestamp', '未知時間')
-                mode = analysis.get('analysis_mode', '')
-                include_nuisance = analysis.get('include_nuisance', False)
-                
-                safe_profile = str(profile)
-                safe_mode = str(mode)
-                
-                if not pdf.font_loaded:
-                    safe_profile = ''.join(c for c in safe_profile if ord(c) < 128)
-                    safe_mode = ''.join(c for c in safe_mode if ord(c) < 128)
-                
-                info = f"""
-基本資訊：
-- 買家類型：{safe_profile}
-- 分析時間：{timestamp}
-- 分析模式：{safe_mode}
-{f'- 包含嫌惡設施分析' if include_nuisance else ''}
-                """
-                pdf.chapter_body(info)
-                
-                # 房屋資訊
-                houses_data = analysis.get('houses_data', {})
-                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
-                pdf.cell(0, 8, '房屋資訊：', 0, 1)
-                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 11)
-                
-                for h_name, h_info in houses_data.items():
-                    safe_h_name = str(h_name)
-                    safe_title = str(h_info.get('title', '未知'))
-                    safe_address = str(h_info.get('address', '未知'))
-                    
-                    if not pdf.font_loaded:
-                        safe_h_name = ''.join(c for c in safe_h_name if ord(c) < 128)
-                        safe_title = ''.join(c for c in safe_title if ord(c) < 128)
-                        safe_address = ''.join(c for c in safe_address if ord(c) < 128)
-                    
-                    pdf.multi_cell(0, 8, f"{safe_h_name}：")
-                    pdf.multi_cell(0, 8, f"  標題：{safe_title}")
-                    pdf.multi_cell(0, 8, f"  地址：{safe_address}")
-                pdf.ln(5)
-                
-                # 設施統計
-                counts = analysis.get('facility_counts', {})
-                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
-                pdf.cell(0, 8, '設施統計：', 0, 1)
-                pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 11)
-                
-                for h_name, count in counts.items():
-                    safe_h_name = str(h_name)
-                    if not pdf.font_loaded:
-                        safe_h_name = ''.join(c for c in safe_h_name if ord(c) < 128)
-                    pdf.cell(0, 8, f"{safe_h_name}：{count} 個設施", 0, 1)
-                pdf.ln(5)
-                
-                # 設施表格
-                df = analysis.get('facilities_table', pd.DataFrame())
-                if not df.empty:
-                    pdf.add_table(df, '設施清單（前20筆）', max_rows=20)
-                
-                # AI 分析結果
-                if 'gemini_result' in analysis:
-                    pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', 'B', 12)
-                    pdf.cell(0, 8, 'AI 分析報告：', 0, 1)
-                    pdf.set_font('chinese' if pdf.font_loaded else 'helvetica', '', 10)
-                    
-                    result_text = str(analysis['gemini_result'])
-                    for line in result_text.split('\n'):
-                        if line.strip():
-                            safe_line = line
-                            if not pdf.font_loaded:
-                                safe_line = ''.join(c for c in line if ord(c) < 128)
-                            if safe_line.strip():
-                                pdf.multi_cell(0, 6, safe_line)
-                    pdf.ln(5)
-            
-            # 使用 utf-8 編碼輸出
-            return pdf.output(dest='S').encode('utf-8', errors='ignore')
+            return pdf_data
             
         except Exception as e:
             st.error(f"PDF生成錯誤：{str(e)}")
             return None
+    
+    def _create_html_report(self):
+        """建立 HTML 報告內容"""
+        html = []
+        
+        # CSS 樣式
+        html.append("""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <style>
+                @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700&display=swap');
+                
+                * {
+                    font-family: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+                }
+                
+                body {
+                    margin: 40px;
+                    padding: 0;
+                    color: #333;
+                    line-height: 1.6;
+                }
+                
+                h1 {
+                    color: #2c3e50;
+                    font-size: 28px;
+                    border-bottom: 3px solid #3498db;
+                    padding-bottom: 10px;
+                    margin-top: 30px;
+                }
+                
+                h2 {
+                    color: #34495e;
+                    font-size: 22px;
+                    border-left: 5px solid #3498db;
+                    padding-left: 15px;
+                    margin: 25px 0 15px;
+                }
+                
+                h3 {
+                    color: #2c3e50;
+                    font-size: 18px;
+                    margin: 20px 0 10px;
+                }
+                
+                .info-box {
+                    background-color: #f8f9fa;
+                    border: 1px solid #e9ecef;
+                    border-radius: 8px;
+                    padding: 20px;
+                    margin: 20px 0;
+                }
+                
+                .info-item {
+                    margin: 10px 0;
+                    font-size: 14px;
+                }
+                
+                .info-label {
+                    font-weight: 700;
+                    color: #2c3e50;
+                    display: inline-block;
+                    width: 100px;
+                }
+                
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20px 0;
+                    font-size: 13px;
+                }
+                
+                th {
+                    background-color: #3498db;
+                    color: white;
+                    font-weight: 500;
+                    padding: 12px 8px;
+                    text-align: left;
+                }
+                
+                td {
+                    border: 1px solid #ddd;
+                    padding: 8px;
+                }
+                
+                tr:nth-child(even) {
+                    background-color: #f8f9fa;
+                }
+                
+                .nuisance-tag {
+                    background-color: #dc3545;
+                    color: white;
+                    padding: 2px 8px;
+                    border-radius: 12px;
+                    font-size: 11px;
+                    font-weight: 500;
+                    margin-left: 8px;
+                }
+                
+                .stats-grid {
+                    display: grid;
+                    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                    gap: 20px;
+                    margin: 20px 0;
+                }
+                
+                .stat-card {
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: white;
+                    padding: 20px;
+                    border-radius: 10px;
+                    text-align: center;
+                }
+                
+                .stat-number {
+                    font-size: 32px;
+                    font-weight: 700;
+                }
+                
+                .stat-label {
+                    font-size: 14px;
+                    opacity: 0.9;
+                }
+                
+                .ai-report {
+                    background-color: #f0f7ff;
+                    border-left: 5px solid #3498db;
+                    padding: 20px;
+                    margin: 20px 0;
+                    border-radius: 0 8px 8px 0;
+                    white-space: pre-wrap;
+                    font-size: 14px;
+                }
+                
+                .footer {
+                    text-align: center;
+                    margin-top: 50px;
+                    padding-top: 20px;
+                    border-top: 1px solid #dee2e6;
+                    color: #6c757d;
+                    font-size: 12px;
+                }
+                
+                .page-break {
+                    page-break-before: always;
+                }
+                
+                .badge {
+                    display: inline-block;
+                    padding: 3px 10px;
+                    border-radius: 20px;
+                    font-size: 12px;
+                    font-weight: 500;
+                }
+                
+                .badge-red {
+                    background-color: #dc3545;
+                    color: white;
+                }
+                
+                .badge-yellow {
+                    background-color: #ffc107;
+                    color: #333;
+                }
+                
+                .badge-green {
+                    background-color: #28a745;
+                    color: white;
+                }
+            </style>
+        </head>
+        <body>
+        """)
+        
+        # 標題
+        html.append(f"""
+        <h1>🏠 房屋分析報告</h1>
+        <div class="info-box">
+            <div class="info-item"><span class="info-label">生成時間：</span>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</div>
+            <div class="info-item"><span class="info-label">總分析數：</span>{len(st.session_state.saved_analyses)} 筆</div>
+        </div>
+        """)
+        
+        # 目錄
+        html.append("<h2>📋 目錄</h2>")
+        html.append("<ul>")
+        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
+            profile = analysis.get('buyer_profile', '未知')
+            include_nuisance = analysis.get('include_nuisance', False)
+            nuisance_tag = " ⚠️" if include_nuisance else ""
+            html.append(f"<li><a href='#analysis-{i}'>{i+1}. {name} - {profile}視角{nuisance_tag}</a></li>")
+        html.append("</ul>")
+        
+        # 逐個分析結果
+        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
+            html.append(f"<div class='page-break' id='analysis-{i}'></div>")
+            
+            profile = analysis.get('buyer_profile', '未知')
+            timestamp = analysis.get('timestamp', '未知時間')
+            mode = analysis.get('analysis_mode', '')
+            include_nuisance = analysis.get('include_nuisance', False)
+            
+            # 標題
+            title = f"{i+1}. {name}"
+            html.append(f"<h1>{title}</h1>")
+            
+            # 基本資訊
+            html.append("<h2>📌 基本資訊</h2>")
+            html.append("<div class='info-box'>")
+            html.append(f"<div class='info-item'><span class='info-label'>買家類型：</span>{profile}</div>")
+            html.append(f"<div class='info-item'><span class='info-label'>分析時間：</span>{timestamp}</div>")
+            html.append(f"<div class='info-item'><span class='info-label'>分析模式：</span>{mode}</div>")
+            if include_nuisance:
+                html.append(f"<div class='info-item'><span class='badge badge-red'>⚠️ 包含嫌惡設施分析</span></div>")
+            html.append("</div>")
+            
+            # 房屋資訊
+            houses_data = analysis.get('houses_data', {})
+            html.append("<h2>🏠 房屋資訊</h2>")
+            for h_name, h_info in houses_data.items():
+                html.append("<div class='info-box'>")
+                html.append(f"<h3>{h_name}</h3>")
+                html.append(f"<div class='info-item'><span class='info-label'>標題：</span>{h_info.get('title', '未知')}</div>")
+                html.append(f"<div class='info-item'><span class='info-label'>地址：</span>{h_info.get('address', '未知')}</div>")
+                html.append("</div>")
+            
+            # 設施統計
+            counts = analysis.get('facility_counts', {})
+            html.append("<h2>📊 設施統計</h2>")
+            html.append("<div class='stats-grid'>")
+            for h_name, count in counts.items():
+                html.append(f"""
+                <div class='stat-card'>
+                    <div class='stat-number'>{count}</div>
+                    <div class='stat-label'>{h_name}</div>
+                </div>
+                """)
+            html.append("</div>")
+            
+            # 設施表格
+            df = analysis.get('facilities_table', pd.DataFrame())
+            if not df.empty:
+                html.append("<h2>📋 設施清單</h2>")
+                
+                # 計算嫌惡設施數量
+                nuisance_count = 0
+                if include_nuisance and analysis.get('nuisance_data'):
+                    for house_name in houses_data.keys():
+                        nuisance_count = len(analysis['nuisance_data'].get(house_name, []))
+                        if nuisance_count > 0:
+                            break
+                
+                if nuisance_count > 0:
+                    html.append(f"<p><span class='badge badge-red'>⚠️ 包含 {nuisance_count} 處嫌惡設施</span></p>")
+                
+                # 建立表格
+                html.append("<table>")
+                html.append("<thead><tr><th>房屋</th><th>設施名稱</th><th>類型</th><th>距離(公尺)</th></tr></thead>")
+                html.append("<tbody>")
+                
+                for _, row in df.iterrows():
+                    # 判斷是否為嫌惡設施
+                    is_nuisance = row['設施子類別'] in NUISANCE_TYPES.keys()
+                    nuisance_mark = " <span class='nuisance-tag'>嫌惡</span>" if is_nuisance else ""
+                    
+                    html.append(f"""
+                    <tr>
+                        <td>{row['房屋']}</td>
+                        <td>{row['設施名稱']}{nuisance_mark}</td>
+                        <td>{row['設施子類別']}</td>
+                        <td>{row['距離(公尺)']}</td>
+                    </tr>
+                    """)
+                
+                html.append("</tbody></table>")
+            
+            # AI 分析結果
+            if 'gemini_result' in analysis:
+                html.append("<h2>🤖 AI 分析報告</h2>")
+                html.append(f"<div class='ai-report'>{analysis['gemini_result']}</div>")
+            
+            html.append("<hr>")
+        
+        # 頁尾
+        html.append(f"""
+        <div class='footer'>
+            房屋分析報告 | 生成時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | 共 {len(st.session_state.saved_analyses)} 筆分析
+        </div>
+        </body>
+        </html>
+        """)
+        
+        return "".join(html)
     
     def render_comparison_tab(self):
         """渲染分析頁面"""
@@ -515,7 +560,7 @@ class ComparisonAnalyzer:
                                 else:
                                     st.error("PDF生成失敗")
                     else:
-                        st.caption("📌 PDF下載功能需要安裝：`pip install fpdf`")
+                        st.caption("📌 PDF下載功能需要安裝：`pip install weasyprint`")
                     
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
                         st.session_state.saved_analyses = {}
