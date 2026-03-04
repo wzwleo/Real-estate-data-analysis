@@ -343,7 +343,7 @@ def plot_floor_distribution(target_row, df):
 
     # ========= Layout =========
     fig.update_layout(
-        title=f"{target_district}「{target_type_main}」樓層分布與單價趨勢",
+        title=f"{target_district}「{target_type_main}」樓層分布與單價趨勢 (共 {len(df_filtered)} 筆)",
         xaxis_title="樓層區間",
         yaxis=dict(title="房屋數量", showgrid=True),
         yaxis2=dict(title="平均單價 (萬/坪)", overlaying='y', side='right'),
