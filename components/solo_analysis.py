@@ -1511,7 +1511,247 @@ def tab1_module():
                         樓層分析數據如下：
                         {json.dumps(floor_analysis_payload, ensure_ascii=False, indent=2)}
                         """
-
+                            
+                        # ===============================
+                        # 格局分析
+                        # ===============================
+                        
+                        # 解析格局
+                        def parse_layout(text):
+                            text = str(text)
+                            result = {
+                                '房數': 0,
+                                '廳數': 0,
+                                '衛數': 0,
+                                '室數': 0
+                            }
+                            for key in result.keys():
+                                match = re.search(rf'(\d+){key[0]}', text)
+                                if match:
+                                    result[key] = int(match.group(1))
+                            return pd.Series(result)
+                        
+                        df_layout = compare_df.copy()
+                        df_layout[['房數', '廳數', '衛數', '室數']] = df_layout['格局'].apply(parse_layout)
+                        
+                        # 過濾出有效格局資料（至少有房數）
+                        df_layout = df_layout[df_layout['房數'] > 0].copy()
+                        
+                        if len(df_layout) > 0:
+                            # 確保有總價和建坪欄位
+                            if '總價(萬)' in df_layout.columns:
+                                df_layout['總價'] = pd.to_numeric(df_layout['總價(萬)'], errors='coerce')
+                            elif '總價' in df_layout.columns:
+                                df_layout['總價'] = pd.to_numeric(df_layout['總價'], errors='coerce')
+                            else:
+                                df_layout['總價'] = 0
+                            
+                            if '建坪' in df_layout.columns:
+                                df_layout['建坪數值'] = pd.to_numeric(df_layout['建坪'], errors='coerce')
+                            elif '建物面積' in df_layout.columns:
+                                df_layout['建坪數值'] = pd.to_numeric(df_layout['建物面積'], errors='coerce')
+                            else:
+                                df_layout['建坪數值'] = 0
+                            
+                            # 計算單價
+                            df_valid_layout = df_layout[(df_layout['總價'] > 0) & (df_layout['建坪數值'] > 0)].copy()
+                            df_valid_layout['單價'] = df_valid_layout['總價'] / df_valid_layout['建坪數值']
+                            
+                            # 取得目標格局
+                            target_layout = selected_row.get('格局', None)
+                            target_layout_parsed = parse_layout(target_layout) if target_layout else None
+                            
+                            if target_layout and not target_layout_parsed.isna().all():
+                                target_rooms = int(target_layout_parsed['房數'])
+                                target_baths = int(target_layout_parsed['衛數'])
+                                target_living = int(target_layout_parsed['廳數'])
+                                
+                                # ========== 計算格局統計 ==========
+                                
+                                # 1. 格局出現次數排名
+                                layout_counts = df_valid_layout['格局'].value_counts()
+                                top5_layouts = layout_counts.head(5).index.tolist()
+                                
+                                # 目標格局是否在前五名
+                                target_in_top5 = target_layout in top5_layouts
+                                target_layout_rank = list(layout_counts.index).index(target_layout) + 1 if target_layout in layout_counts.index else None
+                                target_layout_count = layout_counts.get(target_layout, 0)
+                                
+                                # 2. 前五名格局的統計
+                                df_top5 = df_valid_layout[df_valid_layout['格局'].isin(top5_layouts)]
+                                layout_stats = df_top5.groupby('格局').agg(
+                                    數量=('標題', 'count'),
+                                    平均單價=('單價', 'mean')
+                                ).reset_index()
+                                layout_stats = layout_stats.sort_values('數量', ascending=False)
+                                
+                                # 3. 同格局的統計
+                                same_layout_df = df_valid_layout[df_valid_layout['格局'] == target_layout]
+                                same_layout_avg_price = same_layout_df['單價'].mean() if len(same_layout_df) > 0 else np.nan
+                                same_layout_count = len(same_layout_df)
+                                same_layout_pct = (same_layout_count / len(df_valid_layout)) * 100
+                                
+                                # 4. 同房數的統計
+                                same_rooms_df = df_valid_layout[df_valid_layout['房數'] == target_rooms]
+                                same_rooms_avg_price = same_rooms_df['單價'].mean() if len(same_rooms_df) > 0 else np.nan
+                                same_rooms_count = len(same_rooms_df)
+                                same_rooms_pct = (same_rooms_count / len(df_valid_layout)) * 100
+                                
+                                # 5. 整體市場格局分布
+                                avg_rooms = df_valid_layout['房數'].mean()
+                                median_rooms = df_valid_layout['房數'].median()
+                                avg_baths = df_valid_layout['衛數'].mean()
+                                median_baths = df_valid_layout['衛數'].median()
+                                avg_living = df_valid_layout['廳數'].mean()
+                                
+                                # 6. 計算每房平均坪數
+                                df_valid_layout['每房平均坪數'] = df_valid_layout['建坪數值'] / df_valid_layout['房數']
+                                target_per_room_area = target_building_area / target_rooms if target_rooms > 0 else 0
+                                avg_per_room_area = df_valid_layout['每房平均坪數'].mean()
+                                median_per_room_area = df_valid_layout['每房平均坪數'].median()
+                                
+                                # 7. 格局舒適度分類
+                                def classify_layout_comfort(row):
+                                    if row['房數'] <= 2 and row['衛數'] <= 1:
+                                        return "小型格局"
+                                    elif row['房數'] == 3 and row['衛數'] == 2:
+                                        return "標準格局"
+                                    elif row['房數'] >= 4 or row['衛數'] >= 3:
+                                        return "豪華格局"
+                                    else:
+                                        return "其他格局"
+                                
+                                df_valid_layout['格局分類'] = df_valid_layout.apply(classify_layout_comfort, axis=1)
+                                target_layout_category = classify_layout_comfort(pd.Series({
+                                    '房數': target_rooms,
+                                    '衛數': target_baths
+                                }))
+                                
+                                # 8. 格局分類的市場分布
+                                layout_category_dist = df_valid_layout['格局分類'].value_counts()
+                                target_category_count = layout_category_dist.get(target_layout_category, 0)
+                                target_category_pct = (target_category_count / len(df_valid_layout)) * 100
+                                
+                                # 9. 前五大格局的單價範圍
+                                top5_prices = layout_stats['平均單價'].tolist()
+                                highest_layout_in_top5 = layout_stats.iloc[0]['格局']
+                                highest_price_in_top5 = layout_stats.iloc[0]['平均單價']
+                                lowest_layout_in_top5 = layout_stats.iloc[-1]['格局']
+                                lowest_price_in_top5 = layout_stats.iloc[-1]['平均單價']
+                                top5_price_range = highest_price_in_top5 - lowest_price_in_top5
+                                
+                                # 10. 單價與房數的關聯
+                                if len(df_valid_layout) > 1:
+                                    slope_layout, intercept_layout, r_value_layout, p_value_layout, std_err_layout = stats.linregress(
+                                        df_valid_layout['房數'], 
+                                        df_valid_layout['單價']
+                                    )
+                                    price_change_per_room = slope_layout  # 每增加1房，單價變化
+                                    correlation_layout = r_value_layout  # 相關係數
+                                else:
+                                    price_change_per_room = 0
+                                    correlation_layout = 0
+                                
+                                # 11. 目標格局與同格局平均的比較
+                                if not pd.isna(same_layout_avg_price) and same_layout_avg_price > 0:
+                                    price_vs_same_layout = target_building_price_per_ping - same_layout_avg_price
+                                    price_vs_same_layout_pct = (price_vs_same_layout / same_layout_avg_price) * 100
+                                else:
+                                    price_vs_same_layout = 0
+                                    price_vs_same_layout_pct = 0
+                                
+                                # 建立 layout_analysis_payload
+                                layout_analysis_payload = {
+                                    "區域": target_district,
+                                    "房屋類型": target_type,
+                                    "比較樣本數": len(df_valid_layout),
+                                    
+                                    "目標房屋": {
+                                        "格局": target_layout,
+                                        "房數": target_rooms,
+                                        "廳數": target_living,
+                                        "衛數": target_baths,
+                                        "格局分類": target_layout_category,
+                                        "建坪單價(萬/坪)": round(target_building_price_per_ping, 2),
+                                        "每房平均坪數": round(target_per_room_area, 2)
+                                    },
+                                    
+                                    "格局排名": {
+                                        "格局熱門度排名": target_layout_rank if target_layout_rank else "未在排名中",
+                                        "是否在前五大熱門格局": "是" if target_in_top5 else "否",
+                                        "相同格局數量": same_layout_count,
+                                        "相同格局占比(%)": round(same_layout_pct, 1),
+                                        "前五大熱門格局": [
+                                            {
+                                                "格局": row['格局'],
+                                                "數量": int(row['數量']),
+                                                "平均單價(萬/坪)": round(row['平均單價'], 2)
+                                            }
+                                            for _, row in layout_stats.iterrows()
+                                        ]
+                                    },
+                                    
+                                    "格局分布": {
+                                        "同區平均房數": round(avg_rooms, 1),
+                                        "同區中位數房數": round(median_rooms, 1),
+                                        "同區平均衛數": round(avg_baths, 1),
+                                        "同房數物件數量": same_rooms_count,
+                                        "同房數物件占比(%)": round(same_rooms_pct, 1),
+                                        "格局分類占比(%)": round(target_category_pct, 1)
+                                    },
+                                    
+                                    "空間效率": {
+                                        "每房平均坪數": round(target_per_room_area, 2),
+                                        "同區每房平均坪數": round(avg_per_room_area, 2),
+                                        "同區每房中位數坪數": round(median_per_room_area, 2),
+                                        "與市場平均差距(坪)": round(target_per_room_area - avg_per_room_area, 2)
+                                    },
+                                    
+                                    "格局單價分析": {
+                                        "相同格局平均單價(萬/坪)": round(same_layout_avg_price, 2) if not pd.isna(same_layout_avg_price) else "無資料",
+                                        "同房數平均單價(萬/坪)": round(same_rooms_avg_price, 2) if not pd.isna(same_rooms_avg_price) else "無資料",
+                                        "與同格局差距(萬/坪)": round(price_vs_same_layout, 2),
+                                        "與同格局差距比例(%)": round(price_vs_same_layout_pct, 1),
+                                        "前五大格局單價範圍(萬/坪)": round(top5_price_range, 2),
+                                        "最高單價格局": highest_layout_in_top5,
+                                        "最低單價格局": lowest_layout_in_top5
+                                    },
+                                    
+                                    "單價與房數關聯": {
+                                        "單價隨房數變化率(萬/坪/房)": round(price_change_per_room, 3),
+                                        "相關係數": round(correlation_layout, 3)
+                                    }
+                                }
+                                
+                                # ========== Prompt ==========
+                                layout_prompt = f"""
+                        
+                        ---
+                        
+                        以下是「已經計算完成」的格局分析數據（JSON），
+                        請 **只根據提供的數值進行說明**，不可自行推算或補充不存在的數據。
+                        
+                        請用繁體中文完成以下分析（每項不超過 50 字）：
+                        
+                        1️⃣ **格局評估**：評價該房屋的格局（{layout_analysis_payload['目標房屋']['格局分類']}）在市場中的熱門度
+                           - 目標格局「{target_layout}」排名第 {target_layout_rank if target_layout_rank else '未知'} 位
+                           - {'在前五大熱門格局中' if target_in_top5 else '不在前五大熱門格局中'}
+                        
+                        2️⃣ **空間效率分析**：
+                           - 說明每房平均坪數（{target_per_room_area:.2f} 坪/房）與市場平均（{avg_per_room_area:.2f} 坪/房）的比較
+                           - 評估空間配置的合理性
+                        
+                        3️⃣ **單價分析**：
+                           - 說明該房屋單價與相同格局平均的比較
+                           - 解釋前五大熱門格局的單價差異（範圍 {top5_price_range:.2f} 萬/坪）
+                        
+                        4️⃣ **購屋建議**：
+                           - 格局帶來的優缺點（房數、衛數配置）
+                           - 是否適合購買及需注意事項
+                        
+                        格局分析數據如下：
+                        {json.dumps(layout_analysis_payload, ensure_ascii=False, indent=2)}
+                        """
                 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
@@ -1519,11 +1759,13 @@ def tab1_module():
                     #space_response = model.generate_content(space_prompt)
                     #age_response = model.generate_content(age_prompt)
                     #floor_response = model.generate_content(floor_prompt)
+                    layout_response = model.generate_content(layout_prompt)
                     
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
@@ -1613,7 +1855,8 @@ def tab1_module():
                     compare_base_df = st.session_state.all_properties_df
                 elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
                     compare_base_df = st.session_state.filtered_df
-                
+                st.markdown("### 📌 格局分析結論")
+                st.write(layout_response.text)
                 if not compare_base_df.empty:
                     plot_layout_distribution(selected_row, compare_base_df)
                 else:
