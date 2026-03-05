@@ -2036,7 +2036,11 @@ def tab1_module():
                         """,
                         unsafe_allow_html=True
                     )
-                st.write(floor_area_payload)    
+                st.write(analysis_payload)  
+                st.write(floor_area_payload)  
+                st.write(age_analysis_payload)  
+                st.write(floor_analysis_payload)  
+                st.write(layout_analysis_payload)  
                 st.write(
                     f"價格分數: {score_price:.1f}  "
                     f"(算式：10 × (1 - |目標單價 - 市場中位數| / 市場中位數))"
