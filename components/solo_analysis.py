@@ -1808,7 +1808,75 @@ def tab1_module():
                         格局分析數據如下：
                         {json.dumps(layout_analysis_payload, ensure_ascii=False, indent=2)}
                         """
-                
+                        # ===============================
+                        # 綜合總結 Prompt（新增）
+                        # ===============================
+                        
+                        summary_prompt = f"""
+                        你是一位專業的台灣房市分析顧問。
+                        
+                        你已經完成了以下五個面向的獨立分析：
+                        1. 價格分析
+                        2. 坪數分析  
+                        3. 屋齡分析
+                        4. 樓層分析
+                        5. 格局分析
+                        
+                        現在請基於以下「已經計算完成」的所有數據，提供一個綜合總結。
+                        
+                        ---
+                        
+                        ## 📊 完整分析數據
+                        
+                        ### 1️⃣ 價格數據
+                        {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
+                        
+                        ### 2️⃣ 坪數數據
+                        {json.dumps(floor_area_payload, ensure_ascii=False, indent=2)}
+                        
+                        ### 3️⃣ 屋齡數據
+                        {json.dumps(age_analysis_payload if age_analysis_payload else {}, ensure_ascii=False, indent=2)}
+                        
+                        ### 4️⃣ 樓層數據
+                        {json.dumps(floor_analysis_payload if floor_analysis_payload else {}, ensure_ascii=False, indent=2)}
+                        
+                        ### 5️⃣ 格局數據
+                        {json.dumps(layout_analysis_payload if layout_analysis_payload else {}, ensure_ascii=False, indent=2)}
+                        ---
+                        
+                        ## 📝 請完成綜合總結（200 字內）
+                        
+                        請用繁體中文完成以下四個部分：
+                        
+                        **1. 整體評價（40 字內）**
+                        - 綜合五個面向，給出一句話的整體評價
+                        - 明確說明這間房屋的市場定位（例如：高性價比小家庭首選、主流價格帶標準物件等）
+                        
+                        **2. 三大優勢（60 字內）**
+                        - 列出最明顯的 3 個優點
+                        - 每個優點用一句話說明，並引用具體數據支持
+                        
+                        **3. 三大劣勢（60 字內）**
+                        - 列出最需要注意的 3 個缺點或風險
+                        - 每個缺點用一句話說明，並引用具體數據支持
+                        
+                        **4. 購屋建議（40 字內）**
+                        - 給出明確的購買建議：「強烈推薦」、「值得考慮」、「需謹慎評估」或「不建議」
+                        - 說明最適合的買家類型（例如：首購族、小家庭、退休族、投資客）
+                        
+                        ---
+                        
+                        ## ⚠️ 重要原則
+                        
+                        1. **只使用提供的數據**：不推測、不補充
+                        2. **保持客觀中立**：不誇大優點，不隱瞞缺點
+                        3. **給出明確判斷**：避免模糊用語
+                        4. **嚴格字數限制**：總字數不超過 200 字
+                        5. **使用繁體中文**：符合台灣用語習慣
+                        
+                        請開始撰寫綜合總結。
+                        """
+
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
                     #price_response = model.generate_content(price_prompt)
@@ -1816,12 +1884,15 @@ def tab1_module():
                     #age_response = model.generate_content(age_prompt)
                     #floor_response = model.generate_content(floor_prompt)
                     #layout_response = model.generate_content(layout_prompt)
+                    summary_response = model.generate_content(summary_prompt)
+                    
                     
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
@@ -1945,6 +2016,7 @@ def tab1_module():
                 
                 
                 st.markdown("### 📌 最終結論")
+                summary_response = model.generate_content(summary_prompt)
                 
                 col1, col2 = st.columns([1, 1])
                 with col1:
