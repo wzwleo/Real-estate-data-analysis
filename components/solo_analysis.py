@@ -1965,7 +1965,7 @@ def tab1_module():
                             color:#00C853;
                             font-size:60px;
                             text-align:center;
-                            margin-top:120px;
+                            margin-top:200px;
                         '>
                         {total_score:.1f} / 100
                         </h1>
