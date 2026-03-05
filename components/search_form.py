@@ -135,9 +135,6 @@ def handle_search_submit(
     if budget_min > budget_max and budget_max > 0:
         st.error("❌ 預算範圍錯誤")
         return False
-    if age_min > age_max:
-        st.error("❌ 屋齡範圍錯誤")
-        return False
     if area_min > area_max:
         st.error("❌ 建坪範圍錯誤")
         return False
