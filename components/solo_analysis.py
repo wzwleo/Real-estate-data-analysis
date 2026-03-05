@@ -1959,10 +1959,10 @@ def tab1_module():
                 with col1:
                     st.plotly_chart(fig)
                 with col2:
-                st.markdown(
-                    f"<h1 style='color:#00C853; font-size:60px; text-align:center;'>總評分：{total_score:.1f} / 100</h1>",
-                    unsafe_allow_html=True
-                )
+                    st.markdown(
+                        f"<h1 style='color:#00C853; font-size:60px; text-align:center;'>總評分：{total_score:.1f} / 100</h1>",
+                        unsafe_allow_html=True
+                    )
                 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
