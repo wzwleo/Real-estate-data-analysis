@@ -1879,20 +1879,20 @@ def tab1_module():
 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    #price_response = model.generate_content(price_prompt)
-                    #space_response = model.generate_content(space_prompt)
-                    #age_response = model.generate_content(age_prompt)
-                    #floor_response = model.generate_content(floor_prompt)
-                    #layout_response = model.generate_content(layout_prompt)
-                    #summary_response = model.generate_content(summary_prompt)
+                    price_response = model.generate_content(price_prompt)
+                    space_response = model.generate_content(space_prompt)
+                    age_response = model.generate_content(age_prompt)
+                    floor_response = model.generate_content(floor_prompt)
+                    layout_response = model.generate_content(layout_prompt)
+                    summary_response = model.generate_content(summary_prompt)
                     
                     
-                    price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    #price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
