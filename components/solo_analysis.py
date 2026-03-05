@@ -1179,7 +1179,7 @@ def tab1_module():
                     # ===============================
                     
                     compare_df['空間使用率'] = selected_row['主+陽'] / selected_row['建坪']
-                    target_usage_rate = target_area / float(selected_row['建坪']) if selected_row['建坪'] > 0 else 0
+                    target_usage_rate = selected_row['主+陽'] / float(selected_row['建坪']) if selected_row['建坪'] > 0 else 0
                     usage_percentile = (compare_df['空間使用率'] < target_usage_rate).sum() / total_count * 100
                     median_usage = compare_df['空間使用率'].median()  # 同區中位數
                     mean_usage = compare_df['空間使用率'].mean()      # 同區平均使用率
