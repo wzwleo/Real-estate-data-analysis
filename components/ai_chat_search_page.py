@@ -379,7 +379,7 @@ def render_ai_chat_search():
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['房間數'].notna()) & 
-                                (filtered_df['房間數'] == filters['rooms'])  # 改成 ==
+                                (filtered_df['房間數'] >= filters['rooms'])
                             ]
                             after_count = len(filtered_df)
                             filter_steps.append(f"房間數={filters['rooms']}: {before_count} → {after_count}")
@@ -389,7 +389,7 @@ def render_ai_chat_search():
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['廳數'].notna()) & 
-                                (filtered_df['廳數'] == filters['living_rooms'])  # 改成 ==
+                                (filtered_df['廳數'] >= filters['living_rooms'])
                             ]
                             after_count = len(filtered_df)
                             filter_steps.append(f"廳數={filters['living_rooms']}: {before_count} → {after_count}")
@@ -399,7 +399,7 @@ def render_ai_chat_search():
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['衛數'].notna()) & 
-                                (filtered_df['衛數'] == filters['bathrooms'])  # 改成 ==
+                                (filtered_df['衛數'] >= filters['bathrooms'])
                             ]
                             after_count = len(filtered_df)
                             filter_steps.append(f"衛數={filters['bathrooms']}: {before_count} → {after_count}")
@@ -409,7 +409,7 @@ def render_ai_chat_search():
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
                                 (filtered_df['室數'].notna()) & 
-                                (filtered_df['室數'] == filters['study_rooms'])  # 改成 ==
+                                (filtered_df['室數'] >= filters['study_rooms'])
                             ]
                             after_count = len(filtered_df)
                             filter_steps.append(f"室數={filters['study_rooms']}: {before_count} → {after_count}")
