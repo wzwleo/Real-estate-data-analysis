@@ -57,7 +57,6 @@ def render_search_form():
                 index=0
             )
             age_max = st.number_input("屋齡上限", 0, 100, 100)
-            age_min = st.number_input("屋齡下限", 0, 100, 0)
             
         with col2:
             num_living = st.selectbox(
@@ -65,7 +64,6 @@ def render_search_form():
                 options=["不限"] + list(range(1, 11)),  # 選項 1~10
                 index=0
             )
-            area_max = st.number_input("建坪上限", 0, 1000, 1000, 10)
             area_min = st.number_input("建坪下限", 0, 1000, 0, 10)
 
         with col3:
@@ -85,10 +83,8 @@ def render_search_form():
                 housetype_change,
                 budget_min,
                 budget_max,
-                age_min,
                 age_max,
                 area_min,
-                area_max,
                 car_grip,
                 selected_district,
                 num_rooms,    
@@ -125,10 +121,8 @@ def handle_search_submit(
     housetype_change,
     budget_min,
     budget_max,
-    age_min,
     age_max,
     area_min,
-    area_max,
     car_grip,
     selected_district,
     num_rooms,    
@@ -187,10 +181,8 @@ def handle_search_submit(
             'housetype': housetype_change,
             'budget_min': budget_min,
             'budget_max': budget_max,
-            'age_min': age_min,
             'age_max': age_max,
             'area_min': area_min,
-            'area_max': area_max,
             'car_grip': car_grip,
             'num_rooms': num_rooms,    
             'num_living': num_living,  
