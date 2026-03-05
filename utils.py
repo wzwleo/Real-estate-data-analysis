@@ -60,7 +60,22 @@ def filter_properties(df, filters):
                     (filtered_df['車位'] == "無車位") | 
                     (filtered_df['車位'] == 0)
                 ]
-
+        # 房間數／廳數／衛數
+        if filters.get('num_rooms') and filters['num_rooms'] != "不限":
+            filtered_df = filtered_df[
+                pd.to_numeric(filtered_df['房間數'], errors='coerce') == filters['num_rooms']
+            ]
+        
+        if filters.get('num_living') and filters['num_living'] != "不限":
+            filtered_df = filtered_df[
+                pd.to_numeric(filtered_df['廳數'], errors='coerce') == filters['num_living']
+            ]
+        
+        if filters.get('num_baths') and filters['num_baths'] != "不限":
+            filtered_df = filtered_df[
+                pd.to_numeric(filtered_df['衛數'], errors='coerce') == filters['num_baths']
+            ]
+            
     except Exception as e:
         st.error(f"篩選過程中發生錯誤: {e}")
         return df
