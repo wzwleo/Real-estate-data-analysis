@@ -1934,16 +1934,15 @@ def tab1_module():
                 score_layout = max(0, min(10, score_layout))
 
                 scores = {
-                    "價格競爭力": score_price,
-                    "空間效率": score_space,
-                    "屋齡優勢": score_age,
-                    "樓層定位": score_floor,
-                    "格局流動性": score_layout
+                    "價格競爭力": round(score_price, 1),
+                    "空間效率": round(score_space, 1),
+                    "屋齡優勢": round(score_age, 1),
+                    "樓層定位": round(score_floor, 1),
+                    "格局流動性": round(score_layout, 1)
                 }
                 
-                
                 total_score = sum(scores.values()) / len(scores) * 10
-                print("總評分:", round(total_score,1))
+                
                 
                 st.markdown("### 📌 最終結論")
                 
@@ -1955,8 +1954,10 @@ def tab1_module():
 
                 st.write(scores)
                 fig = create_radar_chart(scores)
-                
-                st.plotly_chart(fig, use_container_width=True)
+                st.write("總評分:", round(total_score,1))
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    st.plotly_chart(fig)
                 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
