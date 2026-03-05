@@ -37,15 +37,11 @@ def filter_properties(df, filters):
         if filters.get('budget_max', 1000000) < 1000000 and '總價(萬)' in filtered_df.columns:
             filtered_df = filtered_df[filtered_df['總價(萬)'] <= filters['budget_max']]
         # 屋齡
-        if filters.get('age_min', 0) > 0 and '屋齡' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['屋齡'] >= filters['age_min']]
         if filters.get('age_max', 100) < 100 and '屋齡' in filtered_df.columns:
             filtered_df = filtered_df[filtered_df['屋齡'] <= filters['age_max']]
         # 建坪
         if filters.get('area_min', 0) > 0 and '建坪' in filtered_df.columns:
             filtered_df = filtered_df[filtered_df['建坪'] >= filters['area_min']]
-        if filters.get('area_max', 1000) < 1000 and '建坪' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['建坪'] <= filters['area_max']]
         # 車位
         if 'car_grip' in filters and '車位' in filtered_df.columns:
             if filters['car_grip'] == "需要":
