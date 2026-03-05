@@ -154,7 +154,7 @@ def render_analysis_records_page():
             col1, col2 = st.columns([1, 1])
             with col1:
                 if not compare_base_df.empty:
-                    plot_price_scatter(selected_row, compare_base_df)
+                    plot_price_scatter(selected_row, compare_base_df, chart_key=f"price_{i}")
                 else:
                     st.warning("⚠️ 無比較資料")
             with col2:
@@ -170,7 +170,7 @@ def render_analysis_records_page():
                 st.write(ai_analysis.get('space', '無分析內容'))
             with col2:
                 if not compare_base_df.empty:
-                    plot_space_efficiency_scatter(selected_row, compare_base_df)
+                    plot_space_efficiency_scatter(selected_row, compare_base_df, chart_key=f"space_{i}")
                 else:
                     st.warning("⚠️ 無比較資料")
             st.markdown("---")
@@ -180,7 +180,7 @@ def render_analysis_records_page():
             st.markdown("### 📌 屋齡分析結論")
             st.write(ai_analysis.get('age', '無分析內容'))
             if not compare_base_df.empty:
-                plot_age_distribution(selected_row, compare_base_df)
+                plot_age_distribution(selected_row, compare_base_df, chart_key=f"age_{i}")
             else:
                 st.warning("⚠️ 無比較資料")
             st.markdown("---")
@@ -190,7 +190,7 @@ def render_analysis_records_page():
             st.markdown("### 📌 樓層分析結論")
             st.write(ai_analysis.get('floor', '無分析內容'))
             if not compare_base_df.empty:
-                plot_floor_distribution(selected_row, compare_base_df)
+                plot_floor_distribution(selected_row, compare_base_df, chart_key=f"floor_{i}")
             else:
                 st.warning("⚠️ 無比較資料")
             st.markdown("---")
@@ -200,7 +200,7 @@ def render_analysis_records_page():
             st.markdown("### 📌 格局分析結論")
             st.write(ai_analysis.get('layout', '無分析內容'))
             if not compare_base_df.empty:
-                plot_layout_distribution(selected_row, compare_base_df)
+                plot_layout_distribution(selected_row, compare_base_df, chart_key=f"layout_{i}")
             else:
                 st.warning("⚠️ 無比較資料")
             st.markdown("---")
@@ -223,7 +223,7 @@ def render_analysis_records_page():
                 col1, col2 = st.columns([1, 1])
                 with col1:
                     fig = create_radar_chart(scores)
-                    st.plotly_chart(fig)
+                    st.plotly_chart(fig, key=f"radar_{i}")
                 with col2:
                     st.markdown(
                         f"""
