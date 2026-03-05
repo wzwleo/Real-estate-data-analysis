@@ -15,6 +15,61 @@ name_map = {
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
+import plotly.graph_objects as go
+
+def create_radar_chart(scores_dict, title="房屋綜合評分雷達圖"):
+    """
+    生成五大面向雷達圖
+    
+    Parameters
+    ----------
+    scores_dict : dict
+        五大面向分數，例如：
+        {
+            "價格競爭力": 7.5,
+            "空間效率": 6.0,
+            "屋齡優勢": 8.0,
+            "樓層定位": 5.5,
+            "格局流動性": 7.0
+        }
+        
+    title : str
+        圖表標題
+    
+    Returns
+    -------
+    fig : plotly.graph_objects.Figure
+    """
+
+    categories = list(scores_dict.keys())
+    values = list(scores_dict.values())
+
+    # 雷達圖需要首尾相接
+    categories.append(categories[0])
+    values.append(values[0])
+
+    fig = go.Figure()
+
+    fig.add_trace(go.Scatterpolar(
+        r=values,
+        theta=categories,
+        fill='toself',
+        name='評分'
+    ))
+
+    fig.update_layout(
+        polar=dict(
+            radialaxis=dict(
+                visible=True,
+                range=[0, 10]
+            )
+        ),
+        showlegend=False,
+        title=title
+    )
+
+    return fig
+
 def plot_layout_distribution(target_row, df):
     """
     繪製同區同類型格局分布與平均單價圖
@@ -1863,7 +1918,7 @@ def tab1_module():
                 else:
                     st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
-                st.markdown("### 📌 最終結論")
+                
                 
                 score_price = max(0, min(10, 10 - price_percentile/10))
 
@@ -1878,12 +1933,30 @@ def tab1_module():
                 score_layout = same_layout_pct / 3
                 score_layout = max(0, min(10, score_layout))
 
+                scores = {
+                    "價格競爭力": score_price,
+                    "空間效率": score_space,
+                    "屋齡優勢": score_age,
+                    "樓層定位": score_floor,
+                    "格局流動性": score_layout
+                }
+                
+                
+                total_score = sum(scores.values()) / len(scores) * 10
+                print("總評分:", round(total_score,1))
+                
+                st.markdown("### 📌 最終結論")
+                
                 st.write("價格分數:", score_price)
                 st.write("坪數分數:", score_space)
                 st.write("屋齡分數:", score_age)
                 st.write("樓層分數:", score_floor)
                 st.write("格局分數:", score_layout)
+
+                st.write(scores)
+                fig = create_radar_chart(scores)
                 
+                st.plotly_chart(fig, use_container_width=True)
                 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
