@@ -16,3 +16,5 @@ fpdf
 matplotlib
 weasyprint==60.2
 openpyxl
+pytz
+
