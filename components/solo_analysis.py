@@ -1677,11 +1677,11 @@ def tab1_module():
                                     },
                                     
                                     "格局排名": {
-                                        "格局熱門度排名": target_layout_rank if target_layout_rank else "未在排名中",
-                                        "是否在前五大熱門格局": "是" if target_in_top5 else "否",
+                                        "格局資料量排名": target_layout_rank if target_layout_rank else "未在排名中",
+                                        "是否為前五多資料量格局": "是" if target_in_top5 else "否",
                                         "相同格局數量": same_layout_count,
                                         "相同格局占比(%)": round(same_layout_pct, 1),
-                                        "前五大熱門格局": [
+                                        "資料量前五多格局": [
                                             {
                                                 "格局": row['格局'],
                                                 "數量": int(row['數量']),
@@ -1760,19 +1760,19 @@ def tab1_module():
                     #space_response = model.generate_content(space_prompt)
                     #age_response = model.generate_content(age_prompt)
                     #floor_response = model.generate_content(floor_prompt)
-                    layout_response = model.generate_content(layout_prompt)
+                    #layout_response = model.generate_content(layout_prompt)
                     
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
                 # 使用三引號處理跨行文字
                 st.write("""
-                我們將針對所選房屋的六大面向逐一分析，包括價格、坪數、屋齡、樓層、格局與地段。
+                我們將針對所選房屋的五大面向逐一分析，包括價格、坪數、屋齡、樓層與格局。
                 每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。
                 """)
                 st.markdown("---")
@@ -1863,6 +1863,26 @@ def tab1_module():
                 else:
                     st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
                 st.markdown("---")
+                st.markdown("### 📌 最終結論")
+                
+                score_price = max(0, min(10, 10 - price_percentile/10))
+
+                score_space = (target_usage_rate / median_usage) * 5
+                score_space = max(0, min(10, score_space))
+
+                score_age = max(0, min(10, 10 - age_percentile/10))
+
+                score_floor = 10 - abs(floor_percentile - 50)/5
+                score_floor = max(0, min(10, score_floor))
+
+                score_layout = same_layout_pct / 3
+                score_layout = max(0, min(10, score_layout))
+
+                print("價格分數:", score_price)
+                print("坪數分數:", score_space)
+                print("屋齡分數:", score_age)
+                print("樓層分數:", score_floor)
+                print("格局分數:", score_layout)
                 
                 
             except Exception as e:
