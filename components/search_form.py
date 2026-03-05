@@ -53,8 +53,8 @@ def render_search_form():
         with col1:
             num_rooms = st.selectbox(
                 "格局數(房)",            # 標籤
-                options=list(range(1, 11)),  # 選項 1~10
-                index=2                     # 預設值的索引（0-based，這裡預設 3 房）
+                options=["不限"] + list(range(1, 11)),  # 選項 1~10
+                index=0
             )
             age_max = st.number_input("屋齡上限", 0, 100, 100)
             age_min = st.number_input("屋齡下限", 0, 100, 0)
@@ -62,8 +62,8 @@ def render_search_form():
         with col2:
             num_living = st.selectbox(
                 "格局數(廳)",            # 標籤
-                options=list(range(1, 11)),  # 選項 1~10
-                index=1                     # 預設值的索引（0-based，這裡預設 3 房）
+                options=["不限"] + list(range(1, 11)),  # 選項 1~10
+                index=0
             )
             area_max = st.number_input("建坪上限", 0, 1000, 1000, 10)
             area_min = st.number_input("建坪下限", 0, 1000, 0, 10)
@@ -71,8 +71,8 @@ def render_search_form():
         with col3:
             num_baths = st.selectbox(
                 "格局數(衛)",            # 標籤
-                options=list(range(1, 11)),  # 選項 1~10
-                index=1                     # 預設值的索引（0-based，這裡預設 3 房）
+                options=["不限"] + list(range(1, 11)),  # 選項 1~10
+                index=0              
             )
             car_grip = st.selectbox("🅿️ 車位需求", ["不限", "需要", "不要"])
 
