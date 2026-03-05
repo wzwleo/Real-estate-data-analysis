@@ -1192,8 +1192,8 @@ def tab1_module():
                         "房屋類型": target_type,
                         "比較樣本數": total_count,
                         "目標房屋": {
-                            "建坪": selected_row['建坪'],
-                            "實際坪數": target_area,
+                            "建坪": compare_df['建坪'],
+                            "實際坪數": compare_df['實際坪數'],
                             "空間使用率": round(target_usage_rate, 2),
                             "實際單價(萬/坪)": round(actual_price_per_ping, 2)
                         },
@@ -1884,7 +1884,7 @@ def tab1_module():
                     #age_response = model.generate_content(age_prompt)
                     #floor_response = model.generate_content(floor_prompt)
                     #layout_response = model.generate_content(layout_prompt)
-                    summary_response = model.generate_content(summary_prompt)
+                    #summary_response = model.generate_content(summary_prompt)
                     
                     
                     price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
@@ -1892,7 +1892,7 @@ def tab1_module():
                     age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
                     
                 st.success("✅ 分析完成")
                 st.header("🏡 房屋分析說明 ")
