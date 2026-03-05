@@ -1192,8 +1192,8 @@ def tab1_module():
                         "房屋類型": target_type,
                         "比較樣本數": total_count,
                         "目標房屋": {
-                            "建坪": compare_df['建坪'],
-                            "實際坪數": compare_df['實際坪數'],
+                            "建坪": selected_row['建坪'],
+                            "實際坪數": target_area,
                             "空間使用率": round(target_usage_rate, 2),
                             "實際單價(萬/坪)": round(actual_price_per_ping, 2)
                         },
