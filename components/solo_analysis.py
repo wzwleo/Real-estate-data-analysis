@@ -2016,7 +2016,7 @@ def tab1_module():
                 
                 
                 st.markdown("### 📌 最終結論")
-                summary_response = model.generate_content(summary_prompt)
+                st.write(summary_response.text)
                 
                 col1, col2 = st.columns([1, 1])
                 with col1:
