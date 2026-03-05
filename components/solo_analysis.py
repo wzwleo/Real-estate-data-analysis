@@ -1933,25 +1933,25 @@ def tab1_module():
                 
                 # ✅ 分析完成後，存進 session_state
                 st.session_state['solo_analysis_result'] = {
-                    'price_response': price_response.text,
-                    'space_response': space_response.text,
-                    'age_response': age_response.text,
-                    'floor_response': floor_response.text,
-                    'layout_response': layout_response.text,
-                    'summary_response': summary_response.text,
-                    'scores': scores,
-                    'total_score': total_score,
-                    'analysis_payload': analysis_payload,
-                    'floor_area_payload': floor_area_payload,
-                    'age_analysis_payload': age_analysis_payload,
+                    'price_text':             price_response.text,
+                    'space_text':             space_response.text,
+                    'age_text':               age_response.text,
+                    'floor_text':             floor_response.text,
+                    'layout_text':            layout_response.text,
+                    'summary_text':           summary_response.text,
+                    'scores':                 scores,
+                    'total_score':            total_score,
+                    'analysis_payload':       analysis_payload,
+                    'floor_area_payload':     floor_area_payload,
+                    'age_analysis_payload':   age_analysis_payload,
                     'floor_analysis_payload': floor_analysis_payload,
-                    'layout_analysis_payload': layout_analysis_payload,
-                    'selected_row': selected_row.to_dict(),
+                    'layout_analysis_payload':layout_analysis_payload,
+                    'selected_row':           selected_row.to_dict(),
                     'compare_base_df': (
                         all_df.to_dict('records')
                         if all_df is not None and not all_df.empty
                         else []
-                    )
+                    ),
                 }
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
