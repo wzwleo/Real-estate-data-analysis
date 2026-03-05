@@ -1946,17 +1946,9 @@ def tab1_module():
                 
                 st.markdown("### 📌 最終結論")
                 
-                st.write("價格分數:", score_price)
-                st.write("坪數分數:", score_space)
-                st.write("屋齡分數:", score_age)
-                st.write("樓層分數:", score_floor)
-                st.write("格局分數:", score_layout)
-
-                st.write(scores)
-                fig = create_radar_chart(scores)
-                st.write("總評分:", round(total_score,1))
                 col1, col2 = st.columns([1, 1])
                 with col1:
+                    fig = create_radar_chart(scores)
                     st.plotly_chart(fig)
                 with col2:
                     st.markdown(
@@ -1965,13 +1957,38 @@ def tab1_module():
                             color:#00C853;
                             font-size:60px;
                             text-align:center;
-                            margin-top:200px;
+                            margin-top:170px;
                         '>
                         {total_score:.1f} / 100
                         </h1>
                         """,
                         unsafe_allow_html=True
                     )
+                    
+                st.write(
+                    f"價格分數: {score_price:.1f}  "
+                    f"(算式：10 × (1 - |目標單價 - 市場中位數| / 市場中位數))"
+                )
+                
+                st.write(
+                    f"坪數分數: {score_space:.1f}  "
+                    f"(算式：10 × (1 - |空間使用率 - 市場平均使用率| / 市場平均使用率))"
+                )
+                
+                st.write(
+                    f"屋齡分數: {score_age:.1f}  "
+                    f"(算式：10 × (1 - 屋齡百分位 / 100))"
+                )
+                
+                st.write(
+                    f"樓層分數: {score_floor:.1f}  "
+                    f"(算式：10 × (1 - |樓層百分位 - 50| / 50))"
+                )
+                
+                st.write(
+                    f"格局分數: {score_layout:.1f}  "
+                    f"(算式：10 × (格局占比 / 100)"
+                )
                 
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
