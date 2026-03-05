@@ -1879,231 +1879,195 @@ def tab1_module():
 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    price_response = model.generate_content(price_prompt)
-                    space_response = model.generate_content(space_prompt)
-                    age_response = model.generate_content(age_prompt)
-                    floor_response = model.generate_content(floor_prompt)
-                    layout_response = model.generate_content(layout_prompt)
-                    summary_response = model.generate_content(summary_prompt)
+                    #price_response = model.generate_content(price_prompt)
+                    #space_response = model.generate_content(space_prompt)
+                    #age_response = model.generate_content(age_prompt)
+                    #floor_response = model.generate_content(floor_prompt)
+                    #layout_response = model.generate_content(layout_prompt)
+                    #summary_response = model.generate_content(summary_prompt)
                     
                     
-                    #price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
                     
-                st.success("✅ 分析完成")
-                st.header("🏡 房屋分析說明 ")
-                # 使用三引號處理跨行文字
-                st.write("""
-                我們將針對所選房屋的五大面向逐一分析，包括價格、坪數、屋齡、樓層與格局。
-                每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。
-                """)
-                st.markdown("---")
-                
-                st.subheader("價格 💸")
-                # 取得比較資料
-                compare_base_df = pd.DataFrame()
-                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                    compare_base_df = st.session_state.all_properties_df
-                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                    compare_base_df = st.session_state.filtered_df
-                
-                # 原有的圖表顯示
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    if not compare_base_df.empty:
-                        plot_price_scatter(selected_row, compare_base_df)
-                    else:
-                        st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
-                with col2:
-                    st.markdown("### 📌 價格分析結論")
-                    st.write(price_response.text)
-                st.markdown("---")
-
-                st.subheader("坪數 📐")
-                col1, col2 = st.columns([1, 1])
-                
-                with col1:
-                    st.markdown("### 📌 坪數分析結論")
-                    st.write(space_response.text)
-                with col2:
-                    # 取得比較資料
-                    compare_base_df = pd.DataFrame()
-                    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                        compare_base_df = st.session_state.all_properties_df
-                    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                        compare_base_df = st.session_state.filtered_df
-                    
-                    if not compare_base_df.empty:
-                        # 呼叫空間效率圖表函式
-                        plot_space_efficiency_scatter(selected_row, compare_base_df)
-                    else:
-                        st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
-                
-                st.markdown("---")
-                
-                st.subheader("屋齡 🕰")
-                # 取得比較資料
-                compare_base_df = pd.DataFrame()
-                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                    compare_base_df = st.session_state.all_properties_df
-                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                    compare_base_df = st.session_state.filtered_df
-                st.markdown("### 📌 屋齡分析結論")
-                st.write(age_response.text)
-                if not compare_base_df.empty:
-                    plot_age_distribution(selected_row, compare_base_df)
-                else:
-                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
-                st.markdown("---")
-                
-                st.subheader("樓層 🏢")
-                # 取得比較資料
-                compare_base_df = pd.DataFrame()
-                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                    compare_base_df = st.session_state.all_properties_df
-                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                    compare_base_df = st.session_state.filtered_df
-                st.markdown("### 📌 樓層分析結論")
-                st.write(floor_response.text)
-                if not compare_base_df.empty:
-                    plot_floor_distribution(selected_row, compare_base_df)
-                else:
-                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
-                st.markdown("---")
-                
-                st.subheader("格局 🛋")
-                # 取得比較資料
-                compare_base_df = pd.DataFrame()
-                if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-                    compare_base_df = st.session_state.all_properties_df
-                elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-                    compare_base_df = st.session_state.filtered_df
-                st.markdown("### 📌 格局分析結論")
-                st.write(layout_response.text)
-                if not compare_base_df.empty:
-                    plot_layout_distribution(selected_row, compare_base_df)
-                else:
-                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
-                st.markdown("---")
-                
-                
-                score_price = max(0, min(10, 10 - price_percentile/10))
-
-                score_space = (target_usage_rate / median_usage) * 5
-                score_space = max(0, min(10, score_space))
-
-                score_age = max(0, min(10, 10 - age_percentile/10))
-
-                score_floor = 10 - abs(floor_percentile - 50)/5
-                score_floor = max(0, min(10, score_floor))
-
-                score_layout = same_layout_pct / 3
-                score_layout = max(0, min(10, score_layout))
-
-                scores = {
-                    "價格競爭力": round(score_price, 1),
-                    "空間效率": round(score_space, 1),
-                    "屋齡優勢": round(score_age, 1),
-                    "樓層定位": round(score_floor, 1),
-                    "格局流動性": round(score_layout, 1)
-                }
-                
-                total_score = sum(scores.values()) / len(scores) * 10
-                
-                
-                st.markdown("### 📌 最終結論")
-                st.write(summary_response.text)
-                
-                col1, col2 = st.columns([1, 1])
-                with col1:
-                    fig = create_radar_chart(scores)
-                    st.plotly_chart(fig)
-                with col2:
-                    st.markdown(
-                        f"""
-                        <h1 style='
-                            color:#00C853;
-                            font-size:60px;
-                            text-align:center;
-                            margin-top:170px;
-                        '>
-                        {total_score:.1f} / 100
-                        </h1>
-                        """,
-                        unsafe_allow_html=True
+                # ✅ 分析完成後，存進 session_state
+                st.session_state['solo_analysis_result'] = {
+                    'price_response': price_response.text,
+                    'space_response': space_response.text,
+                    'age_response': age_response.text,
+                    'floor_response': floor_response.text,
+                    'layout_response': layout_response.text,
+                    'summary_response': summary_response.text,
+                    'scores': scores,
+                    'total_score': total_score,
+                    'analysis_payload': analysis_payload,
+                    'floor_area_payload': floor_area_payload,
+                    'age_analysis_payload': age_analysis_payload,
+                    'floor_analysis_payload': floor_analysis_payload,
+                    'layout_analysis_payload': layout_analysis_payload,
+                    'selected_row': selected_row.to_dict(),
+                    'compare_base_df': (
+                        all_df.to_dict('records')
+                        if all_df is not None and not all_df.empty
+                        else []
                     )
-                st.markdown("---")
-                # ===============================
-                # 💾 儲存分析結果按鈕
-                # ===============================
-                
-                st.markdown("---")
-                
-                col1, col2, col3 = st.columns([1, 1, 1])
-                with col2:
-                    save_button = st.button("💾 儲存本次分析結果", use_container_width=True, type="primary", key="save_analysis")
-                
-                if save_button:
-                    # 初始化 ai_results
-                    if 'ai_results' not in st.session_state:
-                        st.session_state.ai_results = []
-                    
-                    # 準備要儲存的完整分析資料
-                    analysis_result = {
-                        # 基本資訊
-                        'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
-                        'house_title': selected_row.get('標題', '未知房屋'),
-                        'house_address': selected_row.get('地址', '未提供'),
-                        
-                        # 房屋基本資料
-                        'house_data': {
-                            '總價(萬)': selected_row.get('總價(萬)', '未提供'),
-                            '建坪': selected_row.get('建坪', '未提供'),
-                            '實際坪數': selected_row.get('主+陽', '未提供'),
-                            '格局': selected_row.get('格局', '未提供'),
-                            '樓層': selected_row.get('樓層', '未提供'),
-                            '屋齡': selected_row.get('屋齡', '未提供'),
-                            '車位': selected_row.get('車位', '未提供'),
-                            '類型': selected_row.get('類型', '未提供'),
-                            '行政區': selected_row.get('行政區', '未提供'),
-                        },
-                        
-                        # AI 分析結果
-                        'ai_analysis': {
-                            'price': price_response.text,
-                            'space': space_response.text,
-                            'age': age_response.text,
-                            'floor': floor_response.text,
-                            'layout': layout_response.text,
-                            'summary': summary_response.text,
-                        },
-                        
-                        # 分析數據（用於重新生成圖表）
-                        'analysis_data': {
-                            'price_data': analysis_payload,
-                            'space_data': floor_area_payload,
-                            'age_data': age_analysis_payload if age_analysis_payload else None,
-                            'floor_data': floor_analysis_payload if floor_analysis_payload else None,
-                            'layout_data': layout_analysis_payload if layout_analysis_payload else None,
-                        },
-                        
-                        # 比較資料集（用於重新生成圖表）
-                        'compare_base_df': compare_base_df.to_dict('records') if not compare_base_df.empty else [],
-                        
-                        # 目標房型資料（用於重新生成圖表）
-                        'selected_row': selected_row.to_dict(),
-                    }
-                    
-                    # 儲存到 session_state
-                    st.session_state.ai_results.append(analysis_result)
-                    
-                    st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
-                    st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
-
+                }
+            except Exception as e:
+                st.error(f"❌ 分析過程發生錯誤：{e}")
+        
+        # ── ✅ 渲染區塊：只要 session_state 有結果就顯示，不依賴 analyze_clicked ──
+        if 'solo_analysis_result' in st.session_state:
+            r = st.session_state['solo_analysis_result']
+    
+            # 還原資料（用於重新繪圖）
+            _selected_row = pd.Series(r['selected_row'])
+            _compare_df = pd.DataFrame(r['compare_base_df'])
+    
+            st.success("✅ 分析完成")
+            st.header("🏡 房屋分析說明")
+            st.write("我們將針對所選房屋的五大面向逐一分析，包括價格、坪數、屋齡、樓層與格局。每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。")
+            st.markdown("---")
+    
+            # ── 價格 ──
+            st.subheader("價格 💸")
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                if not _compare_df.empty:
+                    plot_price_scatter(_selected_row, _compare_df)
+                else:
+                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+            with col2:
+                st.markdown("### 📌 價格分析結論")
+                st.write(r['price_text'])
+            st.markdown("---")
+    
+            # ── 坪數 ──
+            st.subheader("坪數 📐")
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                st.markdown("### 📌 坪數分析結論")
+                st.write(r['space_text'])
+            with col2:
+                if not _compare_df.empty:
+                    plot_space_efficiency_scatter(_selected_row, _compare_df)
+                else:
+                    st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+            st.markdown("---")
+    
+            # ── 屋齡 ──
+            st.subheader("屋齡 🕰")
+            st.markdown("### 📌 屋齡分析結論")
+            st.write(r['age_text'])
+            if not _compare_df.empty:
+                plot_age_distribution(_selected_row, _compare_df)
+            else:
+                st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+            st.markdown("---")
+    
+            # ── 樓層 ──
+            st.subheader("樓層 🏢")
+            st.markdown("### 📌 樓層分析結論")
+            st.write(r['floor_text'])
+            if not _compare_df.empty:
+                plot_floor_distribution(_selected_row, _compare_df)
+            else:
+                st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+            st.markdown("---")
+    
+            # ── 格局 ──
+            st.subheader("格局 🛋")
+            st.markdown("### 📌 格局分析結論")
+            st.write(r['layout_text'])
+            if not _compare_df.empty:
+                plot_layout_distribution(_selected_row, _compare_df)
+            else:
+                st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
+            st.markdown("---")
+    
+            # ── 最終結論 & 雷達圖 ──
+            st.markdown("### 📌 最終結論")
+            st.write(r['summary_text'])
+    
+            col1, col2 = st.columns([1, 1])
+            with col1:
+                fig = create_radar_chart(r['scores'])
+                st.plotly_chart(fig)
+            with col2:
+                st.markdown(
+                    f"""
+                    <h1 style='color:#00C853; font-size:60px; text-align:center; margin-top:170px;'>
+                    {r['total_score']:.1f} / 100
+                    </h1>
+                    """,
+                    unsafe_allow_html=True
+                )
+            st.markdown("---")
+    
+            # ── 除錯資訊 ──
+            st.write(r['analysis_payload'])
+            st.write(r['floor_area_payload'])
+            st.write(r['age_analysis_payload'])
+            st.write(r['floor_analysis_payload'])
+            st.write(r['layout_analysis_payload'])
+    
+            scores = r['scores']
+            st.write(f"價格分數: {scores['價格競爭力']}  (算式：10 × (1 - 價格百分位 / 100))")
+            st.write(f"坪數分數: {scores['空間效率']}  (算式：(空間使用率 / 市場中位數使用率) × 5)")
+            st.write(f"屋齡分數: {scores['屋齡優勢']}  (算式：10 × (1 - 屋齡百分位 / 100))")
+            st.write(f"樓層分數: {scores['樓層定位']}  (算式：10 - |樓層百分位 - 50| / 5)")
+            st.write(f"格局分數: {scores['格局流動性']}  (算式：格局占比 / 3)")
+    
+            # ── 儲存按鈕 ──
+            st.markdown("---")
+            col1, col2, col3 = st.columns([1, 1, 1])
+            with col2:
+                save_button = st.button("💾 儲存本次分析結果", use_container_width=True, type="primary", key="save_analysis")
+    
+            if save_button:
+                if 'ai_results' not in st.session_state:
+                    st.session_state.ai_results = []
+    
+                analysis_result = {
+                    'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'house_title': r['selected_row'].get('標題', '未知房屋'),
+                    'house_address': r['selected_row'].get('地址', '未提供'),
+                    'house_data': {
+                        '總價(萬)': r['selected_row'].get('總價(萬)', '未提供'),
+                        '建坪': r['selected_row'].get('建坪', '未提供'),
+                        '實際坪數': r['selected_row'].get('主+陽', '未提供'),
+                        '格局': r['selected_row'].get('格局', '未提供'),
+                        '樓層': r['selected_row'].get('樓層', '未提供'),
+                        '屋齡': r['selected_row'].get('屋齡', '未提供'),
+                        '車位': r['selected_row'].get('車位', '未提供'),
+                        '類型': r['selected_row'].get('類型', '未提供'),
+                        '行政區': r['selected_row'].get('行政區', '未提供'),
+                    },
+                    'ai_analysis': {
+                        'price': r['price_text'],
+                        'space': r['space_text'],
+                        'age': r['age_text'],
+                        'floor': r['floor_text'],
+                        'layout': r['layout_text'],
+                        'summary': r['summary_text'],
+                    },
+                    'analysis_data': {
+                        'price_data': r['analysis_payload'],
+                        'space_data': r['floor_area_payload'],
+                        'age_data': r['age_analysis_payload'],
+                        'floor_data': r['floor_analysis_payload'],
+                        'layout_data': r['layout_analysis_payload'],
+                    },
+                    'compare_base_df': r['compare_base_df'],
+                    'selected_row': r['selected_row'],
+                }
+    
+                st.session_state.ai_results.append(analysis_result)
+                st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
+                st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
                 
                 st.write(analysis_payload)  
                 st.write(floor_area_payload)  
@@ -2135,5 +2099,4 @@ def tab1_module():
                     f"(算式：10 × (格局占比 / 100)"
                 )
                 
-            except Exception as e:
-                st.error(f"❌ 分析過程發生錯誤：{e}")
+
