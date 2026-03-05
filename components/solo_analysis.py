@@ -2100,6 +2100,8 @@ def tab1_module():
                     },
                     'compare_base_df': r['compare_base_df'],
                     'selected_row': r['selected_row'],
+                    'scores': r['scores'],
+                    'total_score': r['total_score'],
                 }
     
                 st.session_state.ai_results.append(analysis_result)
