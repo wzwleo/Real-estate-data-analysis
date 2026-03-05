@@ -2032,7 +2032,7 @@ def tab1_module():
             col1, col2 = st.columns([1, 1])
             with col1:
                 fig = create_radar_chart(r['scores'])
-                st.plotly_chart(fig, key=f"radar_{i}")
+                st.plotly_chart(fig)
             with col2:
                 st.markdown(
                     f"""
