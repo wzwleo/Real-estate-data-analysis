@@ -1096,6 +1096,17 @@ def tab1_module():
                 st.stop()
             try:
                 with st.spinner("📊 正在計算市場價格指標..."):
+                    # ✅ 預設值，避免巢狀 if 未執行時 NameError
+                    age_percentile = 50.0
+                    floor_percentile = 50.0
+                    same_layout_pct = 0.0
+                    age_analysis_payload = None
+                    floor_analysis_payload = None
+                    layout_analysis_payload = None
+                    age_response_text = "（無屋齡資料）"
+                    floor_response_text = "（無樓層資料）"
+                    layout_response_text = "（無格局資料）"
+                    
                     # ===============================
                     # 價格分析（使用建坪）
                     # ===============================
@@ -1894,6 +1905,32 @@ def tab1_module():
                     layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
                     summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
                     
+                # ── ✅ 在 session_state 存入前先算好分數 ──────────────────────────
+                # 給還沒算到的變數加預設值，避免 NameError
+                if 'age_percentile' not in dir():
+                    age_percentile = 50.0
+                if 'floor_percentile' not in dir():
+                    floor_percentile = 50.0
+                if 'median_usage' not in dir() or median_usage == 0:
+                    median_usage = 1.0
+                if 'same_layout_pct' not in dir():
+                    same_layout_pct = 0.0
+                
+                score_price = max(0, min(10, 10 - price_percentile / 10))
+                score_space = max(0, min(10, (target_usage_rate / median_usage) * 5))
+                score_age   = max(0, min(10, 10 - age_percentile / 10))
+                score_floor = max(0, min(10, 10 - abs(floor_percentile - 50) / 5))
+                score_layout = max(0, min(10, same_layout_pct / 3))
+                
+                scores = {
+                    "價格競爭力": round(score_price, 1),
+                    "空間效率":   round(score_space, 1),
+                    "屋齡優勢":   round(score_age, 1),
+                    "樓層定位":   round(score_floor, 1),
+                    "格局流動性": round(score_layout, 1)
+                }
+                total_score = sum(scores.values()) / len(scores) * 10 
+                
                 # ✅ 分析完成後，存進 session_state
                 st.session_state['solo_analysis_result'] = {
                     'price_response': price_response.text,
