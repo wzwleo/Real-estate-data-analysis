@@ -2036,6 +2036,75 @@ def tab1_module():
                         """,
                         unsafe_allow_html=True
                     )
+                st.markdown("---")
+                # ===============================
+                # 💾 儲存分析結果按鈕
+                # ===============================
+                
+                st.markdown("---")
+                
+                col1, col2, col3 = st.columns([1, 1, 1])
+                with col2:
+                    save_button = st.button("💾 儲存本次分析結果", use_container_width=True, type="primary", key="save_analysis")
+                
+                if save_button:
+                    # 初始化 ai_results
+                    if 'ai_results' not in st.session_state:
+                        st.session_state.ai_results = []
+                    
+                    # 準備要儲存的完整分析資料
+                    analysis_result = {
+                        # 基本資訊
+                        'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'house_title': selected_row.get('標題', '未知房屋'),
+                        'house_address': selected_row.get('地址', '未提供'),
+                        
+                        # 房屋基本資料
+                        'house_data': {
+                            '總價(萬)': selected_row.get('總價(萬)', '未提供'),
+                            '建坪': selected_row.get('建坪', '未提供'),
+                            '實際坪數': selected_row.get('主+陽', '未提供'),
+                            '格局': selected_row.get('格局', '未提供'),
+                            '樓層': selected_row.get('樓層', '未提供'),
+                            '屋齡': selected_row.get('屋齡', '未提供'),
+                            '車位': selected_row.get('車位', '未提供'),
+                            '類型': selected_row.get('類型', '未提供'),
+                            '行政區': selected_row.get('行政區', '未提供'),
+                        },
+                        
+                        # AI 分析結果
+                        'ai_analysis': {
+                            'price': price_response.text,
+                            'space': space_response.text,
+                            'age': age_response.text,
+                            'floor': floor_response.text,
+                            'layout': layout_response.text,
+                            'summary': summary_response.text,
+                        },
+                        
+                        # 分析數據（用於重新生成圖表）
+                        'analysis_data': {
+                            'price_data': analysis_payload,
+                            'space_data': floor_area_payload,
+                            'age_data': age_analysis_payload if age_analysis_payload else None,
+                            'floor_data': floor_analysis_payload if floor_analysis_payload else None,
+                            'layout_data': layout_analysis_payload if layout_analysis_payload else None,
+                        },
+                        
+                        # 比較資料集（用於重新生成圖表）
+                        'compare_base_df': compare_base_df.to_dict('records') if not compare_base_df.empty else [],
+                        
+                        # 目標房型資料（用於重新生成圖表）
+                        'selected_row': selected_row.to_dict(),
+                    }
+                    
+                    # 儲存到 session_state
+                    st.session_state.ai_results.append(analysis_result)
+                    
+                    st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
+                    st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
+
+                
                 st.write(analysis_payload)  
                 st.write(floor_area_payload)  
                 st.write(age_analysis_payload)  
