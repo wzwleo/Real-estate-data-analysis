@@ -215,6 +215,24 @@ def render_analysis_records_page():
             st.header("🎯 綜合總結與購屋建議")
             st.markdown("### 📊 整體評估")
             st.write(ai_analysis.get('summary', '無綜合分析'))
+            # ✅ 補上雷達圖與總評分
+            scores = result.get('scores', {})
+            total_score = result.get('total_score', 0)
+            
+            if scores:
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    fig = create_radar_chart(scores)
+                    st.plotly_chart(fig)
+                with col2:
+                    st.markdown(
+                        f"""
+                        <h1 style='color:#00C853; font-size:60px; text-align:center; margin-top:170px;'>
+                        {total_score:.1f} / 100
+                        </h1>
+                        """,
+                        unsafe_allow_html=True
+                    )
             st.markdown("---")
             
             # ===============================
