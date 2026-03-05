@@ -1,5 +1,15 @@
 import streamlit as st
 import pandas as pd
+import streamlit as st
+import pandas as pd
+from components.solo_analysis import (
+    plot_price_scatter,
+    plot_space_efficiency_scatter,
+    plot_age_distribution,
+    plot_floor_distribution,
+    plot_layout_distribution,
+    create_radar_chart,
+)
 
 def render_analysis_records_page():
     st.title("📚 分析結果總覽")
