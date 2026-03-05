@@ -1878,11 +1878,11 @@ def tab1_module():
                 score_layout = same_layout_pct / 3
                 score_layout = max(0, min(10, score_layout))
 
-                print("價格分數:", score_price)
-                print("坪數分數:", score_space)
-                print("屋齡分數:", score_age)
-                print("樓層分數:", score_floor)
-                print("格局分數:", score_layout)
+                st.write("價格分數:", score_price)
+                st.write("坪數分數:", score_space)
+                st.write("屋齡分數:", score_age)
+                st.write("樓層分數:", score_floor)
+                st.write("格局分數:", score_layout)
                 
                 
             except Exception as e:
