@@ -51,14 +51,29 @@ def render_search_form():
         col1, col2, col3 = st.columns(3)
 
         with col1:
+            num_rooms = st.selectbox(
+                "格局數(房)",            # 標籤
+                options=list(range(1, 11)),  # 選項 1~10
+                index=2                     # 預設值的索引（0-based，這裡預設 3 房）
+            )
             age_max = st.number_input("屋齡上限", 0, 100, 100)
             age_min = st.number_input("屋齡下限", 0, 100, 0)
             
         with col2:
+            num_living = st.selectbox(
+                "格局數(廳)",            # 標籤
+                options=list(range(1, 11)),  # 選項 1~10
+                index=1                     # 預設值的索引（0-based，這裡預設 3 房）
+            )
             area_max = st.number_input("建坪上限", 0, 1000, 1000, 10)
             area_min = st.number_input("建坪下限", 0, 1000, 0, 10)
 
         with col3:
+            num_baths = st.selectbox(
+                "格局數(衛)",            # 標籤
+                options=list(range(1, 11)),  # 選項 1~10
+                index=1                     # 預設值的索引（0-based，這裡預設 3 房）
+            )
             car_grip = st.selectbox("🅿️ 車位需求", ["不限", "需要", "不要"])
 
         submit = st.form_submit_button("🔍 搜尋", use_container_width=True)
