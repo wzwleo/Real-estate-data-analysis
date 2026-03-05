@@ -70,7 +70,7 @@ def create_radar_chart(scores_dict, title="房屋綜合評分雷達圖"):
 
     return fig
 
-def plot_layout_distribution(target_row, df):
+def plot_layout_distribution(target_row, df, chart_key=None):
     """
     繪製同區同類型格局分布與平均單價圖
     顯示前五大熱門格局，若目標房型在其中則標示紅星
@@ -258,9 +258,9 @@ def plot_layout_distribution(target_row, df):
         bargap=0.3
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
 
-def plot_floor_distribution(target_row, df):
+def plot_floor_distribution(target_row, df, chart_key=None):
     """
     繪製同區同類型樓層分布直方圖（含平均單價趨勢線）
     與 plot_age_distribution 架構完全一致
@@ -415,9 +415,9 @@ def plot_floor_distribution(target_row, df):
         )
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
 
-def plot_age_distribution(target_row, df):
+def plot_age_distribution(target_row, df, chart_key=None):
     """
     繪製同區同類型屋齡分布直方圖（含建坪單價趨勢線）
     """
@@ -593,10 +593,10 @@ def plot_age_distribution(target_row, df):
         )
     )
     
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True, key=chart_key)
     
 
-def plot_price_scatter(target_row, df):
+def plot_price_scatter(target_row, df, chart_key=None):
     """
     繪製同區同類型房價 vs 建坪散佈圖
     
@@ -759,9 +759,9 @@ def plot_price_scatter(target_row, df):
         showlegend=True
     )
     
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key=chart_key)
 
-def plot_space_efficiency_scatter(target_row, df):
+def plot_space_efficiency_scatter(target_row, df, chart_key=None):
     """
     繪製建坪 vs 實際坪數散佈圖（空間效率分析）
     
@@ -925,7 +925,7 @@ def plot_space_efficiency_scatter(target_row, df):
         showlegend=True
     )
     
-    st.plotly_chart(fig)
+    st.plotly_chart(fig, key=chart_key)
 
 def get_favorites_data():
     """取得收藏房產的資料"""
@@ -2032,7 +2032,7 @@ def tab1_module():
             col1, col2 = st.columns([1, 1])
             with col1:
                 fig = create_radar_chart(r['scores'])
-                st.plotly_chart(fig)
+                st.plotly_chart(fig, key=f"radar_{i}")
             with col2:
                 st.markdown(
                     f"""
@@ -2042,24 +2042,10 @@ def tab1_module():
                     """,
                     unsafe_allow_html=True
                 )
-            st.markdown("---")
-    
-            # ── 除錯資訊 ──
-            st.write(r['analysis_payload'])
-            st.write(r['floor_area_payload'])
-            st.write(r['age_analysis_payload'])
-            st.write(r['floor_analysis_payload'])
-            st.write(r['layout_analysis_payload'])
-    
-            scores = r['scores']
-            st.write(f"價格分數: {scores['價格競爭力']}  (算式：10 × (1 - 價格百分位 / 100))")
-            st.write(f"坪數分數: {scores['空間效率']}  (算式：(空間使用率 / 市場中位數使用率) × 5)")
-            st.write(f"屋齡分數: {scores['屋齡優勢']}  (算式：10 × (1 - 屋齡百分位 / 100))")
-            st.write(f"樓層分數: {scores['樓層定位']}  (算式：10 - |樓層百分位 - 50| / 5)")
-            st.write(f"格局分數: {scores['格局流動性']}  (算式：格局占比 / 3)")
-    
+            
             # ── 儲存按鈕 ──
             st.markdown("---")
+            scores = r['scores']
             col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
                 save_button = st.button("💾 儲存本次分析結果", use_container_width=True, type="primary", key="save_analysis")
@@ -2107,7 +2093,18 @@ def tab1_module():
                 st.session_state.ai_results.append(analysis_result)
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
-                
+                        # ── 除錯資訊 ──
+            st.write(r['analysis_payload'])
+            st.write(r['floor_area_payload'])
+            st.write(r['age_analysis_payload'])
+            st.write(r['floor_analysis_payload'])
+            st.write(r['layout_analysis_payload'])
+    
+            st.write(f"價格分數: {scores['價格競爭力']}  (算式：10 × (1 - 價格百分位 / 100))")
+            st.write(f"坪數分數: {scores['空間效率']}  (算式：(空間使用率 / 市場中位數使用率) × 5)")
+            st.write(f"屋齡分數: {scores['屋齡優勢']}  (算式：10 × (1 - 屋齡百分位 / 100))")
+            st.write(f"樓層分數: {scores['樓層定位']}  (算式：10 - |樓層百分位 - 50| / 5)")
+            st.write(f"格局分數: {scores['格局流動性']}  (算式：格局占比 / 3)")
 
                 
 
