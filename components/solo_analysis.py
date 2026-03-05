@@ -2069,34 +2069,6 @@ def tab1_module():
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
                 
-                st.write(analysis_payload)  
-                st.write(floor_area_payload)  
-                st.write(age_analysis_payload)  
-                st.write(floor_analysis_payload)  
-                st.write(layout_analysis_payload)  
-                st.write(
-                    f"價格分數: {score_price:.1f}  "
-                    f"(算式：10 × (1 - |目標單價 - 市場中位數| / 市場中位數))"
-                )
-                
-                st.write(
-                    f"坪數分數: {score_space:.1f}  "
-                    f"(算式：10 × (1 - |空間使用率 - 市場平均使用率| / 市場平均使用率))"
-                )
-                
-                st.write(
-                    f"屋齡分數: {score_age:.1f}  "
-                    f"(算式：10 × (1 - 屋齡百分位 / 100))"
-                )
-                
-                st.write(
-                    f"樓層分數: {score_floor:.1f}  "
-                    f"(算式：10 × (1 - |樓層百分位 - 50| / 50))"
-                )
-                
-                st.write(
-                    f"格局分數: {score_layout:.1f}  "
-                    f"(算式：10 × (格局占比 / 100)"
-                )
+
                 
 
