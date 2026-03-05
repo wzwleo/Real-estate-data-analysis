@@ -1959,11 +1959,17 @@ def tab1_module():
                 with col1:
                     st.plotly_chart(fig)
                 with col2:
-                    st.write("\n")
-                    st.write("\n")
-                    st.write("\n")
                     st.markdown(
-                        f"<h1 style='color:#00C853; font-size:60px; text-align:center;'>{total_score:.1f} / 100</h1>",
+                        f"""
+                        <h1 style='
+                            color:#00C853;
+                            font-size:60px;
+                            text-align:center;
+                            margin-top:120px;
+                        '>
+                        {total_score:.1f} / 100
+                        </h1>
+                        """,
                         unsafe_allow_html=True
                     )
                 
