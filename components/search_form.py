@@ -90,7 +90,10 @@ def render_search_form():
                 area_min,
                 area_max,
                 car_grip,
-                selected_district
+                selected_district,
+                num_rooms,    
+                num_living,  
+                num_baths     
             )
 
     return None
@@ -127,7 +130,10 @@ def handle_search_submit(
     area_min,
     area_max,
     car_grip,
-    selected_district
+    selected_district,
+    num_rooms,    
+    num_living,  
+    num_baths    
 ):
     """處理搜尋表單提交"""
 
@@ -185,8 +191,11 @@ def handle_search_submit(
             'age_max': age_max,
             'area_min': area_min,
             'area_max': area_max,
-            'car_grip': car_grip
-            
+            'car_grip': car_grip,
+            'num_rooms': num_rooms,    
+            'num_living': num_living,  
+            'num_baths': num_baths     
+                    
         }
 
         filtered_df = filter_properties(df, filters)
