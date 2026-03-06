@@ -205,148 +205,122 @@ class ComparisonAnalyzer:
         
         return auto_subtypes
     
-    def _generate_report_zip(self):
-        """生成包含 Excel 和 TXT 的 ZIP 壓縮檔"""
-        
-        if not st.session_state.saved_analyses:
-            return None
+    def _generate_single_analysis_zip(self, name, analysis):
+        """生成單一分析的 Excel 和 TXT 壓縮檔"""
         
         # 建立記憶體中的 ZIP 檔案
         zip_buffer = io.BytesIO()
         
         with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
             
-            # 1. 合併所有分析的設施表格
-            all_facilities = []
-            all_analyses_summary = []
-            
-            for name, analysis in st.session_state.saved_analyses.items():
-                df = analysis.get('facilities_table', pd.DataFrame())
-                if not df.empty:
+            # 1. 建立 Excel 檔案
+            df = analysis.get('facilities_table', pd.DataFrame())
+            if not df.empty:
+                excel_buffer = io.BytesIO()
+                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
                     # 加入分析名稱欄位
                     df_copy = df.copy()
                     df_copy['分析名稱'] = name
                     df_copy['買家類型'] = analysis.get('buyer_profile', '未知')
                     df_copy['分析時間'] = analysis.get('timestamp', '未知')
-                    all_facilities.append(df_copy)
-                
-                # 收集分析摘要
-                summary = {
-                    '分析名稱': name,
-                    '買家類型': analysis.get('buyer_profile', '未知'),
-                    '分析時間': analysis.get('timestamp', '未知'),
-                    '分析模式': analysis.get('analysis_mode', ''),
-                    '搜尋半徑(公尺)': analysis.get('radius', 0),
-                    '總設施數': len(df) if not df.empty else 0,
-                    '包含嫌惡設施': '是' if analysis.get('include_nuisance', False) else '否'
-                }
-                all_analyses_summary.append(summary)
-            
-            # 2. 建立 Excel 檔案（所有設施清單）
-            if all_facilities:
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine='openpyxl') as writer:
-                    # 工作表1：所有設施清單
-                    combined_df = pd.concat(all_facilities, ignore_index=True)
+                    
                     # 重新排列欄位順序
                     column_order = ['分析名稱', '買家類型', '分析時間', '房屋', '設施名稱', '設施子類別', '距離(公尺)']
-                    available_cols = [col for col in column_order if col in combined_df.columns]
-                    combined_df = combined_df[available_cols]
-                    combined_df.to_excel(writer, sheet_name='所有設施清單', index=False)
+                    available_cols = [col for col in column_order if col in df_copy.columns]
+                    df_copy = df_copy[available_cols]
+                    df_copy.to_excel(writer, sheet_name='設施清單', index=False)
                     
-                    # 工作表2：分析摘要
-                    summary_df = pd.DataFrame(all_analyses_summary)
-                    summary_df.to_excel(writer, sheet_name='分析摘要', index=False)
-                    
-                    # 工作表3：依分析分頁（每個分析一個工作表）
-                    for name, analysis in st.session_state.saved_analyses.items():
-                        df = analysis.get('facilities_table', pd.DataFrame())
-                        if not df.empty:
-                            # 移除不必要的欄位
-                            display_cols = ['房屋', '設施名稱', '設施子類別', '距離(公尺)']
-                            df_display = df[display_cols].copy()
-                            sheet_name = name[:20]  # Excel 工作表名稱限制31字符
-                            df_display.to_excel(writer, sheet_name=sheet_name, index=False)
+                    # 加入分析摘要
+                    summary = pd.DataFrame([{
+                        '分析名稱': name,
+                        '買家類型': analysis.get('buyer_profile', '未知'),
+                        '分析時間': analysis.get('timestamp', '未知'),
+                        '分析模式': analysis.get('analysis_mode', ''),
+                        '搜尋半徑(公尺)': analysis.get('radius', 0),
+                        '總設施數': len(df),
+                        '包含嫌惡設施': '是' if analysis.get('include_nuisance', False) else '否'
+                    }])
+                    summary.to_excel(writer, sheet_name='分析摘要', index=False)
                 
                 excel_buffer.seek(0)
-                zip_file.writestr(f"設施清單總表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", excel_buffer.getvalue())
+                safe_name = re.sub(r'[\\/*?:"<>|]', "", name)[:30]
+                zip_file.writestr(f"{safe_name}_設施清單_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", excel_buffer.getvalue())
             
-            # 3. 加入 TXT 檔案（完整分析報告）
-            txt_content = self._generate_txt_report()
-            zip_file.writestr(f"分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", txt_content.encode('utf-8'))
+            # 2. 加入 TXT 檔案（完整分析報告）
+            txt_content = self._generate_single_txt_report(name, analysis)
+            safe_name = re.sub(r'[\\/*?:"<>|]', "", name)[:30]
+            zip_file.writestr(f"{safe_name}_分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", txt_content.encode('utf-8'))
         
         zip_buffer.seek(0)
         return zip_buffer.getvalue()
     
-    def _generate_txt_report(self):
-        """生成 TXT 格式的完整分析報告"""
+    def _generate_single_txt_report(self, name, analysis):
+        """生成單一分析的 TXT 報告"""
         txt_lines = []
         
         txt_lines.append("=" * 60)
-        txt_lines.append("房屋分析報告")
+        txt_lines.append(f"房屋分析報告 - {name}")
         txt_lines.append(f"報告生成時間：{get_taiwan_time()}")
-        txt_lines.append(f"總分析數：{len(st.session_state.saved_analyses)} 筆")
         txt_lines.append("=" * 60)
         txt_lines.append("")
         
-        for i, (name, analysis) in enumerate(st.session_state.saved_analyses.items()):
-            txt_lines.append(f"【分析 {i+1}】{name}")
+        txt_lines.append(f"【分析】{name}")
+        txt_lines.append("-" * 40)
+        
+        # 基本資訊
+        profile = analysis.get('buyer_profile', '未知')
+        timestamp = analysis.get('timestamp', '未知')
+        mode = analysis.get('analysis_mode', '')
+        include_nuisance = analysis.get('include_nuisance', False)
+        radius = analysis.get('radius', 0)
+        
+        txt_lines.append(f"買家類型：{profile}")
+        txt_lines.append(f"分析時間：{timestamp}")
+        txt_lines.append(f"分析模式：{mode}")
+        txt_lines.append(f"搜尋半徑：{radius} 公尺")
+        if include_nuisance:
+            txt_lines.append("包含嫌惡設施分析：是")
+        txt_lines.append("")
+        
+        # 房屋資訊
+        houses_data = analysis.get('houses_data', {})
+        for h_name, h_info in houses_data.items():
+            txt_lines.append(f"房屋：{h_name}")
+            txt_lines.append(f"  標題：{h_info.get('title', '未知')}")
+            txt_lines.append(f"  地址：{h_info.get('address', '未知')}")
+        txt_lines.append("")
+        
+        # 設施統計
+        counts = analysis.get('facility_counts', {})
+        txt_lines.append("設施統計：")
+        for h_name, count in counts.items():
+            txt_lines.append(f"  {h_name}：{count} 個設施")
+        txt_lines.append("")
+        
+        # 設施清單
+        df = analysis.get('facilities_table', pd.DataFrame())
+        if not df.empty:
+            txt_lines.append("設施清單：")
+            txt_lines.append("-" * 50)
+            
+            # 按距離排序
+            df_sorted = df.sort_values('距離(公尺)')
+            for idx, row in df_sorted.iterrows():
+                # 標記嫌惡設施
+                is_nuisance = " ⚠️" if row['設施子類別'] in NUISANCE_TYPES.keys() else ""
+                txt_lines.append(f"  • {row['設施名稱']} ({row['設施子類別']}){is_nuisance} - {row['距離(公尺)']}公尺")
+            
+            txt_lines.append("")
+        
+        # AI 分析結果
+        if 'gemini_result' in analysis:
+            txt_lines.append("AI 分析報告：")
             txt_lines.append("-" * 40)
-            
-            # 基本資訊
-            profile = analysis.get('buyer_profile', '未知')
-            timestamp = analysis.get('timestamp', '未知')
-            mode = analysis.get('analysis_mode', '')
-            include_nuisance = analysis.get('include_nuisance', False)
-            radius = analysis.get('radius', 0)
-            
-            txt_lines.append(f"買家類型：{profile}")
-            txt_lines.append(f"分析時間：{timestamp}")
-            txt_lines.append(f"分析模式：{mode}")
-            txt_lines.append(f"搜尋半徑：{radius} 公尺")
-            if include_nuisance:
-                txt_lines.append("包含嫌惡設施分析：是")
+            txt_lines.append(analysis['gemini_result'])
             txt_lines.append("")
-            
-            # 房屋資訊
-            houses_data = analysis.get('houses_data', {})
-            for h_name, h_info in houses_data.items():
-                txt_lines.append(f"房屋：{h_name}")
-                txt_lines.append(f"  標題：{h_info.get('title', '未知')}")
-                txt_lines.append(f"  地址：{h_info.get('address', '未知')}")
-            txt_lines.append("")
-            
-            # 設施統計
-            counts = analysis.get('facility_counts', {})
-            txt_lines.append("設施統計：")
-            for h_name, count in counts.items():
-                txt_lines.append(f"  {h_name}：{count} 個設施")
-            txt_lines.append("")
-            
-            # 設施清單
-            df = analysis.get('facilities_table', pd.DataFrame())
-            if not df.empty:
-                txt_lines.append("設施清單：")
-                txt_lines.append("-" * 50)
-                
-                # 按距離排序
-                df_sorted = df.sort_values('距離(公尺)')
-                for idx, row in df_sorted.iterrows():
-                    # 標記嫌惡設施
-                    is_nuisance = " ⚠️" if row['設施子類別'] in NUISANCE_TYPES.keys() else ""
-                    txt_lines.append(f"  • {row['設施名稱']} ({row['設施子類別']}){is_nuisance} - {row['距離(公尺)']}公尺")
-                
-                txt_lines.append("")
-            
-            # AI 分析結果
-            if 'gemini_result' in analysis:
-                txt_lines.append("AI 分析報告：")
-                txt_lines.append("-" * 40)
-                txt_lines.append(analysis['gemini_result'])
-                txt_lines.append("")
-            
-            txt_lines.append("=" * 60)
-            txt_lines.append("")
+        
+        txt_lines.append("=" * 60)
+        txt_lines.append("")
         
         return "\n".join(txt_lines)
     
@@ -374,29 +348,33 @@ class ComparisonAnalyzer:
                         timestamp = analysis.get('timestamp', '未知時間')
                         include_nuisance = analysis.get('include_nuisance', False)
                         
-                        btn_label = f"{icon} {name[:20]}... {profile} | {timestamp}"
-                        if include_nuisance:
-                            btn_label = "⚠️ " + btn_label
+                        # 分析按鈕
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            btn_label = f"{icon} {name[:20]}... {profile} | {timestamp}"
+                            if include_nuisance:
+                                btn_label = "⚠️ " + btn_label
+                            
+                            if name == st.session_state.current_analysis_name:
+                                btn_label = f"👉 {btn_label}"
+                            
+                            if st.button(btn_label, key=f"saved_{name}", use_container_width=True):
+                                st.session_state.current_analysis_name = name
+                                st.rerun()
                         
-                        if name == st.session_state.current_analysis_name:
-                            btn_label = f"👉 {btn_label}"
-                        
-                        if st.button(btn_label, key=f"saved_{name}", use_container_width=True):
-                            st.session_state.current_analysis_name = name
-                            st.rerun()
+                        with col2:
+                            # 下載按鈕
+                            if st.button("📥", key=f"download_{name}", help="下載此分析"):
+                                with st.spinner("生成報告中..."):
+                                    zip_data = self._generate_single_analysis_zip(name, analysis)
+                                    if zip_data:
+                                        b64 = base64.b64encode(zip_data).decode()
+                                        safe_name = re.sub(r'[\\/*?:"<>|]', "", name)[:30]
+                                        filename = f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
+                                        href = f'<a href="data:application/zip;base64,{b64}" download="{filename}">✅ 點此下載</a>'
+                                        st.markdown(href, unsafe_allow_html=True)
                     
-                    # 下載報告按鈕 - 取代原來的 PDF 下載
-                    if st.button("📥 下載報告 (Excel + TXT)", use_container_width=True):
-                        with st.spinner("生成報告中..."):
-                            zip_data = self._generate_report_zip()
-                            if zip_data:
-                                b64 = base64.b64encode(zip_data).decode()
-                                filename = f"房屋分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip"
-                                href = f'<a href="data:application/zip;base64,{b64}" download="{filename}">✅ 點此下載</a>'
-                                st.markdown(href, unsafe_allow_html=True)
-                            else:
-                                st.error("報告生成失敗")
-                    
+                    # 清除所有分析按鈕
                     if st.button("🗑️ 清除所有分析", use_container_width=True):
                         st.session_state.saved_analyses = {}
                         st.session_state.current_analysis_name = None
@@ -872,7 +850,7 @@ class ComparisonAnalyzer:
                     "num_houses": len(houses_data),
                     "facilities_table": table,
                     "buyer_profile": s.get("profile", "未指定"),
-                    "timestamp": get_taiwan_time()  # 使用台灣時間
+                    "timestamp": get_taiwan_time()
                 }
                 
                 if s["mode"] == "單一房屋分析":
@@ -1161,7 +1139,7 @@ class ComparisonAnalyzer:
                     "num_houses": len(houses_data),
                     "facilities_table": table,
                     "buyer_profile": s.get("profile", "未指定"),
-                    "timestamp": get_taiwan_time(),  # 使用台灣時間
+                    "timestamp": get_taiwan_time(),
                     "include_nuisance": s.get("include_nuisance", False),
                     "nuisance_data": nuisance_data if s.get("include_nuisance", False) else None
                 }
