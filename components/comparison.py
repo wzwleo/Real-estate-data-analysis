@@ -11,10 +11,11 @@ from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
 from collections import Counter
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
 import io
 import re
 import zipfile
+import pytz
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,6 +36,22 @@ except ImportError as e:
     CHINESE_TO_CATEGORY = {}
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
+
+# 設定台灣時區
+try:
+    TZ_TAIWAN = pytz.timezone('Asia/Taipei')
+except:
+    TZ_TAIWAN = None
+
+def get_taiwan_time():
+    """取得台灣時間"""
+    if TZ_TAIWAN:
+        return datetime.now(TZ_TAIWAN).strftime('%Y-%m-%d %H:%M:%S')
+    else:
+        # 如果沒有 pytz，手動調整 UTC+8
+        utc_now = datetime.utcnow()
+        taiwan_time = utc_now + timedelta(hours=8)
+        return taiwan_time.strftime('%Y-%m-%d %H:%M:%S')
 
 
 class ComparisonAnalyzer:
@@ -252,11 +269,11 @@ class ComparisonAnalyzer:
                             df_display.to_excel(writer, sheet_name=sheet_name, index=False)
                 
                 excel_buffer.seek(0)
-                zip_file.writestr(f"設施清單總表_{time.strftime('%Y%m%d_%H%M%S')}.xlsx", excel_buffer.getvalue())
+                zip_file.writestr(f"設施清單總表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx", excel_buffer.getvalue())
             
             # 3. 加入 TXT 檔案（完整分析報告）
             txt_content = self._generate_txt_report()
-            zip_file.writestr(f"分析報告_{time.strftime('%Y%m%d_%H%M%S')}.txt", txt_content.encode('utf-8'))
+            zip_file.writestr(f"分析報告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", txt_content.encode('utf-8'))
         
         zip_buffer.seek(0)
         return zip_buffer.getvalue()
@@ -267,7 +284,7 @@ class ComparisonAnalyzer:
         
         txt_lines.append("=" * 60)
         txt_lines.append("房屋分析報告")
-        txt_lines.append(f"生成時間：{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        txt_lines.append(f"報告生成時間：{get_taiwan_time()}")
         txt_lines.append(f"總分析數：{len(st.session_state.saved_analyses)} 筆")
         txt_lines.append("=" * 60)
         txt_lines.append("")
@@ -357,7 +374,7 @@ class ComparisonAnalyzer:
                         timestamp = analysis.get('timestamp', '未知時間')
                         include_nuisance = analysis.get('include_nuisance', False)
                         
-                        btn_label = f"{icon} {name[:20]}...\n{profile} | {timestamp}"
+                        btn_label = f"{icon} {name[:20]}... {profile} | {timestamp}"
                         if include_nuisance:
                             btn_label = "⚠️ " + btn_label
                         
@@ -855,7 +872,7 @@ class ComparisonAnalyzer:
                     "num_houses": len(houses_data),
                     "facilities_table": table,
                     "buyer_profile": s.get("profile", "未指定"),
-                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+                    "timestamp": get_taiwan_time()  # 使用台灣時間
                 }
                 
                 if s["mode"] == "單一房屋分析":
@@ -1144,7 +1161,7 @@ class ComparisonAnalyzer:
                     "num_houses": len(houses_data),
                     "facilities_table": table,
                     "buyer_profile": s.get("profile", "未指定"),
-                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+                    "timestamp": get_taiwan_time(),  # 使用台灣時間
                     "include_nuisance": s.get("include_nuisance", False),
                     "nuisance_data": nuisance_data if s.get("include_nuisance", False) else None
                 }
@@ -1822,12 +1839,12 @@ class ComparisonAnalyzer:
                 if mode != "單一房屋分析":
                     report_title = f"{profile}視角-{res['num_houses']}間房屋{'含嫌惡設施' if include_nuisance else '生活機能'}比較報告"
                 
-                report = f"{report_title}\n生成時間：{time.strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+                report = f"{report_title}\n生成時間：{get_taiwan_time()}\n\n"
                 report += f"AI 分析結果：\n{st.session_state.gemini_result}"
                 st.download_button(
                     label="📥 下載分析報告",
                     data=report,
-                    file_name=f"{report_title}_{time.strftime('%Y%m%d_%H%M%S')}.txt",
+                    file_name=f"{report_title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
                     mime="text/plain",
                     use_container_width=True,
                     key="download_report"
