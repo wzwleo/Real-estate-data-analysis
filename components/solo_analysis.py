@@ -1959,6 +1959,8 @@ def tab1_module():
         # ── ✅ 渲染區塊：只要 session_state 有結果就顯示，不依賴 analyze_clicked ──
         if 'solo_analysis_result' in st.session_state:
             r = st.session_state['solo_analysis_result']
+        if "ai_results_summary" not in st.session_state:
+            st.session_state.ai_results_summary = []
     
             # 還原資料（用於重新繪圖）
             _selected_row = pd.Series(r['selected_row'])
