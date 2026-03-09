@@ -996,15 +996,13 @@ class ComparisonAnalyzer:
                     "房屋地址": h_info['address'],
                     "設施名稱": p[2],
                     "設施子類別": p[1],
-                    "主要類別": p[0],  # 新增：判斷是否為嫌惡設施
+                    "主要類別": p[0],
                     "距離(公尺)": p[5],
                     "經度": p[4],
                     "緯度": p[3],
                     "place_id": p[6]
                 })
         return pd.DataFrame(rows)
-    
-    # ==================== 修改：顯示分析結果（嫌惡設施獨立）====================
     
     def _display_analysis_results(self, res):
         """顯示分析結果 - 嫌惡設施獨立"""
@@ -1042,7 +1040,7 @@ class ComparisonAnalyzer:
         df = res.get("facilities_table", pd.DataFrame())
         if not df.empty:
             # 分離一般設施和嫌惡設施
-            if include_nuisance:
+            if include_nuisance and '主要類別' in df.columns:
                 normal_df = df[df['主要類別'] != "嫌惡設施"].copy()
                 nuisance_df = df[df['主要類別'] == "嫌惡設施"].copy()
             else:
@@ -1123,13 +1121,15 @@ class ComparisonAnalyzer:
             return
         
         # 分離一般設施和嫌惡設施
-        if include_nuisance:
+        if include_nuisance and '主要類別' in df.columns:
             normal_df = df[df['主要類別'] != "嫌惡設施"]
             nuisance_df = df[df['主要類別'] == "嫌惡設施"]
             normal_cnt = len(normal_df)
             nuisance_cnt = len(nuisance_df)
             total_cnt = len(df)
         else:
+            normal_df = df
+            nuisance_df = pd.DataFrame()
             normal_cnt = len(df)
             nuisance_cnt = 0
             total_cnt = len(df)
@@ -1197,18 +1197,24 @@ class ComparisonAnalyzer:
         names = list(houses_data.keys())
         
         # 分離一般設施和嫌惡設施
-        if include_nuisance:
+        if include_nuisance and '主要類別' in df.columns:
             normal_df = df[df['主要類別'] != "嫌惡設施"]
             nuisance_df = df[df['主要類別'] == "嫌惡設施"]
-            
-            # 各房屋統計
-            normal_counts = normal_df.groupby('房屋').size().to_dict()
-            nuisance_counts = nuisance_df.groupby('房屋').size().to_dict()
-            total_counts = df.groupby('房屋').size().to_dict()
         else:
-            normal_counts = df.groupby('房屋').size().to_dict()
-            nuisance_counts = {name: 0 for name in names}
-            total_counts = normal_counts
+            normal_df = df.copy()
+            nuisance_df = pd.DataFrame()
+        
+        # 各房屋統計
+        normal_counts = normal_df.groupby('房屋').size().to_dict()
+        nuisance_counts = nuisance_df.groupby('房屋').size().to_dict() if not nuisance_df.empty else {}
+        total_counts = df.groupby('房屋').size().to_dict()
+        
+        # 為沒有資料的房屋補0
+        for name in names:
+            if name not in normal_counts:
+                normal_counts[name] = 0
+            if name not in nuisance_counts:
+                nuisance_counts[name] = 0
         
         # 顯示統計
         cols = st.columns(min(4, len(names)))
@@ -1545,7 +1551,7 @@ class ComparisonAnalyzer:
             return
         
         # 分離一般設施和嫌惡設施
-        if include_nuisance:
+        if include_nuisance and '主要類別' in df.columns:
             normal_df = df[df['主要類別'] != "嫌惡設施"]
             nuisance_df = df[df['主要類別'] == "嫌惡設施"]
         else:
@@ -1620,8 +1626,6 @@ class ComparisonAnalyzer:
                         with col4:
                             st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
                         st.divider()
-    
-    # ==================== AI 分析（嫌惡設施獨立）====================
     
     def _display_ai_analysis(self, res):
         """AI 分析 - 嫌惡設施獨立章節"""
@@ -1734,7 +1738,7 @@ class ComparisonAnalyzer:
             return "無周邊設施資料", ""
         
         # 分離一般設施和嫌惡設施
-        if include_nuisance:
+        if include_nuisance and '主要類別' in df.columns:
             normal_df = df[df['主要類別'] != "嫌惡設施"]
             nuisance_df = df[df['主要類別'] == "嫌惡設施"]
         else:
@@ -1924,7 +1928,7 @@ class ComparisonAnalyzer:
         # 各房屋嫌惡設施數量
         nuisance_counts = {}
         df = res.get("facilities_table", pd.DataFrame())
-        if not df.empty:
+        if not df.empty and '主要類別' in df.columns:
             nuisance_df = df[df['主要類別'] == "嫌惡設施"]
             for name in houses_data.keys():
                 nuisance_counts[name] = len(nuisance_df[nuisance_df['房屋'] == name])
