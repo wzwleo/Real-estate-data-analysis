@@ -18,7 +18,7 @@ import zipfile
 import pytz
 
 # 修正匯入路徑
-current_dir = os.path.dirname(os.path.abspath(__file__))
+current_dir = os.path.dirname(os.path.abspath(_file_))
 parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
@@ -614,7 +614,7 @@ class ComparisonAnalyzer:
             total_selected = sum(len(v) for v in st.session_state.last_selected_subtypes.values())
             if total_selected > 0:
                 st.markdown("### 📋 當前選擇摘要")
-                st.info(f"📌 當前已選擇 **{total_selected}** 種設施")
+                st.info(f"📌 當前已選擇 *{total_selected}* 種設施")
                 
                 cols = st.columns(3)
                 col_idx = 0
@@ -750,7 +750,7 @@ class ComparisonAnalyzer:
                         st.rerun()
                 with cc3:
                     if current_profile:
-                        st.markdown(f"💡 **{current_profile}推薦**")
+                        st.markdown(f"💡 *{current_profile}推薦*")
                 
                 # 取得此類別所有設施（去除重複）
                 items = []
@@ -1100,7 +1100,7 @@ class ComparisonAnalyzer:
         
         if len(selected) == 1:
             h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == selected[0]].iloc[0]
-            st.markdown(f"**🏠 {h['標題'][:30]}**  |  📍 {h['地址'][:20]}...")
+            st.markdown(*🏠 {h['標題'][:30]}***  |  📍 {h['地址'][:20]}...")
         else:
             cols = st.columns(min(3, len(selected)))
             for i, opt in enumerate(selected[:3]):
@@ -1108,7 +1108,7 @@ class ComparisonAnalyzer:
                 with cols[i]:
                     letter = chr(65 + i)
                     price = f"💰 {int(h['平均單價元平方公尺']):,} 元/㎡" if '平均單價元平方公尺' in h else ""
-                    st.markdown(f"**房屋 {letter}**  \n📍 {h['地址'][:15]}...  \n{price}")
+                    st.markdown(f*房屋 {letter}**  \n📍 {h['地址'][:15]}...  \n{price}")
     
     def _validate_inputs(self, houses, cats):
         """驗證輸入"""
@@ -1789,7 +1789,7 @@ class ComparisonAnalyzer:
                     
                     var legendDiv = document.createElement('div');
                     legendDiv.id = 'legend';
-                    legendDiv.innerHTML = '<h4 style="margin-top:0; margin-bottom:10px;">設施類別圖例</h4>' + `{legend_html}`;
+                    legendDiv.innerHTML = '<h4 style="margin-top:0; margin-bottom:10px;">設施類別圖例</h4>' + {legend_html};
                     map.controls[google.maps.ControlPosition.RIGHT_TOP].push(legendDiv);
                     
                     var facilities = {facilities_json};
@@ -1864,9 +1864,9 @@ class ComparisonAnalyzer:
         </html>
         """
         
-        st.markdown(f"**🗺️ {title} - 周邊設施地圖**")
+        st.markdown(*🗺️ {title} - 周邊設施地圖***")
         if places:
-            st.markdown(f"📊 **共找到 {len(places)} 個設施** (搜尋半徑: {radius}公尺)")
+            st.markdown(f"📊 *共找到 {len(places)} 個設施* (搜尋半徑: {radius}公尺)")
         else:
             st.info(f"📭 {title} 周圍半徑 {radius} 公尺內未找到設施")
         
@@ -1908,7 +1908,7 @@ class ComparisonAnalyzer:
                         col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
                         
                         with col1:
-                            st.markdown(f"**{i}.** {name}")
+                            st.markdown(f"*{i}.* {name}")
                         
                         with col2:
                             st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{subtype}</span>', 
@@ -1967,9 +1967,9 @@ class ComparisonAnalyzer:
                 st.markdown(f"- {pt}")
             if include_nuisance:
                 st.markdown("---")
-                st.markdown("⚠️ **此分析包含嫌惡設施評估**")
+                st.markdown("⚠️ *此分析包含嫌惡設施評估*")
             st.markdown("---")
-            st.markdown("**提示：**")
+            st.markdown("*提示：*")
             st.markdown("您可以編輯左側的提示詞，讓AI更符合您的需求")
             if st.button("🔄 恢復預設提示詞", use_container_width=True, key="reset_prompt"):
                 st.session_state.custom_prompt = prompt
@@ -2059,15 +2059,15 @@ class ComparisonAnalyzer:
 3. **主要缺點**（3-5點）
    對{profile}來說的不足之處或潛在問題，請具體說明每個缺點的影響程度，並指出缺少哪些重要設施。
 
-4. **生活便利性預測**
+4. *生活便利性預測*
    - 平日通勤/上班日：預測平日的生活便利性
    - 假日生活：預測週末的生活樣貌
    - 緊急情況（醫療、採買）：評估緊急情況下的應變能力
 
-5. **未來發展潛力**
+5. *未來發展潛力*
    根據周邊設施和區域特性，預測這個地點未來3-5年的發展潛力。
 
-6. **購買建議**
+6. *購買建議*
    - 是否適合{profile}購買？
    - 合理的價格區間建議
    - 什麼時候是最佳購買時機？
@@ -2135,10 +2135,10 @@ class ComparisonAnalyzer:
    - 假日生活：預測週末的生活樣貌（考慮嫌惡設施的影響）
    - 緊急情況（醫療、採買）：評估緊急情況下的應變能力
 
-5. **未來發展潛力**
+5. *未來發展潛力*
    根據周邊設施和區域特性，預測這個地點未來3-5年的發展潛力，**並評估嫌惡設施是否可能搬遷或改善**。
 
-6. **購買建議**
+6. *購買建議*
    - 是否適合{profile}購買？**考慮嫌惡設施的影響**
    - 合理的價格區間建議（**因嫌惡設施應有適當折價**）
    - 什麼時候是最佳購買時機？
@@ -2180,7 +2180,7 @@ class ComparisonAnalyzer:
 2. **各房屋評分與計算方式**（1-10分）
    {chr(10).join([f'   - {name}：___分\n     交通便利性(3):___ 日常採買(3):___ 生活品質(2):___ 特殊需求(2):___' for name in houses_data.keys()])}
 
-3. **優缺點比較表**
+3. *優缺點比較表*
    | 項目 | {' | '.join(houses_data.keys())} |
    |------|{'|'.join(['---' for _ in houses_data])}|
    | 交通便利性 | |{' |'.join([' ' for _ in houses_data])}|
@@ -2189,15 +2189,15 @@ class ComparisonAnalyzer:
    | 價格效益 | |{' |'.join([' ' for _ in houses_data])}|
    | 未來潛力 | |{' |'.join([' ' for _ in houses_data])}|
 
-4. **各房屋詳細分析**
+4. *各房屋詳細分析*
    {chr(10).join([f'   **{name}**：\n   - 優勢（引用具體設施）：\n   - 劣勢（缺少的設施）：\n   - 適合{profile}的程度：' for name in houses_data.keys()])}
 
-5. **最終推薦**
+5. *最終推薦*
    - **首選**：房屋___，因為...
    - **備選**：房屋___，當首選有問題時
    - **不建議**：房屋___，因為...
 
-6. **購買時機建議**
+6. *購買時機建議*
    現在是否適合購買？應該等待還是立即行動？預期的價格趨勢如何？
 
 請用專業、客觀的角度分析，給出實用的比較建議，並盡量引用具體的設施名稱和距離來支持你的觀點。
@@ -2246,7 +2246,7 @@ class ComparisonAnalyzer:
 2. **各房屋評分與計算方式**（1-10分）
    {chr(10).join([f'   - {name}：___分\n     交通便利性(3):___ 日常採買(3):___ 生活品質(2):___ 特殊需求(2):___ 嫌惡設施扣分(最高-3):___' for name in houses_data.keys()])}
 
-3. **優缺點比較表**
+3. *優缺點比較表*
    | 項目 | {' | '.join(houses_data.keys())} |
    |------|{'|'.join(['---' for _ in houses_data])}|
    | 交通便利性 | |{' |'.join([' ' for _ in houses_data])}|
@@ -2256,15 +2256,15 @@ class ComparisonAnalyzer:
    | 未來潛力 | |{' |'.join([' ' for _ in houses_data])}|
    | 嫌惡設施影響 | |{' |'.join([str(nuisance_counts.get(name, 0)) + '處' for name in houses_data.keys()])}|
 
-4. **各房屋詳細分析**
+4. *各房屋詳細分析*
    {chr(10).join([f'   **{name}**：\n   - 優勢（引用具體設施）：\n   - 劣勢（包含嫌惡設施）：\n   - 嫌惡設施影響：{nuisance_counts.get(name, 0)}處\n   - 適合{profile}的程度：' for name in houses_data.keys()])}
 
-5. **最終推薦**
+5. *最終推薦*
    - **首選**：房屋___，因為...（考慮嫌惡設施的影響）
    - **備選**：房屋___，當首選有問題時
    - **不建議**：房屋___，因為...（可能因嫌惡設施過多）
 
-6. **購買時機建議**
+6. *購買時機建議*
    現在是否適合購買？應該等待還是立即行動？預期的價格趨勢如何？**請考慮嫌惡設施對房價的長期影響**。
 
 請用專業、客觀的角度分析，給出實用的比較建議，並盡量引用具體的設施名稱和距離來支持你的觀點。
