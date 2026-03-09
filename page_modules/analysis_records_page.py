@@ -230,7 +230,6 @@ def render_analysis_records_page():
                         """,
                         unsafe_allow_html=True
                     )
-            st.write(st.session_state.ai_results_summary)
             st.markdown("---")
             
             # ===============================
