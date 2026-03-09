@@ -80,7 +80,7 @@ class ComparisonAnalyzer:
             if key not in st.session_state:
                 st.session_state[key] = value
     
-    # ==================== 新增：深度分析輔助函式 ====================
+    # ==================== 深度分析輔助函式（修正版）====================
     
     def _get_depth_analysis_by_title(self, title):
         """根據房屋標題從 ai_results_summary 取得深度分析資料"""
@@ -1482,7 +1482,7 @@ class ComparisonAnalyzer:
             else:
                 st.info(f"📭 {house_name} 周圍未找到設施")
     
-    # ==================== 修改：AI 分析加入深度數據 ====================
+    # ==================== AI 分析加入深度數據（修正版）====================
     
     def _display_ai_analysis(self, res):
         """AI 分析 - 加入深度分析數據"""
@@ -1499,7 +1499,7 @@ class ComparisonAnalyzer:
         # 產生詳細的設施清單
         facilities_text = self._format_all_facilities_for_prompt(res)
         
-        # ====== 新增：取得深度分析資料 ======
+        # ====== 修正：用標題取得深度分析資料 ======
         depth_texts = {}
         if 'ai_results_summary' in st.session_state:
             if mode == "單一房屋分析":
@@ -1590,16 +1590,13 @@ class ComparisonAnalyzer:
                     key="download_report"
                 )
     
-    # ==================== 修改：四種 Prompt 建構函式 ====================
-    
     def _build_single_without_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
-        """單一房屋無嫌惡設施的提示詞 - 加入深度分析"""
+        """單一房屋無嫌惡設施的提示詞"""
         name = list(res["houses_data"].keys())[0]
         h = res["houses_data"][name]
         cnt = res["facility_counts"].get(name, 0)
         focus = pinfo.get("prompt_focus", [])
         
-        # 取得深度分析文字
         depth_text = depth_texts.get(name, "")
         
         return f"""
@@ -1628,47 +1625,43 @@ class ComparisonAnalyzer:
 
 1. **綜合評分**（1-10分）
    請根據{profile}的需求給出具體分數，並詳細說明評分依據：
-   - 交通便利性（滿分3分）：根據周邊交通設施數量和距離評分
-   - 日常採買（滿分3分）：根據超市、便利商店等設施評分
-   - 生活品質（滿分2分）：根據公園、餐廳等設施評分
-   - 特殊需求（滿分2分）：根據{profile}的關注重點評分
-   請列出每項得分和計算方式。
+   - 交通便利性（滿分3分）
+   - 日常採買（滿分3分）
+   - 生活品質（滿分2分）
+   - 特殊需求（滿分2分）
 
 2. **主要優點**（3-5點）
-   對{profile}來說最實用的設施和生活機能，**並結合房屋本身優勢**，請引用具體數據。
+   對{profile}來說最實用的設施和生活機能，**並結合房屋本身優勢**
 
 3. **主要缺點**（3-5點）
-   對{profile}來說的不足之處或潛在問題，**包含房屋本身劣勢**。
+   對{profile}來說的不足之處或潛在問題，**包含房屋本身劣勢**
 
 4. **生活便利性預測**
-   - 平日通勤/上班日：預測平日的生活便利性
-   - 假日生活：預測週末的生活樣貌
-   - 緊急情況（醫療、採買）：評估緊急情況下的應變能力
+   - 平日通勤/上班日
+   - 假日生活
+   - 緊急情況
 
 5. **未來發展潛力**
-   根據房屋條件和周邊設施，預測這個地點未來3-5年的發展潛力。
+   根據房屋條件和周邊設施預測
 
 6. **購買建議**
    - 是否適合{profile}購買？
    - 合理的價格區間建議
-   - 什麼時候是最佳購買時機？
 
-請用專業、客觀的角度分析，給出實用的建議，並盡量引用具體的設施名稱和距離來支持你的觀點。
+請用專業、客觀的角度分析，給出實用的建議。
 """
 
     def _build_single_with_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
-        """單一房屋有嫌惡設施的提示詞 - 加入深度分析"""
+        """單一房屋有嫌惡設施的提示詞"""
         name = list(res["houses_data"].keys())[0]
         h = res["houses_data"][name]
         cnt = res["facility_counts"].get(name, 0)
         focus = pinfo.get("prompt_focus", [])
         
-        # 計算嫌惡設施數量
         nuisance_count = 0
         if res.get('nuisance_data'):
             nuisance_count = len(res['nuisance_data'].get(name, []))
         
-        # 取得深度分析文字
         depth_text = depth_texts.get(name, "")
         
         return f"""
@@ -1696,42 +1689,32 @@ class ComparisonAnalyzer:
 請根據【房屋深度分析】和【周邊設施清單】兩者綜合評估，**特別注意嫌惡設施的影響**，提供以下分析：
 
 1. **綜合評分**（1-10分）
-   請根據{profile}的需求給出具體分數，並詳細說明評分依據：
-   - 交通便利性（滿分3分）：根據周邊交通設施數量和距離評分
-   - 日常採買（滿分3分）：根據超市、便利商店等設施評分
-   - 生活品質（滿分2分）：根據公園、餐廳等設施評分，**會因嫌惡設施而扣分**
-   - 特殊需求（滿分2分）：根據{profile}的關注重點評分
-   - **嫌惡設施扣分**：根據數量、距離和類型，從總分中扣除（最高扣3分）
-   
-   請列出每項得分、扣分項目和最終計算方式。
+   - 交通便利性（滿分3分）
+   - 日常採買（滿分3分）
+   - 生活品質（滿分2分，**會因嫌惡設施而扣分**）
+   - 特殊需求（滿分2分）
+   - **嫌惡設施扣分**（最高扣3分）
 
 2. **主要優點**（3-5點）
-   對{profile}來說最實用的設施和生活機能，**並結合房屋本身優勢**，請引用具體數據。
+   對{profile}來說最實用的設施和生活機能，**並結合房屋本身優勢**
 
 3. **主要缺點**（3-5點）
-   對{profile}來說的不足之處或潛在問題，**必須包含嫌惡設施的影響和房屋本身劣勢**，請具體說明：
-   - 每個嫌惡設施的類型、距離和潛在影響
-   - 對日常生活、居住品質的具體影響
-   - 對房價的可能影響
+   **必須包含嫌惡設施的影響和房屋本身劣勢**
 
 4. **生活便利性預測**（需考慮嫌惡設施）
-   - 平日通勤/上班日：預測平日的生活便利性
-   - 假日生活：預測週末的生活樣貌（考慮嫌惡設施的影響）
-   - 緊急情況（醫療、採買）：評估緊急情況下的應變能力
 
 5. **未來發展潛力**
-   根據房屋條件和周邊設施，預測這個地點未來3-5年的發展潛力，**並評估嫌惡設施是否可能搬遷或改善**。
+   **並評估嫌惡設施是否可能搬遷或改善**
 
 6. **購買建議**
    - 是否適合{profile}購買？**考慮嫌惡設施的影響**
    - 合理的價格區間建議（**因嫌惡設施應有適當折價**）
-   - 什麼時候是最佳購買時機？
 
-請用專業、客觀的角度分析，給出實用的建議，並盡量引用具體的設施名稱和距離來支持你的觀點。
+請用專業、客觀的角度分析，給出實用的建議。
 """
 
     def _build_multi_without_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
-        """多房屋比較無嫌惡設施的提示詞 - 加入深度分析"""
+        """多房屋比較無嫌惡設施的提示詞"""
         houses_data = res["houses_data"]
         counts = res["facility_counts"]
         focus = pinfo.get("prompt_focus", [])
@@ -1740,7 +1723,6 @@ class ComparisonAnalyzer:
         comparison_rows = [f"  {name}：{cnt} 個設施" for name, cnt in counts.items()]
         comparison_text = "\n".join(comparison_rows)
         
-        # 整理各房屋深度分析
         depth_section = "\n【各房屋深度分析】\n"
         for name in houses_data.keys():
             if name in depth_texts:
@@ -1767,36 +1749,28 @@ class ComparisonAnalyzer:
 請根據【各房屋深度分析】和【周邊設施清單】兩者綜合評估，提供以下分析：
 
 1. **綜合排名**（1-{len(houses_data)}名）
-   請將這{len(houses_data)}間房屋從最適合到最不適合排序，**同時考慮房屋本身條件和周邊設施**，並詳細說明排名依據。
+   **同時考慮房屋本身條件和周邊設施**
 
 2. **各房屋評分與計算方式**（1-10分）
-   {chr(10).join([f'   - {name}：___分\n     交通便利性(3):___ 日常採買(3):___ 生活品質(2):___ 特殊需求(2):___' for name in houses_data.keys()])}
 
 3. **優缺點比較表**
-   | 項目 | {' | '.join(houses_data.keys())} |
-   |------|{'|'.join(['---' for _ in houses_data])}|
-   | 交通便利性 | |{' |'.join([' ' for _ in houses_data])}|
-   | 日常採買 | |{' |'.join([' ' for _ in houses_data])}|
-   | 生活品質 | |{' |'.join([' ' for _ in houses_data])}|
-   | 價格效益 | |{' |'.join([' ' for _ in houses_data])}|
-   | 未來潛力 | |{' |'.join([' ' for _ in houses_data])}|
 
 4. **各房屋詳細分析**
-   {chr(10).join([f'   **{name}**：\n   - 房屋優勢（引用深度分析）：\n   - 房屋劣勢：\n   - 周邊優勢（引用具體設施）：\n   - 周邊劣勢：\n   - 適合{profile}的程度：' for name in houses_data.keys()])}
+   - 房屋優勢（引用深度分析）
+   - 房屋劣勢
+   - 周邊優勢（引用具體設施）
+   - 周邊劣勢
 
 5. **最終推薦**
-   - **首選**：房屋___，因為...
-   - **備選**：房屋___，當首選有問題時
-   - **不建議**：房屋___，因為...
+   - **首選**、**備選**、**不建議**
 
 6. **購買時機建議**
-   現在是否適合購買？應該等待還是立即行動？預期的價格趨勢如何？
 
-請用專業、客觀的角度分析，給出實用的比較建議，並盡量引用具體的數據來支持你的觀點。
+請用專業、客觀的角度分析，給出實用的比較建議。
 """
 
     def _build_multi_with_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
-        """多房屋比較有嫌惡設施的提示詞 - 加入深度分析"""
+        """多房屋比較有嫌惡設施的提示詞"""
         houses_data = res["houses_data"]
         counts = res["facility_counts"]
         focus = pinfo.get("prompt_focus", [])
@@ -1805,7 +1779,6 @@ class ComparisonAnalyzer:
         comparison_rows = [f"  {name}：{cnt} 個設施" for name, cnt in counts.items()]
         comparison_text = "\n".join(comparison_rows)
         
-        # 建立各房屋嫌惡設施比較
         nuisance_comparison = "\n【各房屋嫌惡設施數量】\n"
         nuisance_counts = {}
         if res.get('nuisance_data'):
@@ -1813,7 +1786,6 @@ class ComparisonAnalyzer:
                 nuisance_counts[name] = len(res['nuisance_data'].get(name, []))
                 nuisance_comparison += f"- {name}：{nuisance_counts[name]} 處嫌惡設施\n"
         
-        # 整理各房屋深度分析
         depth_section = "\n【各房屋深度分析】\n"
         for name in houses_data.keys():
             if name in depth_texts:
@@ -1841,33 +1813,28 @@ class ComparisonAnalyzer:
 請根據【各房屋深度分析】和【周邊設施清單】兩者綜合評估，**特別注意嫌惡設施的影響**，提供以下分析：
 
 1. **綜合排名**（1-{len(houses_data)}名）
-   請將這{len(houses_data)}間房屋從最適合到最不適合排序，**同時考慮房屋本身條件、周邊設施、嫌惡設施**，並詳細說明排名依據。
+   **優先考慮嫌惡設施較少的房屋**，同時考慮房屋本身條件
 
 2. **各房屋評分與計算方式**（1-10分）
-   {chr(10).join([f'   - {name}：___分\n     交通便利性(3):___ 日常採買(3):___ 生活品質(2):___ 特殊需求(2):___ 嫌惡設施扣分(最高-3):___' for name in houses_data.keys()])}
+   **包含嫌惡設施扣分**
 
 3. **優缺點比較表**
-   | 項目 | {' | '.join(houses_data.keys())} |
-   |------|{'|'.join(['---' for _ in houses_data])}|
-   | 交通便利性 | |{' |'.join([' ' for _ in houses_data])}|
-   | 日常採買 | |{' |'.join([' ' for _ in houses_data])}|
-   | 生活品質 | |{' |'.join([' ' for _ in houses_data])}|
-   | 價格效益 | |{' |'.join([' ' for _ in houses_data])}|
-   | 未來潛力 | |{' |'.join([' ' for _ in houses_data])}|
-   | 嫌惡設施影響 | |{' |'.join([str(nuisance_counts.get(name, 0)) + '處' for name in houses_data.keys()])}|
+   **包含嫌惡設施影響欄位**
 
 4. **各房屋詳細分析**
-   {chr(10).join([f'   **{name}**：\n   - 房屋優勢（引用深度分析）：\n   - 房屋劣勢：\n   - 周邊優勢（引用具體設施）：\n   - 周邊劣勢（包含嫌惡設施）：\n   - 嫌惡設施影響：{nuisance_counts.get(name, 0)}處\n   - 適合{profile}的程度：' for name in houses_data.keys()])}
+   - 房屋優勢（引用深度分析）
+   - 房屋劣勢
+   - 周邊優勢（引用具體設施）
+   - 周邊劣勢（包含嫌惡設施）
+   - 嫌惡設施影響
 
 5. **最終推薦**
-   - **首選**：房屋___，因為...（考慮嫌惡設施的影響）
-   - **備選**：房屋___，當首選有問題時
-   - **不建議**：房屋___，因為...（可能因嫌惡設施過多）
+   - **首選**、**備選**、**不建議**（考慮嫌惡設施）
 
 6. **購買時機建議**
-   現在是否適合購買？應該等待還是立即行動？預期的價格趨勢如何？**請考慮嫌惡設施對房價的長期影響**。
+   **請考慮嫌惡設施對房價的長期影響**
 
-請用專業、客觀的角度分析，給出實用的比較建議，並盡量引用具體的數據來支持你的觀點。
+請用專業、客觀的角度分析，給出實用的比較建議。
 """
     
     def _call_gemini(self, prompt):
