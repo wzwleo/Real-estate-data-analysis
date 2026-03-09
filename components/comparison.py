@@ -24,7 +24,7 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 try:
-    from config import CATEGORY_COLORS, DEFAULT_RADIUS
+    from config import CATEGORY_COLORS, DEFAULT_RADIUS, NUISANCE_LEVEL_COLORS
     from components.place_types import PLACE_TYPES, CHINESE_TO_CATEGORY, NUISANCE_TYPES
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
@@ -36,7 +36,7 @@ except ImportError as e:
     CHINESE_TO_CATEGORY = {}
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
-
+    NUISANCE_LEVEL_COLORS = {}
 # 設定台灣時區
 try:
     TZ_TAIWAN = pytz.timezone('Asia/Taipei')
