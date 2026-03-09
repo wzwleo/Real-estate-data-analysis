@@ -2112,6 +2112,7 @@ def tab1_module():
                         'age_data': r['age_analysis_payload'],
                         'floor_data': r['floor_analysis_payload'],
                         'layout_data': r['layout_analysis_payload'],
+                    }
                 }
                 
                 st.session_state.ai_results_summary.append(analysis_summary)
@@ -2121,10 +2122,6 @@ def tab1_module():
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
 
                 # ── 除錯資訊 ──
-                st.write(r['analysis_payload'])
-                st.write(r['floor_area_payload'])
-                st.write(r['age_analysis_payload'])
-                st.write(r['floor_analysis_payload'])
-                st.write(r['layout_analysis_payload'])
+                st.write(st.session_state.ai_results_summary)
                 
 
