@@ -80,7 +80,7 @@ class ComparisonAnalyzer:
             if key not in st.session_state:
                 st.session_state[key] = value
     
-    # ==================== 深度分析輔助函式（修正版）====================
+    # ==================== 深度分析輔助函式 ====================
     
     def _get_depth_analysis_by_title(self, title):
         """根據房屋標題從 ai_results_summary 取得深度分析資料"""
@@ -136,7 +136,7 @@ class ComparisonAnalyzer:
         except Exception as e:
             return ""
     
-    # ==================== 原有方法保持不變 ====================
+    # ==================== 買家類型定義 ====================
     
     def _get_buyer_profiles(self):
         """定義買家類型"""
@@ -996,6 +996,7 @@ class ComparisonAnalyzer:
                     "房屋地址": h_info['address'],
                     "設施名稱": p[2],
                     "設施子類別": p[1],
+                    "主要類別": p[0],  # 新增：判斷是否為嫌惡設施
                     "距離(公尺)": p[5],
                     "經度": p[4],
                     "緯度": p[3],
@@ -1003,8 +1004,10 @@ class ComparisonAnalyzer:
                 })
         return pd.DataFrame(rows)
     
+    # ==================== 修改：顯示分析結果（嫌惡設施獨立）====================
+    
     def _display_analysis_results(self, res):
-        """顯示分析結果"""
+        """顯示分析結果 - 嫌惡設施獨立"""
         if not res:
             return
         
@@ -1032,115 +1035,198 @@ class ComparisonAnalyzer:
                     st.markdown(f"- {pt}")
         
         st.markdown("---")
-        st.subheader("📋 設施詳細資料表格" + (" (包含嫌惡設施)" if include_nuisance else ""))
+        
+        # ====== 設施詳細資料表格（分開顯示）======
+        st.subheader("📋 設施詳細資料")
         
         df = res.get("facilities_table", pd.DataFrame())
         if not df.empty:
-            nuisance_count = 0
-            if include_nuisance and res.get('nuisance_data'):
-                for house_name in res['houses_data'].keys():
-                    nuisance_count = len(res['nuisance_data'].get(house_name, []))
-                    if nuisance_count > 0:
-                        break
+            # 分離一般設施和嫌惡設施
+            if include_nuisance:
+                normal_df = df[df['主要類別'] != "嫌惡設施"].copy()
+                nuisance_df = df[df['主要類別'] == "嫌惡設施"].copy()
+            else:
+                normal_df = df.copy()
+                nuisance_df = pd.DataFrame()
             
-            st.info(f"📈 共找到 {len(df)} 筆資料" + (f"（包含 {nuisance_count} 處嫌惡設施）" if nuisance_count > 0 else ""))
-            
-            st.dataframe(
-                df,
-                use_container_width=True,
-                column_config={
-                    "房屋": st.column_config.TextColumn(width="small"),
-                    "房屋標題": st.column_config.TextColumn(width="medium"),
-                    "房屋地址": st.column_config.TextColumn(width="medium"),
-                    "設施名稱": st.column_config.TextColumn(width="large"),
-                    "設施子類別": st.column_config.TextColumn(width="small"),
-                    "距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
-                    "place_id": st.column_config.TextColumn("Google地圖", 
-                        help="點擊連結在Google地圖中查看",
-                        width="small"
+            # 顯示一般設施表格
+            if not normal_df.empty:
+                with st.expander("✅ 一般設施", expanded=True):
+                    st.dataframe(
+                        normal_df,
+                        use_container_width=True,
+                        column_config={
+                            "房屋": st.column_config.TextColumn(width="small"),
+                            "房屋標題": st.column_config.TextColumn(width="medium"),
+                            "房屋地址": st.column_config.TextColumn(width="medium"),
+                            "設施名稱": st.column_config.TextColumn(width="large"),
+                            "設施子類別": st.column_config.TextColumn(width="small"),
+                            "距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
+                            "place_id": st.column_config.TextColumn("Google地圖", 
+                                help="點擊連結在Google地圖中查看",
+                                width="small"
+                            )
+                        },
+                        column_order=["房屋", "房屋標題", "房屋地址", "設施名稱", "設施子類別", "距離(公尺)", "place_id"],
+                        hide_index=True
                     )
-                },
-                column_order=["房屋", "房屋標題", "房屋地址", "設施名稱", "設施子類別", "距離(公尺)", "place_id"],
-                hide_index=True
-            )
+            
+            # 顯示嫌惡設施表格
+            if not nuisance_df.empty:
+                with st.expander("⚠️ 嫌惡設施", expanded=True):
+                    st.dataframe(
+                        nuisance_df,
+                        use_container_width=True,
+                        column_config={
+                            "房屋": st.column_config.TextColumn(width="small"),
+                            "房屋標題": st.column_config.TextColumn(width="medium"),
+                            "房屋地址": st.column_config.TextColumn(width="medium"),
+                            "設施名稱": st.column_config.TextColumn(width="large"),
+                            "設施子類別": st.column_config.TextColumn(width="small"),
+                            "距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
+                            "place_id": st.column_config.TextColumn("Google地圖", 
+                                help="點擊連結在Google地圖中查看",
+                                width="small"
+                            )
+                        },
+                        column_order=["房屋", "房屋標題", "房屋地址", "設施名稱", "設施子類別", "距離(公尺)", "place_id"],
+                        hide_index=True
+                    )
+        else:
+            st.info("📭 無設施資料")
         
         st.markdown("---")
-        st.subheader("📈 設施統計")
-        if res["num_houses"] == 1:
-            self._show_single_stats(res)
-        else:
-            self._show_multi_stats(res)
         
+        # ====== 設施統計（分開統計）======
+        st.subheader("📈 設施統計")
+        
+        if res["num_houses"] == 1:
+            self._show_single_stats(res, include_nuisance)
+        else:
+            self._show_multi_stats(res, include_nuisance)
+        
+        # ====== 地圖檢視 ======
         self._display_maps(res)
-        self._display_facilities_list_with_links(res)
+        
+        # ====== 全部設施列表（分開顯示）======
+        self._display_facilities_list_with_links(res, include_nuisance)
+        
+        # ====== AI 智能分析 ======
         self._display_ai_analysis(res)
     
-    def _show_single_stats(self, res):
-        """單一房屋統計"""
+    def _show_single_stats(self, res, include_nuisance=False):
+        """單一房屋統計 - 分開計算"""
         name = list(res["houses_data"].keys())[0]
-        cnt = res["facility_counts"].get(name, 0)
-        places = res["places_data"][name]
         
-        if places:
-            dists = [p[5] for p in places]
-            avg = sum(dists) / len(dists)
-            mini = min(dists)
-            
-            c1, c2, c3 = st.columns(3)
-            c1.metric("🏠 總設施數量", f"{cnt} 個")
-            c2.metric("📏 平均距離", f"{avg:.0f} 公尺")
-            c3.metric("📍 最近設施", f"{mini} 公尺")
-            
-            cat_cnt = Counter([p[1] for p in places])
+        df = res.get("facilities_table", pd.DataFrame())
+        if df.empty:
+            return
+        
+        # 分離一般設施和嫌惡設施
+        if include_nuisance:
+            normal_df = df[df['主要類別'] != "嫌惡設施"]
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+            normal_cnt = len(normal_df)
+            nuisance_cnt = len(nuisance_df)
+            total_cnt = len(df)
+        else:
+            normal_cnt = len(df)
+            nuisance_cnt = 0
+            total_cnt = len(df)
+        
+        # 顯示統計
+        cols = st.columns(4)
+        with cols[0]:
+            st.metric("🏠 總設施", f"{total_cnt} 個")
+        with cols[1]:
+            st.metric("✅ 一般設施", f"{normal_cnt} 個")
+        if include_nuisance:
+            with cols[2]:
+                st.metric("⚠️ 嫌惡設施", f"{nuisance_cnt} 個", delta_color="inverse")
+        
+        # 一般設施距離統計
+        if normal_cnt > 0:
+            normal_dists = normal_df['距離(公尺)'].tolist()
+            avg_normal = sum(normal_dists) / len(normal_dists)
+            min_normal = min(normal_dists)
+            with cols[3] if include_nuisance else cols[2]:
+                st.metric("📏 平均距離", f"{avg_normal:.0f} 公尺")
+            with cols[4] if include_nuisance else cols[3]:
+                st.metric("📍 最近設施", f"{min_normal} 公尺")
+        
+        # 各類型設施分布（只統計一般設施）
+        if normal_cnt > 0:
+            st.markdown("#### 🏪 一般設施類型分布")
+            cat_cnt = Counter(normal_df['設施子類別'].tolist())
             top10 = cat_cnt.most_common(10)
             
-            if top10:
-                st.markdown("#### 🏪 各類型設施分布")
-                chart_data = {
-                    "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
-                    "grid": {"left": "3%", "right": "4%", "bottom": "15%", "top": "10%", "containLabel": True},
-                    "xAxis": {
-                        "type": "category",
-                        "data": [x[0] for x in top10],
-                        "axisLabel": {"rotate": 45, "interval": 0}
+            chart_data = {
+                "tooltip": {"trigger": "axis", "axisPointer": {"type": "shadow"}},
+                "grid": {"left": "3%", "right": "4%", "bottom": "15%", "top": "10%", "containLabel": True},
+                "xAxis": {
+                    "type": "category",
+                    "data": [x[0] for x in top10],
+                    "axisLabel": {"rotate": 45, "interval": 0}
+                },
+                "yAxis": {"type": "value"},
+                "series": [{
+                    "type": "bar",
+                    "data": [x[1] for x in top10],
+                    "itemStyle": {
+                        "color": {
+                            "type": "linear",
+                            "x": 0, "y": 0, "x2": 0, "y2": 1,
+                            "colorStops": [
+                                {"offset": 0, "color": "#5470c6"},
+                                {"offset": 1, "color": "#91cc75"}
+                            ]
+                        }
                     },
-                    "yAxis": {"type": "value"},
-                    "series": [{
-                        "type": "bar",
-                        "data": [x[1] for x in top10],
-                        "itemStyle": {
-                            "color": {
-                                "type": "linear",
-                                "x": 0, "y": 0, "x2": 0, "y2": 1,
-                                "colorStops": [
-                                    {"offset": 0, "color": "#5470c6"},
-                                    {"offset": 1, "color": "#91cc75"}
-                                ]
-                            }
-                        },
-                        "label": {"show": True, "position": "top"}
-                    }]
-                }
-                st_echarts(chart_data, height="500px")
-                
-                with st.expander("📊 查看詳細設施類型統計"):
-                    subtype_df = pd.DataFrame(top10, columns=["設施類型", "數量"])
-                    st.dataframe(subtype_df, use_container_width=True, hide_index=True)
+                    "label": {"show": True, "position": "top"}
+                }]
+            }
+            st_echarts(chart_data, height="500px")
     
-    def _show_multi_stats(self, res):
-        """多房屋統計"""
-        cnts = res["facility_counts"]
-        names = list(cnts.keys())
+    def _show_multi_stats(self, res, include_nuisance=False):
+        """多房屋統計 - 分開計算"""
+        df = res.get("facilities_table", pd.DataFrame())
+        if df.empty:
+            return
         
+        houses_data = res["houses_data"]
+        names = list(houses_data.keys())
+        
+        # 分離一般設施和嫌惡設施
+        if include_nuisance:
+            normal_df = df[df['主要類別'] != "嫌惡設施"]
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+            
+            # 各房屋統計
+            normal_counts = normal_df.groupby('房屋').size().to_dict()
+            nuisance_counts = nuisance_df.groupby('房屋').size().to_dict()
+            total_counts = df.groupby('房屋').size().to_dict()
+        else:
+            normal_counts = df.groupby('房屋').size().to_dict()
+            nuisance_counts = {name: 0 for name in names}
+            total_counts = normal_counts
+        
+        # 顯示統計
         cols = st.columns(min(4, len(names)))
-        for i, n in enumerate(names):
+        for i, name in enumerate(names):
             with cols[i % len(cols)]:
-                rank = sorted(cnts.values(), reverse=True).index(cnts[n]) + 1
-                st.metric(f"🏠 {n}", f"{cnts[n]} 個", f"第{rank}名")
+                total = total_counts.get(name, 0)
+                normal = normal_counts.get(name, 0)
+                nuisance = nuisance_counts.get(name, 0)
+                
+                st.metric(f"🏠 {name}", f"{total} 個")
+                if include_nuisance and nuisance > 0:
+                    st.caption(f"✅ {normal} 一般 | ⚠️ {nuisance} 嫌惡")
         
+        # 設施數量排名（只比一般設施）
         if len(names) > 1:
-            st.markdown("#### 📊 設施數量排名")
-            data = sorted([(n, c) for n, c in cnts.items()], key=lambda x: x[1], reverse=True)
+            st.markdown("#### 📊 一般設施數量排名")
+            data = sorted([(name, normal_counts.get(name, 0)) for name in names], 
+                         key=lambda x: x[1], reverse=True)
             chart_data = {
                 "xAxis": {"type": "category", "data": [x[0] for x in data]},
                 "yAxis": {"type": "value"},
@@ -1161,6 +1247,23 @@ class ComparisonAnalyzer:
                 "tooltip": {"trigger": "axis"}
             }
             st_echarts(chart_data, height="300px")
+            
+            # 如果有嫌惡設施，另外顯示排名
+            if include_nuisance and any(nuisance_counts.values()):
+                st.markdown("#### ⚠️ 嫌惡設施數量排名")
+                nuisance_data = sorted([(name, nuisance_counts.get(name, 0)) for name in names], 
+                                      key=lambda x: x[1], reverse=True)
+                nuisance_chart = {
+                    "xAxis": {"type": "category", "data": [x[0] for x in nuisance_data]},
+                    "yAxis": {"type": "value"},
+                    "series": [{
+                        "type": "bar",
+                        "data": [x[1] for x in nuisance_data],
+                        "itemStyle": {"color": "#dc3545"}
+                    }],
+                    "tooltip": {"trigger": "axis"}
+                }
+                st_echarts(nuisance_chart, height="300px")
     
     def _display_maps(self, res):
         """顯示地圖"""
@@ -1198,15 +1301,16 @@ class ComparisonAnalyzer:
                     )
     
     def _render_map_with_links(self, lat, lng, places, radius, title, house_info, browser_key):
-        """渲染地圖"""
+        """渲染地圖 - 嫌惡設施用紅色標示"""
         if not browser_key:
             st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
             return
         
         facilities_data = []
         for p in places:
+            # 判斷是否為嫌惡設施
             if p[0] == "嫌惡設施":
-                color = "#dc3545"
+                color = "#dc3545"  # 紅色
             else:
                 color = CATEGORY_COLORS.get(p[0], "#666")
             
@@ -1430,62 +1534,97 @@ class ComparisonAnalyzer:
         
         html(html_content, height=550)
     
-    def _display_facilities_list_with_links(self, res):
-        """顯示設施列表"""
+    def _display_facilities_list_with_links(self, res, include_nuisance=False):
+        """顯示設施列表 - 分開一般設施和嫌惡設施"""
         st.markdown("---")
-        include_nuisance = res.get("include_nuisance", False)
+        st.subheader("📍 全部設施列表")
         
-        st.subheader("📍 全部設施列表" + (" (包含嫌惡設施)" if include_nuisance else ""))
+        df = res.get("facilities_table", pd.DataFrame())
+        if df.empty:
+            st.info("📭 無設施資料")
+            return
         
-        for house_name, places in res["places_data"].items():
-            if places:
-                with st.expander(f"🏠 {house_name} - 共 {len(places)} 個設施", expanded=False):
-                    for i, p in enumerate(places, 1):
-                        cat, subtype, name, lat, lng, dist, pid = p
+        # 分離一般設施和嫌惡設施
+        if include_nuisance:
+            normal_df = df[df['主要類別'] != "嫌惡設施"]
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+        else:
+            normal_df = df
+            nuisance_df = pd.DataFrame()
+        
+        # 按房屋分組顯示一般設施
+        if not normal_df.empty:
+            with st.expander("✅ 一般設施", expanded=True):
+                for house_name in normal_df['房屋'].unique():
+                    house_df = normal_df[normal_df['房屋'] == house_name]
+                    st.markdown(f"**🏠 {house_name}** - 共 {len(house_df)} 個設施")
+                    
+                    for i, row in house_df.iterrows():
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={row['緯度']},{row['經度']}&query_place_id={row['place_id']}"
                         
-                        if cat == "嫌惡設施":
-                            color = "#dc3545"
-                            is_nuisance = True
-                        else:
-                            color = CATEGORY_COLORS.get(cat, "#666")
-                            is_nuisance = False
-                        
-                        maps_url = f"https://www.google.com/maps/search/?api=1&query={lat},{lng}&query_place_id={pid}"
-                        
+                        dist = row['距離(公尺)']
                         if dist <= 300:
-                            dist_color = "#dc3545" if is_nuisance else "#28a745"
-                            dist_badge = "很近" if not is_nuisance else "⚠️ 危險近"
+                            dist_color = "#28a745"
+                            dist_badge = "很近"
                         elif dist <= 600:
-                            dist_color = "#fd7e14" if is_nuisance else "#ffc107"
-                            dist_badge = "中等" if not is_nuisance else "⚠️ 需注意"
+                            dist_color = "#ffc107"
+                            dist_badge = "中等"
                         else:
-                            dist_color = "#ffc107" if is_nuisance else "#dc3545"
-                            dist_badge = "較遠" if not is_nuisance else "🟢 尚可"
+                            dist_color = "#dc3545"
+                            dist_badge = "較遠"
                         
                         col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
-                        
                         with col1:
-                            st.markdown(f"**{i}.** {name}")
-                        
+                            st.markdown(f"**{i+1}.** {row['設施名稱']}")
                         with col2:
-                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{subtype}</span>', 
+                            color = CATEGORY_COLORS.get(row['主要類別'], "#666")
+                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px;">{row["設施子類別"]}</span>', 
                                       unsafe_allow_html=True)
+                        with col3:
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px;">{dist}公尺 ({dist_badge})</span>', 
+                                      unsafe_allow_html=True)
+                        with col4:
+                            st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
+                        st.divider()
+        
+        # 按房屋分組顯示嫌惡設施
+        if not nuisance_df.empty:
+            with st.expander("⚠️ 嫌惡設施", expanded=True):
+                for house_name in nuisance_df['房屋'].unique():
+                    house_df = nuisance_df[nuisance_df['房屋'] == house_name]
+                    st.markdown(f"**🏠 {house_name}** - 共 {len(house_df)} 個嫌惡設施")
+                    
+                    for i, row in house_df.iterrows():
+                        maps_url = f"https://www.google.com/maps/search/?api=1&query={row['緯度']},{row['經度']}&query_place_id={row['place_id']}"
                         
+                        dist = row['距離(公尺)']
+                        if dist <= 300:
+                            dist_color = "#dc3545"
+                            dist_badge = "⚠️ 危險近"
+                        elif dist <= 600:
+                            dist_color = "#fd7e14"
+                            dist_badge = "⚠️ 需注意"
+                        else:
+                            dist_color = "#ffc107"
+                            dist_badge = "🟢 尚可"
+                        
+                        col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
+                        with col1:
+                            st.markdown(f"**{i+1}.** {row['設施名稱']}")
+                        with col2:
+                            st.markdown(f'<span style="background-color:#dc354520; color:#dc3545; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["設施子類別"]}</span>', 
+                                      unsafe_allow_html=True)
                         with col3:
                             st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺 ({dist_badge})</span>', 
                                       unsafe_allow_html=True)
-                        
                         with col4:
                             st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
-                        
                         st.divider()
-            else:
-                st.info(f"📭 {house_name} 周圍未找到設施")
     
-    # ==================== AI 分析加入深度數據（修正版）====================
+    # ==================== AI 分析（嫌惡設施獨立）====================
     
     def _display_ai_analysis(self, res):
-        """AI 分析 - 加入深度分析數據"""
+        """AI 分析 - 嫌惡設施獨立章節"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
@@ -1496,21 +1635,19 @@ class ComparisonAnalyzer:
         pinfo = profiles.get(profile, {})
         icon = pinfo.get("icon", "👤")
         
-        # 產生詳細的設施清單
-        facilities_text = self._format_all_facilities_for_prompt(res)
+        # 產生設施清單（分開一般設施和嫌惡設施）
+        facilities_text, nuisance_text = self._format_facilities_for_prompt(res, include_nuisance)
         
-        # ====== 修正：用標題取得深度分析資料 ======
+        # 取得深度分析資料
         depth_texts = {}
         if 'ai_results_summary' in st.session_state:
             if mode == "單一房屋分析":
-                # 單一房屋：取得第一間
                 house_name = list(res["houses_data"].keys())[0]
                 title = res["houses_data"][house_name]['title']
                 depth_item = self._get_depth_analysis_by_title(title)
                 if depth_item:
                     depth_texts[house_name] = self._format_depth_summary(depth_item)
             else:
-                # 多房屋：逐一取得
                 for house_name, info in res["houses_data"].items():
                     depth_item = self._get_depth_analysis_by_title(info['title'])
                     if depth_item:
@@ -1519,12 +1656,12 @@ class ComparisonAnalyzer:
         # 根據四種情境選擇不同的提示詞
         if mode == "單一房屋分析":
             if include_nuisance:
-                prompt = self._build_single_with_nuisance_prompt(res, facilities_text, depth_texts, profile, icon, pinfo)
+                prompt = self._build_single_with_nuisance_prompt(res, facilities_text, nuisance_text, depth_texts, profile, icon, pinfo)
             else:
                 prompt = self._build_single_without_nuisance_prompt(res, facilities_text, depth_texts, profile, icon, pinfo)
         else:  # 多房屋比較
             if include_nuisance:
-                prompt = self._build_multi_with_nuisance_prompt(res, facilities_text, depth_texts, profile, icon, pinfo)
+                prompt = self._build_multi_with_nuisance_prompt(res, facilities_text, nuisance_text, depth_texts, profile, icon, pinfo)
             else:
                 prompt = self._build_multi_without_nuisance_prompt(res, facilities_text, depth_texts, profile, icon, pinfo)
         
@@ -1546,7 +1683,7 @@ class ComparisonAnalyzer:
                 st.markdown("⚠️ **此分析包含嫌惡設施評估**")
             st.markdown("---")
             st.markdown("**提示：**")
-            st.markdown("您可以編輯左側的提示詞，讓AI更符合您的需求")
+            st.markdown("您可以編輯左側的提示詞")
             if st.button("🔄 恢復預設提示詞", use_container_width=True, key="reset_prompt"):
                 st.session_state.custom_prompt = prompt
                 st.rerun()
@@ -1590,6 +1727,50 @@ class ComparisonAnalyzer:
                     key="download_report"
                 )
     
+    def _format_facilities_for_prompt(self, res, include_nuisance=False):
+        """格式化設施資料供提示詞使用 - 分開一般設施和嫌惡設施"""
+        df = res.get("facilities_table", pd.DataFrame())
+        if df.empty:
+            return "無周邊設施資料", ""
+        
+        # 分離一般設施和嫌惡設施
+        if include_nuisance:
+            normal_df = df[df['主要類別'] != "嫌惡設施"]
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+        else:
+            normal_df = df
+            nuisance_df = pd.DataFrame()
+        
+        # 一般設施清單
+        normal_text = "\n【一般設施清單】\n"
+        normal_text += "=" * 60 + "\n"
+        
+        for house_name in normal_df['房屋'].unique():
+            house_df = normal_df[normal_df['房屋'] == house_name]
+            normal_text += f"\n🏠 {house_name} 周邊一般設施（共 {len(house_df)} 個）：\n"
+            normal_text += "-" * 50 + "\n"
+            
+            house_df_sorted = house_df.sort_values('距離(公尺)')
+            for i, row in house_df_sorted.iterrows():
+                normal_text += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
+        
+        # 嫌惡設施清單
+        nuisance_text = ""
+        if not nuisance_df.empty:
+            nuisance_text = "\n【⚠️ 嫌惡設施清單】\n"
+            nuisance_text += "=" * 60 + "\n"
+            
+            for house_name in nuisance_df['房屋'].unique():
+                house_df = nuisance_df[nuisance_df['房屋'] == house_name]
+                nuisance_text += f"\n🏠 {house_name} 周邊嫌惡設施（共 {len(house_df)} 處）：\n"
+                nuisance_text += "-" * 50 + "\n"
+                
+                house_df_sorted = house_df.sort_values('距離(公尺)')
+                for i, row in house_df_sorted.iterrows():
+                    nuisance_text += f"  {i+1}. ⚠️ {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
+        
+        return normal_text, nuisance_text
+    
     def _build_single_without_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
         """單一房屋無嫌惡設施的提示詞"""
         name = list(res["houses_data"].keys())[0]
@@ -1618,49 +1799,26 @@ class ComparisonAnalyzer:
 【周邊設施統計】
 - 總數量：{cnt} 個設施
 
-【完整設施清單】
 {facilities_text}
 
-請根據【房屋深度分析】和【周邊設施清單】兩者綜合評估，提供以下分析：
+請根據【房屋深度分析】和【一般設施清單】綜合評估，提供以下分析：
 
 1. **綜合評分**（1-10分）
-   請根據{profile}的需求給出具體分數，並詳細說明評分依據：
-   - 交通便利性（滿分3分）
-   - 日常採買（滿分3分）
-   - 生活品質（滿分2分）
-   - 特殊需求（滿分2分）
-
 2. **主要優點**（3-5點）
-   對{profile}來說最實用的設施和生活機能，**並結合房屋本身優勢**
-
 3. **主要缺點**（3-5點）
-   對{profile}來說的不足之處或潛在問題，**包含房屋本身劣勢**
-
 4. **生活便利性預測**
-   - 平日通勤/上班日
-   - 假日生活
-   - 緊急情況
-
 5. **未來發展潛力**
-   根據房屋條件和周邊設施預測
-
 6. **購買建議**
-   - 是否適合{profile}購買？
-   - 合理的價格區間建議
 
 請用專業、客觀的角度分析，給出實用的建議。
 """
 
-    def _build_single_with_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
-        """單一房屋有嫌惡設施的提示詞"""
+    def _build_single_with_nuisance_prompt(self, res, facilities_text, nuisance_text, depth_texts, profile, icon, pinfo):
+        """單一房屋有嫌惡設施的提示詞 - 嫌惡設施獨立章節"""
         name = list(res["houses_data"].keys())[0]
         h = res["houses_data"][name]
         cnt = res["facility_counts"].get(name, 0)
         focus = pinfo.get("prompt_focus", [])
-        
-        nuisance_count = 0
-        if res.get('nuisance_data'):
-            nuisance_count = len(res['nuisance_data'].get(name, []))
         
         depth_text = depth_texts.get(name, "")
         
@@ -1680,31 +1838,27 @@ class ComparisonAnalyzer:
 - 分析類別：{', '.join(res['selected_categories'])}
 - 關鍵字：{res.get('keyword', '') if res.get('keyword') else '無'}
 
-【周邊設施統計】
-- 總數量：{cnt} 個設施（包含 {nuisance_count} 處嫌惡設施）
-
-【完整設施清單】（⚠️ 標記為嫌惡設施）
 {facilities_text}
+{nuisance_text}
 
-請根據【房屋深度分析】和【周邊設施清單】兩者綜合評估，**特別注意嫌惡設施的影響**，提供以下分析：
+請根據【房屋深度分析】、【一般設施清單】和【嫌惡設施清單】綜合評估，**特別注意嫌惡設施的影響**，提供以下分析：
 
 1. **綜合評分**（1-10分）
-   - 交通便利性（滿分3分）
-   - 日常採買（滿分3分）
-   - 生活品質（滿分2分，**會因嫌惡設施而扣分**）
-   - 特殊需求（滿分2分）
+   - 一般設施評分（滿分7分）
    - **嫌惡設施扣分**（最高扣3分）
-
+   
 2. **主要優點**（3-5點）
-   對{profile}來說最實用的設施和生活機能，**並結合房屋本身優勢**
+   - 房屋本身優勢
+   - 一般設施優勢
 
 3. **主要缺點**（3-5點）
-   **必須包含嫌惡設施的影響和房屋本身劣勢**
+   - **必須詳細說明每個嫌惡設施的影響**（類型、距離、潛在問題）
+   - 房屋本身劣勢
 
 4. **生活便利性預測**（需考慮嫌惡設施）
 
 5. **未來發展潛力**
-   **並評估嫌惡設施是否可能搬遷或改善**
+   **評估嫌惡設施是否可能搬遷或改善**
 
 6. **購買建議**
    - 是否適合{profile}購買？**考慮嫌惡設施的影響**
@@ -1743,34 +1897,22 @@ class ComparisonAnalyzer:
 【各房屋設施數量】
 {comparison_text}
 
-【完整設施清單】
 {facilities_text}
 
-請根據【各房屋深度分析】和【周邊設施清單】兩者綜合評估，提供以下分析：
+請根據【各房屋深度分析】和【一般設施清單】綜合評估，提供以下分析：
 
 1. **綜合排名**（1-{len(houses_data)}名）
-   **同時考慮房屋本身條件和周邊設施**
-
-2. **各房屋評分與計算方式**（1-10分）
-
+2. **各房屋評分與計算方式**
 3. **優缺點比較表**
-
 4. **各房屋詳細分析**
-   - 房屋優勢（引用深度分析）
-   - 房屋劣勢
-   - 周邊優勢（引用具體設施）
-   - 周邊劣勢
-
 5. **最終推薦**
-   - **首選**、**備選**、**不建議**
-
 6. **購買時機建議**
 
 請用專業、客觀的角度分析，給出實用的比較建議。
 """
 
-    def _build_multi_with_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
-        """多房屋比較有嫌惡設施的提示詞"""
+    def _build_multi_with_nuisance_prompt(self, res, facilities_text, nuisance_text, depth_texts, profile, icon, pinfo):
+        """多房屋比較有嫌惡設施的提示詞 - 嫌惡設施獨立章節"""
         houses_data = res["houses_data"]
         counts = res["facility_counts"]
         focus = pinfo.get("prompt_focus", [])
@@ -1779,12 +1921,13 @@ class ComparisonAnalyzer:
         comparison_rows = [f"  {name}：{cnt} 個設施" for name, cnt in counts.items()]
         comparison_text = "\n".join(comparison_rows)
         
-        nuisance_comparison = "\n【各房屋嫌惡設施數量】\n"
+        # 各房屋嫌惡設施數量
         nuisance_counts = {}
-        if res.get('nuisance_data'):
+        df = res.get("facilities_table", pd.DataFrame())
+        if not df.empty:
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
             for name in houses_data.keys():
-                nuisance_counts[name] = len(res['nuisance_data'].get(name, []))
-                nuisance_comparison += f"- {name}：{nuisance_counts[name]} 處嫌惡設施\n"
+                nuisance_counts[name] = len(nuisance_df[nuisance_df['房屋'] == name])
         
         depth_section = "\n【各房屋深度分析】\n"
         for name in houses_data.keys():
@@ -1805,31 +1948,32 @@ class ComparisonAnalyzer:
 
 【各房屋設施數量】
 {comparison_text}
-{nuisance_comparison}
+【各房屋嫌惡設施數量】
+{chr(10).join([f'- {name}：{nuisance_counts.get(name, 0)} 處嫌惡設施' for name in houses_data.keys()])}
 
-【完整設施清單】（⚠️ 標記為嫌惡設施）
 {facilities_text}
+{nuisance_text}
 
-請根據【各房屋深度分析】和【周邊設施清單】兩者綜合評估，**特別注意嫌惡設施的影響**，提供以下分析：
+請根據【各房屋深度分析】、【一般設施清單】和【嫌惡設施清單】綜合評估，**特別注意嫌惡設施的影響**，提供以下分析：
 
 1. **綜合排名**（1-{len(houses_data)}名）
-   **優先考慮嫌惡設施較少的房屋**，同時考慮房屋本身條件
+   **優先考慮嫌惡設施較少的房屋**
 
-2. **各房屋評分與計算方式**（1-10分）
-   **包含嫌惡設施扣分**
+2. **各房屋評分與計算方式**
+   - 一般設施評分（滿分7分）
+   - **嫌惡設施扣分**（最高扣3分）
 
 3. **優缺點比較表**
    **包含嫌惡設施影響欄位**
 
 4. **各房屋詳細分析**
-   - 房屋優勢（引用深度分析）
+   - 房屋優勢
    - 房屋劣勢
-   - 周邊優勢（引用具體設施）
-   - 周邊劣勢（包含嫌惡設施）
-   - 嫌惡設施影響
+   - 一般設施優勢
+   - **嫌惡設施影響（詳細說明）**
 
 5. **最終推薦**
-   - **首選**、**備選**、**不建議**（考慮嫌惡設施）
+   **考慮嫌惡設施的影響**
 
 6. **購買時機建議**
    **請考慮嫌惡設施對房價的長期影響**
@@ -1863,36 +2007,6 @@ class ComparisonAnalyzer:
                 st.rerun()
             except Exception as e:
                 st.error(f"❌ Gemini API 錯誤：{e}")
-    
-    def _format_all_facilities_for_prompt(self, res):
-        """格式化所有設施資料供提示詞使用"""
-        df = res.get("facilities_table", pd.DataFrame())
-        if df.empty:
-            return "無周邊設施資料"
-        
-        result = "\n【完整周邊設施清單】\n"
-        result += "=" * 60 + "\n"
-        
-        for house_name in df['房屋'].unique():
-            house_df = df[df['房屋'] == house_name]
-            result += f"\n🏠 {house_name} 周邊設施（共 {len(house_df)} 個）：\n"
-            result += "-" * 50 + "\n"
-            
-            house_df_sorted = house_df.sort_values('距離(公尺)')
-            
-            for i, row in house_df_sorted.iterrows():
-                is_nuisance = " ⚠️" if row['設施子類別'] in [n for n in NUISANCE_TYPES.keys()] else ""
-                result += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}){is_nuisance} - {row['距離(公尺)']}公尺\n"
-            
-            result += f"\n  📊 統計摘要：\n"
-            cat_summary = house_df.groupby('設施子類別').size().sort_values(ascending=False)
-            for cat, count in cat_summary.items():
-                is_nuisance_cat = " ⚠️" if cat in [n for n in NUISANCE_TYPES.keys()] else ""
-                result += f"     - {cat}{is_nuisance_cat}: {count}個\n"
-            
-            result += "\n"
-        
-        return result
     
     def _get_favorites_data(self):
         """取得收藏"""
