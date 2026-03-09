@@ -2126,6 +2126,11 @@ def tab1_module():
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
 
-
+                # ── 除錯資訊 ──
+                st.write(r['analysis_payload'])
+                st.write(r['floor_area_payload'])
+                st.write(r['age_analysis_payload'])
+                st.write(r['floor_analysis_payload'])
+                st.write(r['layout_analysis_payload'])
                 
 
