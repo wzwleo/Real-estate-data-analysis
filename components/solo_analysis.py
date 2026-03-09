@@ -2106,7 +2106,7 @@ def tab1_module():
                     },
                     
                     # AI 總結
-                    'ai_summary': summary_text,
+                    'ai_summary': r['summary_text'],
                     
                     # 總體評分
                     'overall_rating': total_score,
