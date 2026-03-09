@@ -81,6 +81,101 @@ class ComparisonAnalyzer:
             if key not in st.session_state:
                 st.session_state[key] = value
     
+    # ==================== 新增：深度分析整合相關函式 ====================
+    
+    def _get_house_id_from_option(self, option_str, fav_df):
+        """從 '標題 | 地址' 格式中提取房屋編號"""
+        try:
+            # 先用標題去比對
+            title = option_str.split(' | ')[0]
+            if not fav_df.empty:
+                match = fav_df[fav_df['標題'] == title]
+                if not match.empty:
+                    return str(match.iloc[0]['編號'])
+        except:
+            pass
+        return None
+    
+    def _load_depth_analysis_data(self, house_id):
+        """從 ai_results_summary 載入深度分析資料"""
+        if 'ai_results_summary' not in st.session_state:
+            return None
+        
+        for item in st.session_state.ai_results_summary:
+            # 比對房屋編號
+            if str(item['basic_info'].get('編號', '')) == str(house_id):
+                return item
+        return None
+    
+    def _calculate_scores_from_analysis(self, analysis_data):
+        """從 analysis_data 計算五大面向分數"""
+        try:
+            # 1. 價格競爭力
+            price_percentile = analysis_data['price_data']['價格分布']['價格百分位']
+            score_price = max(0, min(10, 10 - price_percentile / 10))
+            
+            # 2. 空間效率
+            space_data = analysis_data['space_data']
+            target_usage = space_data['目標房屋']['空間使用率']
+            median_usage = space_data['坪數分布']['中位數使用率']
+            score_space = max(0, min(10, (target_usage / median_usage) * 5))
+            
+            # 3. 屋齡優勢
+            age_data = analysis_data['age_data']
+            age_percentile = age_data['屋齡分布']['屋齡百分位']
+            score_age = max(0, min(10, 10 - age_percentile / 10))
+            
+            # 4. 樓層定位
+            floor_data = analysis_data['floor_data']
+            floor_percentile = floor_data['樓層分布']['樓層百分位']
+            score_floor = max(0, min(10, 10 - abs(floor_percentile - 50) / 5))
+            
+            # 5. 格局流動性
+            layout_data = analysis_data['layout_data']
+            same_layout_pct = layout_data['格局排名']['相同格局占比(%)']
+            score_layout = max(0, min(10, same_layout_pct / 3))
+            
+            return {
+                "價格競爭力": round(score_price, 1),
+                "空間效率": round(score_space, 1),
+                "屋齡優勢": round(score_age, 1),
+                "樓層定位": round(score_floor, 1),
+                "格局流動性": round(score_layout, 1)
+            }
+        except Exception as e:
+            return {
+                "價格競爭力": 0,
+                "空間效率": 0,
+                "屋齡優勢": 0,
+                "樓層定位": 0,
+                "格局流動性": 0
+            }
+    
+    def _generate_summary_from_analysis(self, analysis_data, scores):
+        """從 analysis_data 產生一句話總結（不用AI，用規則產生）"""
+        try:
+            price_data = analysis_data['price_data']
+            age_data = analysis_data['age_data']
+            floor_data = analysis_data['floor_data']
+            
+            price_text = "價格偏低" if scores["價格競爭力"] >= 7 else "價格合理" if scores["價格競爭力"] >= 5 else "價格偏高"
+            space_text = "空間大" if scores["空間效率"] >= 7 else "空間一般" if scores["空間效率"] >= 5 else "空間小"
+            age_text = age_data['屋齡分布']['屋齡評估']
+            floor_text = floor_data['樓層分布']['樓層評估']
+            
+            total = sum(scores.values()) / 5 * 10
+            
+            if total >= 80:
+                return f"⭐ 優質物件：{price_text}、{space_text}、{age_text}屋齡、{floor_text}，總分{total:.0f}分"
+            elif total >= 60:
+                return f"📌 一般物件：{price_text}、{space_text}、{age_text}屋齡、{floor_text}，總分{total:.0f}分"
+            else:
+                return f"⚠️ 需評估：{price_text}、{space_text}、{age_text}屋齡、{floor_text}，總分{total:.0f}分"
+        except:
+            return "深度分析資料不完整"
+    
+    # ==================== 原有方法保持不變 ====================
+    
     def _get_buyer_profiles(self):
         """定義買家類型"""
         return {
@@ -1258,8 +1353,10 @@ class ComparisonAnalyzer:
                 })
         return pd.DataFrame(rows)
     
+    # ==================== 修改：_display_analysis_results 加入深度分析 ====================
+    
     def _display_analysis_results(self, res):
-        """顯示分析結果"""
+        """顯示分析結果 - 加入深度分析整合"""
         if not res:
             return
         
@@ -1280,6 +1377,93 @@ class ComparisonAnalyzer:
             st.markdown(f"## {icon} {profile}視角 · 單一房屋分析" + (" (含嫌惡設施)" if include_nuisance else ""))
         else:
             st.markdown(f"## {icon} {profile}視角 · {res['num_houses']}間房屋比較" + (" (含嫌惡設施)" if include_nuisance else ""))
+        
+        # ====== 新增：深度分析評分表（只有多房屋比較才顯示）======
+        if mode == "多房屋比較":
+            st.markdown("---")
+            st.subheader("📊 深度分析評分對照")
+            
+            # 取得收藏資料用於比對編號
+            fav_df = self._get_favorites_data()
+            
+            # 收集所有房屋的深度分析資料
+            depth_data = {}
+            houses_list = list(res["houses_data"].keys())
+            
+            # 建立對照表：房屋名稱 -> 原始選項字串
+            house_to_option = {}
+            for name in houses_list:
+                for opt in st.session_state.get('selected_houses', []):
+                    if name in opt or (len(houses_list) == 1 and opt == st.session_state.selected_houses[0]):
+                        house_to_option[name] = opt
+                        break
+            
+            # 載入每間房屋的深度分析
+            for house_name in houses_list:
+                option_str = house_to_option.get(house_name, "")
+                if option_str:
+                    house_id = self._get_house_id_from_option(option_str, fav_df)
+                    if house_id:
+                        depth_item = self._load_depth_analysis_data(house_id)
+                        if depth_item:
+                            scores = self._calculate_scores_from_analysis(depth_item['analysis_data'])
+                            summary = self._generate_summary_from_analysis(depth_item['analysis_data'], scores)
+                            depth_data[house_name] = {
+                                'scores': scores,
+                                'summary': summary,
+                                'has_data': True
+                            }
+                        else:
+                            depth_data[house_name] = {
+                                'has_data': False,
+                                'summary': '尚未進行深度分析'
+                            }
+                    else:
+                        depth_data[house_name] = {
+                            'has_data': False,
+                            'summary': '無法比對房屋編號'
+                        }
+                else:
+                    depth_data[house_name] = {
+                        'has_data': False,
+                        'summary': '無法取得房屋資訊'
+                    }
+            
+            # 顯示評分表格
+            if depth_data:
+                # 建立 DataFrame 顯示分數
+                scores_df = pd.DataFrame()
+                for house_name, data in depth_data.items():
+                    if data['has_data']:
+                        scores_df[house_name] = pd.Series(data['scores'])
+                
+                if not scores_df.empty:
+                    st.dataframe(scores_df, use_container_width=True)
+                    
+                    # 顯示總分
+                    st.markdown("#### 📈 綜合總分")
+                    total_cols = st.columns(len(depth_data))
+                    for idx, (house_name, data) in enumerate(depth_data.items()):
+                        with total_cols[idx]:
+                            if data['has_data']:
+                                total = sum(data['scores'].values()) / 5 * 10
+                                st.metric(f"{house_name}", f"{total:.1f} 分")
+                            else:
+                                st.metric(f"{house_name}", "—")
+                    
+                    # 顯示摘要
+                    st.markdown("#### 💬 分析摘要")
+                    for house_name, data in depth_data.items():
+                        if data['has_data']:
+                            st.info(f"**{house_name}**：{data['summary']}")
+                        else:
+                            st.info(f"**{house_name}**：{data['summary']}")
+                else:
+                    st.info("📭 目前沒有房屋進行過深度分析，仍可進行周邊設施比較")
+            else:
+                st.info("📭 無法載入深度分析資料")
+            
+            st.markdown("---")
         
         if pinfo:
             with st.expander(f"📌 {profile} 分析重點", expanded=False):
@@ -1329,6 +1513,8 @@ class ComparisonAnalyzer:
         self._display_maps(res)
         self._display_facilities_list_with_links(res)
         self._display_ai_analysis(res)
+    
+    # ==================== 其餘方法保持不變 ====================
     
     def _show_single_stats(self, res):
         """單一房屋統計"""
