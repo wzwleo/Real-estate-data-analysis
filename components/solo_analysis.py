@@ -1890,20 +1890,20 @@ def tab1_module():
 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    price_response = model.generate_content(price_prompt)
-                    space_response = model.generate_content(space_prompt)
-                    age_response = model.generate_content(age_prompt)
-                    floor_response = model.generate_content(floor_prompt)
-                    layout_response = model.generate_content(layout_prompt)
-                    summary_response = model.generate_content(summary_prompt)
+                    #price_response = model.generate_content(price_prompt)
+                    #space_response = model.generate_content(space_prompt)
+                    #age_response = model.generate_content(age_prompt)
+                    #floor_response = model.generate_content(floor_prompt)
+                    #layout_response = model.generate_content(layout_prompt)
+                    #summary_response = model.generate_content(summary_prompt)
                     
                     
-                    #price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
+                    summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
                     
                 # ── ✅ 在 session_state 存入前先算好分數 ──────────────────────────
                 # 給還沒算到的變數加預設值，避免 NameError
@@ -2106,18 +2106,12 @@ def tab1_module():
                         '車位': selected_row.get('車位', '未提供'),
                         '總價': selected_row.get('總價(萬)', '未提供'),
                     },
-                    
-                    'ai_analysis': {
-                        'price': r['price_text'],
-                        'space': r['space_text'],
-                        'age': r['age_text'],
-                        'floor': r['floor_text'],
-                        'layout': r['layout_text'],
-                        'summary': r['summary_text'],
-                    },
-                    
-                    # 總體評分
-                    'overall_rating': r['total_score'],
+                    'analysis_data': {
+                        'price_data': r['analysis_payload'],
+                        'space_data': r['floor_area_payload'],
+                        'age_data': r['age_analysis_payload'],
+                        'floor_data': r['floor_analysis_payload'],
+                        'layout_data': r['layout_analysis_payload'],
                 }
                 
                 st.session_state.ai_results_summary.append(analysis_summary)
