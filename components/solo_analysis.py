@@ -2109,7 +2109,7 @@ def tab1_module():
                     'ai_summary': r['summary_text'],
                     
                     # 總體評分
-                    'overall_rating': total_score,
+                    'overall_rating': r['total_score'],
                 }
                 
                 st.session_state.ai_results_summary.append(analysis_summary)
