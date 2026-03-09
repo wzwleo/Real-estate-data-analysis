@@ -2093,9 +2093,9 @@ def tab1_module():
                 
                 # 房屋基本資訊（不含總價）
                 'basic_info': {
-                    '標題' selected_row.get('標題', '未提供'),
+                    '標題': selected_row.get('標題', '未提供'),
                     '類型': selected_row.get('類型', '未提供'),
-                    '地址' selected_row.get('地址', '未提供'),
+                    '地址': selected_row.get('地址', '未提供'),
                     '建坪': selected_row.get('建坪', '未提供'),
                     '實際坪數': selected_row.get('主+陽', '未提供'),
                     '格局': selected_row.get('格局', '未提供'),
