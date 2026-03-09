@@ -5,14 +5,6 @@ def render_home_page():
     渲染首頁內容 - 不動產智能分析平台
     """
     st.title("🏠 不動產智能分析平台")
-    
-    # 黑底白字的歡迎訊息
-    st.markdown("""
-    <div style='background-color: #1E1E1E; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #333;'>
-        <h3 style='margin-top: 0; color: #FFFFFF;'>👋 歡迎來到 AI 購屋分析系統</h3>
-        <p style='font-size: 16px; color: #FFFFFF;'>本系統整合 AI 技術與數據分析，提供完整的購屋決策支援。</p>
-    </div>
-    """, unsafe_allow_html=True)
 
     st.markdown("## 📋 系統功能總覽")
     
