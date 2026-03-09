@@ -1959,8 +1959,6 @@ def tab1_module():
         # ── ✅ 渲染區塊：只要 session_state 有結果就顯示，不依賴 analyze_clicked ──
         if 'solo_analysis_result' in st.session_state:
             r = st.session_state['solo_analysis_result']
-        if "ai_results_summary" not in st.session_state:
-            st.session_state.ai_results_summary = []
     
             # 還原資料（用於重新繪圖）
             _selected_row = pd.Series(r['selected_row'])
@@ -2055,7 +2053,9 @@ def tab1_module():
             if save_button:
                 if 'ai_results' not in st.session_state:
                     st.session_state.ai_results = []
-    
+                if "ai_results_summary" not in st.session_state:
+                    st.session_state.ai_results_summary = []
+                    
                 analysis_result = {
                     'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
                     'house_title': r['selected_row'].get('標題', '未知房屋'),
@@ -2107,8 +2107,14 @@ def tab1_module():
                         '總價': selected_row.get('總價(萬)', '未提供'),
                     },
                     
-                    # AI 總結
-                    'ai_summary': r['summary_text'],
+                    'ai_analysis': {
+                        'price': r['price_text'],
+                        'space': r['space_text'],
+                        'age': r['age_text'],
+                        'floor': r['floor_text'],
+                        'layout': r['layout_text'],
+                        'summary': r['summary_text'],
+                    },
                     
                     # 總體評分
                     'overall_rating': r['total_score'],
