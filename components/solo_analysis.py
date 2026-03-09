@@ -2089,22 +2089,34 @@ def tab1_module():
                     'scores': r['scores'],
                     'total_score': r['total_score'],
                 }
-    
+            analysis_summary = {
+                
+                # 房屋基本資訊（不含總價）
+                'basic_info': {
+                    '標題' selected_row.get('標題', '未提供'),
+                    '類型': selected_row.get('類型', '未提供'),
+                    '地址' selected_row.get('地址', '未提供'),
+                    '建坪': selected_row.get('建坪', '未提供'),
+                    '實際坪數': selected_row.get('主+陽', '未提供'),
+                    '格局': selected_row.get('格局', '未提供'),
+                    '樓層': selected_row.get('樓層', '未提供'),
+                    '屋齡': selected_row.get('屋齡', '未提供'),
+                    '車位': selected_row.get('車位', '未提供'),
+                    '總價': selected_row.get('總價(萬)', '未提供'),
+                },
+                
+                # AI 總結
+                'ai_summary': summary_text,
+                
+                # 總體評分
+                'overall_rating': total_score,
+            }
+                st.session_state.ai_results_summary.append(analysis_summary)
                 st.session_state.ai_results.append(analysis_result)
+            
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
-                        # ── 除錯資訊 ──
-            st.write(r['analysis_payload'])
-            st.write(r['floor_area_payload'])
-            st.write(r['age_analysis_payload'])
-            st.write(r['floor_analysis_payload'])
-            st.write(r['layout_analysis_payload'])
-    
-            st.write(f"價格分數: {scores['價格競爭力']}  (算式：10 × (1 - 價格百分位 / 100))")
-            st.write(f"坪數分數: {scores['空間效率']}  (算式：(空間使用率 / 市場中位數使用率) × 5)")
-            st.write(f"屋齡分數: {scores['屋齡優勢']}  (算式：10 × (1 - 屋齡百分位 / 100))")
-            st.write(f"樓層分數: {scores['樓層定位']}  (算式：10 - |樓層百分位 - 50| / 5)")
-            st.write(f"格局分數: {scores['格局流動性']}  (算式：格局占比 / 3)")
+
 
                 
 
