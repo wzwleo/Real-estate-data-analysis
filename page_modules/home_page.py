@@ -2,13 +2,15 @@ import streamlit as st
 
 def render_home_page(): 
     """
-    渲染首頁內容 - 不動產智能分析平台介紹
+    渲染首頁內容 - 不動產智能分析平台
     """
     st.title("🏠 不動產智能分析平台")
+    
+    # 黑底白字的歡迎訊息
     st.markdown("""
-    <div style='background-color: #f0f2f6; padding: 20px; border-radius: 10px; margin-bottom: 20px;'>
-        <h3 style='margin-top: 0;'>👋 歡迎來到 AI 購屋分析系統</h3>
-        <p style='font-size: 16px;'>本系統整合 AI 技術與數據分析，提供完整的購屋決策支援。</p>
+    <div style='background-color: #1E1E1E; padding: 20px; border-radius: 10px; margin-bottom: 20px; border: 1px solid #333;'>
+        <h3 style='margin-top: 0; color: #FFFFFF;'>👋 歡迎來到 AI 購屋分析系統</h3>
+        <p style='font-size: 16px; color: #FFFFFF;'>本系統整合 AI 技術與數據分析，提供完整的購屋決策支援。</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -136,7 +138,7 @@ def render_home_page():
         </div>
         """, unsafe_allow_html=True)
 
-    # 技術架構簡介（可選）
+    # 技術架構簡介
     with st.expander("🔧 技術架構"):
         st.markdown("""
         - **前端框架**：Streamlit
