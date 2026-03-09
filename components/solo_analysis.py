@@ -7,6 +7,7 @@ import plotly.express as px
 import json
 import re
 import numpy as np
+from scipy import stats
 
 # 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
@@ -1311,14 +1312,23 @@ def tab1_module():
                         overall_median_building_price = df_valid_price['建坪單價'].median()
                         
                         # 單價隨屋齡的變化率（線性回歸斜率）
-                        from scipy import stats
+                        
                         if len(df_valid_price) > 1:
-                            slope, intercept, r_value, p_value, std_err = stats.linregress(
-                                df_valid_price['屋齡數值'], 
-                                df_valid_price['建坪單價']
-                            )
-                            price_decline_per_year = slope  # 每增加1年屋齡，單價變化（通常為負值）
-                            correlation = r_value  # 相關係數
+                            unique_ages = df_valid_price['屋齡數值'].nunique()  # ✅ 新增
+                            if unique_ages > 1:  # ✅ 新增
+                                try:  # ✅ 新增
+                                    slope, intercept, r_value, p_value, std_err = stats.linregress(
+                                        df_valid_price['屋齡數值'], 
+                                        df_valid_price['建坪單價']
+                                    )
+                                    price_decline_per_year = slope
+                                    correlation = r_value
+                                except Exception as e:  # ✅ 新增
+                                    price_decline_per_year = 0
+                                    correlation = 0
+                            else:  # ✅ 新增
+                                price_decline_per_year = 0
+                                correlation = 0
                         else:
                             price_decline_per_year = 0
                             correlation = 0
@@ -1479,14 +1489,22 @@ def tab1_module():
                             overall_median_floor_price = df_valid_floor['建坪單價'].median()
                             
                             # 單價隨樓層的變化率（線性回歸斜率）
-                            from scipy import stats
                             if len(df_valid_floor) > 1:
-                                slope_floor, intercept_floor, r_value_floor, p_value_floor, std_err_floor = stats.linregress(
-                                    df_valid_floor['樓層數值'], 
-                                    df_valid_floor['建坪單價']
-                                )
-                                price_change_per_floor = slope_floor  # 每增加1層，單價變化
-                                correlation_floor = r_value_floor  # 相關係數
+                                unique_floors = df_valid_floor['樓層數值'].nunique()  # ✅ 新增
+                                if unique_floors > 1:  # ✅ 新增
+                                    try:  # ✅ 新增
+                                        slope_floor, intercept_floor, r_value_floor, p_value_floor, std_err_floor = stats.linregress(
+                                            df_valid_floor['樓層數值'], 
+                                            df_valid_floor['建坪單價']
+                                        )
+                                        price_change_per_floor = slope_floor
+                                        correlation_floor = r_value_floor
+                                    except Exception as e:  # ✅ 新增
+                                        price_change_per_floor = 0
+                                        correlation_floor = 0
+                                else:  # ✅ 新增
+                                    price_change_per_floor = 0
+                                    correlation_floor = 0
                             else:
                                 price_change_per_floor = 0
                                 correlation_floor = 0
@@ -1708,12 +1726,21 @@ def tab1_module():
                                 
                                 # 10. 單價與房數的關聯
                                 if len(df_valid_layout) > 1:
-                                    slope_layout, intercept_layout, r_value_layout, p_value_layout, std_err_layout = stats.linregress(
-                                        df_valid_layout['房數'], 
-                                        df_valid_layout['單價']
-                                    )
-                                    price_change_per_room = slope_layout  # 每增加1房，單價變化
-                                    correlation_layout = r_value_layout  # 相關係數
+                                    unique_rooms = df_valid_layout['房數'].nunique()  # ✅ 新增
+                                    if unique_rooms > 1:  # ✅ 新增
+                                        try:  # ✅ 新增
+                                            slope_layout, intercept_layout, r_value_layout, p_value_layout, std_err_layout = stats.linregress(
+                                                df_valid_layout['房數'], 
+                                                df_valid_layout['單價']
+                                            )
+                                            price_change_per_room = slope_layout
+                                            correlation_layout = r_value_layout
+                                        except Exception as e:  # ✅ 新增
+                                            price_change_per_room = 0
+                                            correlation_layout = 0
+                                    else:  # ✅ 新增
+                                        price_change_per_room = 0
+                                        correlation_layout = 0
                                 else:
                                     price_change_per_room = 0
                                     correlation_layout = 0
