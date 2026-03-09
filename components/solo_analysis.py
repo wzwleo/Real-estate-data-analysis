@@ -2053,8 +2053,8 @@ def tab1_module():
             if save_button:
                 if 'ai_results' not in st.session_state:
                     st.session_state.ai_results = []
-            if "ai_results_summary" not in st.session_state:
-                st.session_state.ai_results_summary = []
+                if "ai_results_summary" not in st.session_state:
+                    st.session_state.ai_results_summary = []
 
                     
                 analysis_result = {
