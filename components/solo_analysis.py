@@ -2049,12 +2049,12 @@ def tab1_module():
             col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
                 save_button = st.button("💾 儲存本次分析結果", use_container_width=True, type="primary", key="save_analysis")
-    
+            if "ai_results_summary" not in st.session_state:
+                st.session_state.ai_results_summary = []
             if save_button:
                 if 'ai_results' not in st.session_state:
                     st.session_state.ai_results = []
-                if "ai_results_summary" not in st.session_state:
-                    st.session_state.ai_results_summary = []
+
                     
                 analysis_result = {
                     'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
