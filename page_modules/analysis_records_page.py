@@ -205,9 +205,6 @@ def render_analysis_records_page():
                 st.warning("⚠️ 無比較資料")
             st.markdown("---")
             
-            # 地段分析
-            st.subheader("地段 🗺")
-            st.markdown("---")
             
             # 綜合總結
             st.markdown("---")
@@ -233,6 +230,7 @@ def render_analysis_records_page():
                         """,
                         unsafe_allow_html=True
                     )
+            st.write(st.session_state.ai_results_summary)
             st.markdown("---")
             
             # ===============================
