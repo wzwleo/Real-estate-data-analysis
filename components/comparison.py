@@ -25,7 +25,7 @@ if parent_dir not in sys.path:
 
 try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
-    from components.place_types import PLACE_TYPES, CHINESE_TO_CATEGORY, NUISANCE_TYPES, IMPACT_WEIGHTS
+    from components.place_types import PLACE_TYPES, CHINESE_TO_CATEGORY, NUISANCE_TYPES, IMPACT_TYPES
     from components.geocoding import geocode_address, haversine
     CONFIG_LOADED = True
 except ImportError as e:
@@ -36,7 +36,7 @@ except ImportError as e:
     CHINESE_TO_CATEGORY = {}
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
-    IMPACT_WEIGHTS = {}
+    IMPACT_TYPES = {}
 
 # 設定台灣時區
 try:
@@ -59,6 +59,8 @@ class ComparisonAnalyzer:
     
     def __init__(self):
         self._init_session_state()
+        # 建立影響類型到嫌惡設施的映射
+        self._impact_to_nuisances = self._build_impact_mapping()
     
     def _init_session_state(self):
         """初始化必要的 session state 變數"""
@@ -76,11 +78,21 @@ class ComparisonAnalyzer:
             'include_nuisance': False,
             'selected_nuisances': [],
             'last_selected_subtypes': {},
-            'custom_impact_weights': {}  # 使用者自訂的權重
+            'custom_impact_weights': {}  # 使用者自訂的影響類型權重
         }
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
+    
+    def _build_impact_mapping(self):
+        """建立影響類型到嫌惡設施的映射"""
+        mapping = {}
+        for name, info in NUISANCE_TYPES.items():
+            for impact in info.get("impacts", []):
+                if impact not in mapping:
+                    mapping[impact] = []
+                mapping[impact].append(name)
+        return mapping
     
     # ==================== 深度分析輔助函式 ====================
     
@@ -260,66 +272,130 @@ class ComparisonAnalyzer:
     # ==================== 嫌惡設施權重設定 ====================
     
     def _render_impact_weight_settings(self):
-        """渲染影響類型權重設定介面"""
-        st.markdown("#### ⚙️ 嫌惡設施權重設定")
-        st.markdown("根據您的重視程度，調整各類型的權重（權重越高影響越大）")
+        """渲染影響類型權重設定介面 - 讓使用者選擇重視的項目並設定權重"""
+        st.markdown("#### ⚙️ 嫌惡設施影響權重設定")
+        st.markdown("請選擇您最在意的影響類型，並設定權重（1-10分）")
         
-        current_weights = st.session_state.get('custom_impact_weights', IMPACT_WEIGHTS.copy())
+        # 獲取當前設定
+        current_weights = st.session_state.get('custom_impact_weights', {})
         
-        # 定義影響類型說明
-        impact_descriptions = {
-            "噪音": "車輛、廟會、KTV等噪音源",
-            "空氣品質": "工廠廢氣、焚化爐、宮廟香火",
-            "生命安全": "加油站爆炸、高壓電塔輻射",
-            "環境衛生": "垃圾場、夜市、畜牧業",
-            "風水": "公墓、殯儀館、監獄",
-            "心理": "醫院、警察局、監獄",
-            "交通": "交流道、大型賣場",
-            "視野": "高壓電塔、基地台",
-            "健康疑慮": "基地台、發電廠",
-            "安全": "特種行業、機場",
-            "汙水": "工業區、汙水處理廠"
-        }
+        st.markdown("---")
         
-        cols = st.columns(2)
-        col_idx = 0
+        # 顯示權重設定說明
+        st.info("💡 **說明**：勾選您重視的影響類型，並設定權重（1-10分）。\n\n權重越高，相關嫌惡設施的風險分數越高。")
         
-        for impact, default_weight in IMPACT_WEIGHTS.items():
-            with cols[col_idx % 2]:
-                current = current_weights.get(impact, default_weight)
-                new_weight = st.slider(
-                    f"{impact}",
-                    min_value=0.0,
-                    max_value=2.0,
-                    value=float(current),
-                    step=0.1,
-                    key=f"weight_{impact}",
-                    help=impact_descriptions.get(impact, "")
-                )
-                current_weights[impact] = new_weight
-            col_idx += 1
+        st.markdown("#### 📋 選擇您重視的影響類型並設定權重")
         
-        if st.button("✅ 套用權重設定", use_container_width=True):
-            st.session_state.custom_impact_weights = current_weights
-            st.success("權重已儲存！")
+        # 三欄布局顯示所有影響類型
+        cols = st.columns(3)
+        impact_list = list(IMPACT_TYPES.items())
+        per_col = len(impact_list) // 3 + (1 if len(impact_list) % 3 > 0 else 0)
+        
+        new_weights = {}
+        
+        for col_idx in range(3):
+            with cols[col_idx]:
+                start_idx = col_idx * per_col
+                end_idx = min((col_idx + 1) * per_col, len(impact_list))
+                
+                for i in range(start_idx, end_idx):
+                    impact_name, impact_info = impact_list[i]
+                    description = impact_info["description"]
+                    color = impact_info["color"]
+                    
+                    # 是否已選擇
+                    is_selected = impact_name in current_weights
+                    default_weight = current_weights.get(impact_name, 5)
+                    
+                    with st.container():
+                        st.markdown(f"""
+                        <div style="border-left:4px solid {color}; padding-left:12px; margin-bottom:8px;">
+                            <span style="font-weight:bold; font-size:14px;">{impact_name}</span>
+                            <span style="font-size:10px; color:#888;">{description[:30]}...</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        col_select, col_weight = st.columns([1, 2])
+                        with col_select:
+                            selected = st.checkbox("重視", key=f"select_{impact_name}", value=is_selected)
+                        with col_weight:
+                            if selected:
+                                weight = st.slider(
+                                    "權重",
+                                    min_value=1,
+                                    max_value=10,
+                                    value=int(default_weight),
+                                    step=1,
+                                    key=f"weight_{impact_name}",
+                                    label_visibility="collapsed"
+                                )
+                                new_weights[impact_name] = weight
+                            else:
+                                st.write("─")
+                        
+                        st.markdown("---")
+        
+        # 顯示選擇摘要
+        if new_weights:
+            st.markdown("#### 📊 您設定的權重")
+            
+            # 按權重排序
+            sorted_weights = sorted(new_weights.items(), key=lambda x: x[1], reverse=True)
+            
+            weight_cols = st.columns(3)
+            for idx, (impact, weight) in enumerate(sorted_weights):
+                with weight_cols[idx % 3]:
+                    st.markdown(f"**{impact}**：{weight} 分")
+            
+            # 顯示受影響的嫌惡設施
+            with st.expander("🔍 查看受影響的嫌惡設施", expanded=False):
+                for impact, weight in sorted_weights:
+                    if impact in self._impact_to_nuisances:
+                        nuisances = self._impact_to_nuisances[impact]
+                        st.markdown(f"**{impact} (權重 {weight})** 影響以下設施：")
+                        for n in nuisances:
+                            st.markdown(f"  - {n}")
+                        st.markdown("---")
+        
+        # 儲存按鈕
+        if st.button("✅ 套用權重設定", use_container_width=True, key="apply_weights"):
+            st.session_state.custom_impact_weights = new_weights
+            st.success(f"✅ 已儲存 {len(new_weights)} 項權重設定！")
+            st.rerun()
+        
+        # 重置按鈕
+        if st.button("🔄 重置所有權重", use_container_width=True, key="reset_weights"):
+            st.session_state.custom_impact_weights = {}
+            st.success("✅ 已重置所有權重")
+            st.rerun()
         
         st.markdown("---")
     
     def _calculate_nuisance_score(self, nuisance_name, distance):
-        """計算嫌惡設施的風險分數（使用自訂權重）"""
+        """計算嫌惡設施的風險分數（使用使用者自訂權重）"""
         if nuisance_name not in NUISANCE_TYPES:
             return 0
         
         nuisance_info = NUISANCE_TYPES[nuisance_name]
-        base_weight = nuisance_info.get("base_weight", 5)
         impacts = nuisance_info.get("impacts", [])
         
-        custom_weights = st.session_state.get('custom_impact_weights', IMPACT_WEIGHTS)
+        # 取得使用者自訂權重
+        custom_weights = st.session_state.get('custom_impact_weights', {})
         
-        # 計算影響因子
-        impact_factor = 1.0
+        # 如果使用者沒有設定任何權重，返回 0（不計算分數）
+        if not custom_weights:
+            return 0
+        
+        # 計算影響因子：取使用者設定的最高權重
+        max_weight = 0
         for impact in impacts:
-            impact_factor += custom_weights.get(impact, 1.0) - 1.0
+            weight = custom_weights.get(impact, 0)
+            if weight > max_weight:
+                max_weight = weight
+        
+        # 如果該設施的所有影響類型都沒有被使用者選中，不計算分數
+        if max_weight == 0:
+            return 0
         
         # 距離因子
         if distance <= 300:
@@ -331,7 +407,8 @@ class ComparisonAnalyzer:
         else:
             distance_factor = 0.3
         
-        score = base_weight * impact_factor * distance_factor
+        # 最終分數 = 使用者設定的權重 × 距離因子
+        score = max_weight * distance_factor
         return round(score, 1)
     
     def _render_nuisance_selection_with_weights(self):
@@ -340,6 +417,7 @@ class ComparisonAnalyzer:
         
         st.markdown("#### 選擇嫌惡設施類型（可複選）")
         
+        # 先顯示權重設定
         with st.expander("⚙️ 進階設定 - 調整嫌惡設施權重", expanded=False):
             self._render_impact_weight_settings()
         
@@ -350,7 +428,7 @@ class ComparisonAnalyzer:
         items = list(NUISANCE_TYPES.items())
         mid = len(items) // 2 + len(items) % 2
         
-        custom_weights = st.session_state.get('custom_impact_weights', IMPACT_WEIGHTS)
+        custom_weights = st.session_state.get('custom_impact_weights', {})
         
         for col_idx, column in enumerate(cols):
             with column:
@@ -361,22 +439,31 @@ class ComparisonAnalyzer:
                     nuisance_name, nuisance_info = items[i]
                     color = nuisance_info.get("color", "#dc3545")
                     impacts = nuisance_info.get("impacts", [])
-                    base_weight = nuisance_info.get("base_weight", 5)
                     
                     # 計算調整後的權重
-                    adjusted_weight = base_weight
-                    for impact in impacts:
-                        adjusted_weight += custom_weights.get(impact, 1.0) - 1.0
-                    
-                    if adjusted_weight >= 9:
-                        weight_stars = "🔴🔴🔴 高風險"
-                    elif adjusted_weight >= 7:
-                        weight_stars = "🟡🟡 中高風險"
-                    elif adjusted_weight >= 5:
-                        weight_stars = "🟡 中等風險"
+                    if custom_weights:
+                        max_weight = 0
+                        for impact in impacts:
+                            weight = custom_weights.get(impact, 0)
+                            if weight > max_weight:
+                                max_weight = weight
+                        
+                        if max_weight > 0:
+                            # 顯示風險等級
+                            if max_weight >= 8:
+                                weight_stars = "🔴🔴 高風險"
+                            elif max_weight >= 6:
+                                weight_stars = "🟡🟡 中高風險"
+                            elif max_weight >= 4:
+                                weight_stars = "🟡 中等風險"
+                            else:
+                                weight_stars = "🟢 低風險"
+                        else:
+                            weight_stars = "⚪ 未選中影響"
                     else:
-                        weight_stars = "🟢 低風險"
+                        weight_stars = "⚪ 請先設定權重"
                     
+                    # 影響類型標籤
                     impact_tags = " ".join([f"#{imp}" for imp in impacts[:3]])
                     
                     st.markdown(f"""
@@ -394,16 +481,24 @@ class ComparisonAnalyzer:
             st.success(f"✅ 已選擇 {len(selected)} 類嫌惡設施")
             
             with st.expander("📊 權重計算結果", expanded=False):
+                custom_weights = st.session_state.get('custom_impact_weights', {})
                 for name in selected:
                     info = NUISANCE_TYPES[name]
                     impacts = info.get("impacts", [])
-                    base = info.get("base_weight", 5)
-                    adjusted = base
-                    for impact in impacts:
-                        adjusted += custom_weights.get(impact, 1.0) - 1.0
                     
-                    st.markdown(f"- **{name}**：基礎分 {base} → 調整後 {adjusted:.1f} 分")
-                    st.markdown(f"  影響類型：{', '.join(impacts)}")
+                    if custom_weights:
+                        max_weight = 0
+                        for impact in impacts:
+                            weight = custom_weights.get(impact, 0)
+                            if weight > max_weight:
+                                max_weight = weight
+                        
+                        st.markdown(f"- **{name}**：影響權重 {max_weight} 分")
+                        st.markdown(f"  影響類型：{', '.join(impacts)}")
+                        if max_weight > 0:
+                            st.markdown(f"  使用者權重：{', '.join([f'{imp}({custom_weights.get(imp,0)}分)' for imp in impacts if imp in custom_weights])}")
+                    else:
+                        st.markdown(f"- **{name}**：請先設定權重")
         else:
             st.info("👆 請選擇要分析的嫌惡設施類型")
         
@@ -1146,9 +1241,9 @@ class ComparisonAnalyzer:
             st.info("⚠️ 此分析包含嫌惡設施評估")
             if nuisance_scores:
                 for name, score in nuisance_scores.items():
-                    if score >= 15:
+                    if score >= 8:
                         st.warning(f"🔴 {name} 嫌惡設施風險評分：{score} 分（高風險）")
-                    elif score >= 8:
+                    elif score >= 4:
                         st.warning(f"🟡 {name} 嫌惡設施風險評分：{score} 分（中風險）")
                     else:
                         st.info(f"🟢 {name} 嫌惡設施風險評分：{score} 分（低風險）")
