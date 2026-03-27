@@ -371,8 +371,8 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
     
-    def _calculate_nuisance_score(self, nuisance_name, distance):
-        """計算嫌惡設施的風險分數（使用使用者自訂權重）"""
+    def _calculate_base_score(self, nuisance_name):
+        """計算嫌惡設施的基礎分數（不考慮距離）"""
         if nuisance_name not in NUISANCE_TYPES:
             return 0
         
@@ -382,21 +382,20 @@ class ComparisonAnalyzer:
         # 取得使用者自訂權重
         custom_weights = st.session_state.get('custom_impact_weights', {})
         
-        # 如果使用者沒有設定任何權重，返回 0（不計算分數）
+        # 如果使用者沒有設定任何權重，返回 0
         if not custom_weights:
             return 0
         
-        # 計算影響因子：取使用者設定的最高權重
-        max_weight = 0
+        # 計算所有影響類型的權重總和
+        total_weight = 0
         for impact in impacts:
             weight = custom_weights.get(impact, 0)
-            if weight > max_weight:
-                max_weight = weight
+            total_weight += weight
         
-        # 如果該設施的所有影響類型都沒有被使用者選中，不計算分數
-        if max_weight == 0:
-            return 0
-        
+        return total_weight
+    
+    def _calculate_final_score(self, base_score, distance, same_type_count):
+        """計算嫌惡設施的最終風險分數（加入距離因子和數量加成）"""
         # 距離因子
         if distance <= 300:
             distance_factor = 1.0
@@ -407,9 +406,14 @@ class ComparisonAnalyzer:
         else:
             distance_factor = 0.3
         
-        # 最終分數 = 使用者設定的權重 × 距離因子
-        score = max_weight * distance_factor
-        return round(score, 1)
+        # 單一設施分數
+        facility_score = base_score * distance_factor
+        
+        # 數量加成
+        quantity_factor = 1 + (same_type_count - 1) * 0.1
+        quantity_factor = min(quantity_factor, 1.5)  # 最高 1.5
+        
+        return facility_score * quantity_factor
     
     def _render_nuisance_selection_with_weights(self):
         """渲染嫌惡設施選擇（包含權重設定）"""
@@ -424,11 +428,24 @@ class ComparisonAnalyzer:
         st.markdown("---")
         st.markdown("#### 選擇要分析的嫌惡設施")
         
-        cols = st.columns(2)
-        items = list(NUISANCE_TYPES.items())
-        mid = len(items) // 2 + len(items) % 2
+        # 計算每個嫌惡設施的基礎分數
+        facility_base_scores = {}
+        for name in NUISANCE_TYPES.keys():
+            base_score = self._calculate_base_score(name)
+            if base_score > 0:  # 只顯示有影響的設施
+                facility_base_scores[name] = base_score
         
-        custom_weights = st.session_state.get('custom_impact_weights', {})
+        # 按基礎分數排序
+        sorted_facilities = sorted(facility_base_scores.items(), key=lambda x: x[1], reverse=True)
+        
+        if not sorted_facilities:
+            st.info("👆 請先設定權重，才會顯示可選擇的嫌惡設施")
+            return selected
+        
+        # 兩欄布局顯示
+        cols = st.columns(2)
+        items = sorted_facilities
+        mid = len(items) // 2 + len(items) % 2
         
         for col_idx, column in enumerate(cols):
             with column:
@@ -436,41 +453,17 @@ class ComparisonAnalyzer:
                 end_idx = min((col_idx + 1) * mid, len(items))
                 
                 for i in range(start_idx, end_idx):
-                    nuisance_name, nuisance_info = items[i]
+                    nuisance_name, base_score = items[i]
+                    nuisance_info = NUISANCE_TYPES[nuisance_name]
                     color = nuisance_info.get("color", "#dc3545")
                     impacts = nuisance_info.get("impacts", [])
                     
-                    # 計算調整後的權重
-                    if custom_weights:
-                        max_weight = 0
-                        for impact in impacts:
-                            weight = custom_weights.get(impact, 0)
-                            if weight > max_weight:
-                                max_weight = weight
-                        
-                        if max_weight > 0:
-                            # 顯示風險等級
-                            if max_weight >= 8:
-                                weight_stars = "🔴🔴 高風險"
-                            elif max_weight >= 6:
-                                weight_stars = "🟡🟡 中高風險"
-                            elif max_weight >= 4:
-                                weight_stars = "🟡 中等風險"
-                            else:
-                                weight_stars = "🟢 低風險"
-                        else:
-                            weight_stars = "⚪ 未選中影響"
-                    else:
-                        weight_stars = "⚪ 請先設定權重"
-                    
-                    # 影響類型標籤
-                    impact_tags = " ".join([f"#{imp}" for imp in impacts[:3]])
-                    
+                    # 顯示基礎分數
                     st.markdown(f"""
                     <div style="border-left:4px solid {color}; padding-left:8px; margin-bottom:15px;">
                         <span style="font-weight:bold; font-size:16px;">{nuisance_name}</span>
-                        <span style="color:{color}; font-size:12px; margin-left:8px;">{weight_stars}</span>
-                        <div style="font-size:11px; color:#666; margin-top:4px;">{impact_tags}</div>
+                        <span style="font-size:12px; margin-left:8px;">基礎分數: {base_score}分</span>
+                        <div style="font-size:11px; color:#666; margin-top:4px;">影響: {', '.join(impacts)}</div>
                     </div>
                     """, unsafe_allow_html=True)
                     
@@ -479,26 +472,6 @@ class ComparisonAnalyzer:
         
         if selected:
             st.success(f"✅ 已選擇 {len(selected)} 類嫌惡設施")
-            
-            with st.expander("📊 權重計算結果", expanded=False):
-                custom_weights = st.session_state.get('custom_impact_weights', {})
-                for name in selected:
-                    info = NUISANCE_TYPES[name]
-                    impacts = info.get("impacts", [])
-                    
-                    if custom_weights:
-                        max_weight = 0
-                        for impact in impacts:
-                            weight = custom_weights.get(impact, 0)
-                            if weight > max_weight:
-                                max_weight = weight
-                        
-                        st.markdown(f"- **{name}**：影響權重 {max_weight} 分")
-                        st.markdown(f"  影響類型：{', '.join(impacts)}")
-                        if max_weight > 0:
-                            st.markdown(f"  使用者權重：{', '.join([f'{imp}({custom_weights.get(imp,0)}分)' for imp in impacts if imp in custom_weights])}")
-                    else:
-                        st.markdown(f"- **{name}**：請先設定權重")
         else:
             st.info("👆 請選擇要分析的嫌惡設施類型")
         
@@ -521,6 +494,8 @@ class ComparisonAnalyzer:
                     df_copy['分析時間'] = analysis.get('timestamp', '未知')
                     
                     column_order = ['分析名稱', '買家類型', '分析時間', '房屋', '設施名稱', '設施子類別', '距離(公尺)']
+                    if '風險分數' in df_copy.columns:
+                        column_order.append('風險分數')
                     available_cols = [col for col in column_order if col in df_copy.columns]
                     df_copy = df_copy[available_cols]
                     df_copy.to_excel(writer, sheet_name='設施清單', index=False)
@@ -532,7 +507,8 @@ class ComparisonAnalyzer:
                         '分析模式': analysis.get('analysis_mode', ''),
                         '搜尋半徑(公尺)': analysis.get('radius', 0),
                         '總設施數': len(df),
-                        '包含嫌惡設施': '是' if analysis.get('include_nuisance', False) else '否'
+                        '包含嫌惡設施': '是' if analysis.get('include_nuisance', False) else '否',
+                        '嫌惡設施風險分數': analysis.get('nuisance_scores', {}).get(name, 0) if analysis.get('include_nuisance', False) else 0
                     }])
                     summary.to_excel(writer, sheet_name='分析摘要', index=False)
                 
@@ -571,7 +547,9 @@ class ComparisonAnalyzer:
         txt_lines.append(f"分析模式：{mode}")
         txt_lines.append(f"搜尋半徑：{radius} 公尺")
         if include_nuisance:
-            txt_lines.append("包含嫌惡設施分析：是")
+            nuisance_scores = analysis.get('nuisance_scores', {})
+            score = nuisance_scores.get(name, 0)
+            txt_lines.append(f"嫌惡設施風險分數：{score} 分")
         txt_lines.append("")
         
         houses_data = analysis.get('houses_data', {})
@@ -594,8 +572,9 @@ class ComparisonAnalyzer:
             
             df_sorted = df.sort_values('距離(公尺)')
             for idx, row in df_sorted.iterrows():
-                is_nuisance = " ⚠️" if row['設施子類別'] in NUISANCE_TYPES.keys() else ""
-                txt_lines.append(f"  • {row['設施名稱']} ({row['設施子類別']}){is_nuisance} - {row['距離(公尺)']}公尺")
+                is_nuisance = " ⚠️" if row['主要類別'] == "嫌惡設施" else ""
+                score_text = f" [風險:{row['風險分數']}分]" if '風險分數' in row and row['風險分數'] > 0 else ""
+                txt_lines.append(f"  • {row['設施名稱']} ({row['設施子類別']}){is_nuisance}{score_text} - {row['距離(公尺)']}公尺")
             
             txt_lines.append("")
         
@@ -991,6 +970,7 @@ class ComparisonAnalyzer:
             fav_df = pd.read_json(s["fav"], orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
+                # 步驟1：解析地址
                 st.write("📌 步驟 1/4：解析地址...")
                 houses_data = {}
                 for i, opt in enumerate(s["houses"]):
@@ -1006,6 +986,7 @@ class ComparisonAnalyzer:
                         "lat": lat, "lng": lng
                     }
                 
+                # 步驟2：查詢生活機能設施
                 st.write("🔍 步驟 2/4：查詢周邊生活機能設施...")
                 places_data = {}
                 for idx, (name, info) in enumerate(houses_data.items()):
@@ -1016,36 +997,63 @@ class ComparisonAnalyzer:
                     )
                     places_data[name] = places
                 
+                # 步驟2.5：如果需要，查詢嫌惡設施
                 nuisance_data = {}
                 nuisance_scores = {}
                 if s.get("include_nuisance", False) and s.get("selected_nuisances"):
                     st.write("🔍 步驟 2.5/4：查詢周邊嫌惡設施...")
+                    
+                    # 預先計算每個設施類型的基礎分數
+                    base_scores = {}
+                    for nuisance in s["selected_nuisances"]:
+                        base_scores[nuisance] = self._calculate_base_score(nuisance)
+                    
                     for idx, (name, info) in enumerate(houses_data.items()):
                         st.write(f"   - 查詢 {name} 周邊嫌惡設施...")
-                        nuisances = self._query_nuisances_no_progress(
-                            info["lat"], info["lng"], s["server"],
-                            s["selected_nuisances"], s["radius"]
-                        )
-                        nuisance_data[name] = nuisances
+                        
+                        # 查詢每個選中的嫌惡設施
+                        all_nuisances = []
+                        for nuisance in s["selected_nuisances"]:
+                            nuisances = self._query_nuisances_no_progress(
+                                info["lat"], info["lng"], s["server"],
+                                [nuisance], s["radius"]
+                            )
+                            all_nuisances.extend(nuisances)
+                        
+                        nuisance_data[name] = all_nuisances
                         
                         if name not in places_data:
                             places_data[name] = []
                         
-                        st.write(f"     找到 {len(nuisances)} 處嫌惡設施")
+                        st.write(f"     找到 {len(all_nuisances)} 處嫌惡設施")
                         
+                        # 計算每個設施類型的數量
+                        type_counts = {}
+                        for n in all_nuisances:
+                            n_type = n[0]
+                            type_counts[n_type] = type_counts.get(n_type, 0) + 1
+                        
+                        # 計算總風險分數
                         total_score = 0
-                        for n in nuisances:
-                            score = self._calculate_nuisance_score(n[0], n[5])
-                            total_score += score
-                            places_data[name].append(("嫌惡設施", n[1], n[2], n[3], n[4], n[5], n[6], score))
+                        for n in all_nuisances:
+                            n_type = n[0]
+                            base_score = base_scores.get(n_type, 0)
+                            if base_score > 0:
+                                distance = n[5]
+                                same_type_count = type_counts.get(n_type, 1)
+                                final_score = self._calculate_final_score(base_score, distance, same_type_count)
+                                total_score += final_score
+                                places_data[name].append(("嫌惡設施", n[1], n[2], n[3], n[4], n[5], n[6], final_score))
                         
                         nuisance_scores[name] = round(total_score, 1)
                         st.write(f"     風險評分：{nuisance_scores[name]} 分")
                 
+                # 步驟3：計算統計
                 st.write("📊 步驟 3/4：計算統計...")
                 counts = {n: len(p) for n, p in places_data.items()}
                 table = self._create_facilities_table(houses_data, places_data)
                 
+                # 步驟4：儲存結果
                 st.write("💾 步驟 4/4：儲存結果...")
                 
                 analysis_result = {
@@ -1223,7 +1231,7 @@ class ComparisonAnalyzer:
         return pd.DataFrame(rows)
     
     def _display_analysis_results(self, res):
-        """顯示分析結果 - 嫌惡設施獨立"""
+        """顯示分析結果"""
         if not res:
             return
         
@@ -1241,12 +1249,7 @@ class ComparisonAnalyzer:
             st.info("⚠️ 此分析包含嫌惡設施評估")
             if nuisance_scores:
                 for name, score in nuisance_scores.items():
-                    if score >= 8:
-                        st.warning(f"🔴 {name} 嫌惡設施風險評分：{score} 分（高風險）")
-                    elif score >= 4:
-                        st.warning(f"🟡 {name} 嫌惡設施風險評分：{score} 分（中風險）")
-                    else:
-                        st.info(f"🟢 {name} 嫌惡設施風險評分：{score} 分（低風險）")
+                    st.markdown(f"{name} 嫌惡設施風險評分：{score} 分")
         st.markdown("---")
         
         if mode == "單一房屋分析":
@@ -1511,7 +1514,7 @@ class ComparisonAnalyzer:
                     )
     
     def _render_map_with_links(self, lat, lng, places, radius, title, house_info, browser_key):
-        """渲染地圖 - 嫌惡設施用紅色標示"""
+        """渲染地圖"""
         if not browser_key:
             st.error("❌ 請在側邊欄填入 Google Maps Browser Key")
             return
@@ -1633,7 +1636,7 @@ class ComparisonAnalyzer:
         html(html_content, height=550)
     
     def _display_facilities_list_with_links(self, res, include_nuisance=False):
-        """顯示設施列表 - 分開一般設施和嫌惡設施"""
+        """顯示設施列表"""
         st.markdown("---")
         st.subheader("📍 全部設施列表")
         
@@ -1699,13 +1702,14 @@ class ComparisonAnalyzer:
                         with col2:
                             st.markdown(f'<span style="background-color:#dc354520; color:#dc3545; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["設施子類別"]}</span>', unsafe_allow_html=True)
                         with col3:
-                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺 ({dist_badge})</span>', unsafe_allow_html=True)
+                            score_text = f" [風險:{row['風險分數']}分]" if '風險分數' in row else ""
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺 ({dist_badge}){score_text}</span>', unsafe_allow_html=True)
                         with col4:
                             st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
                         st.divider()
     
     def _display_ai_analysis(self, res):
-        """AI 分析 - 嫌惡設施獨立章節"""
+        """AI 分析"""
         st.markdown("---")
         st.subheader("🤖 AI 智能分析")
         
@@ -1898,7 +1902,7 @@ class ComparisonAnalyzer:
 - 分析類別：{', '.join(res['selected_categories'])}
 - 關鍵字：{res.get('keyword', '') if res.get('keyword') else '無'}
 
-【嫌惡設施風險評分】{score} 分（越高風險越大）
+【嫌惡設施風險評分】{score} 分
 {facilities_text}
 {nuisance_text}
 
