@@ -211,155 +211,190 @@ PLACE_TYPES = {
     ]
 }
 
-# 嫌惡設施類別（根據您提供的表格）
+# 嫌惡設施類別 - 包含影響類型標籤
 NUISANCE_TYPES = {
     "加油站/瓦斯行": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["空氣品質", "生命安全威脅"],
+        "impacts": ["生命安全", "空氣品質"],
         "suggested_distance": 600,
-        "keywords": ["加油站", "瓦斯行", "瓦斯桶", "加氣站"]
+        "keywords": ["加油站", "瓦斯行", "瓦斯桶", "加氣站"],
+        "base_weight": 9
     },
     "基地台/電塔/變電所": {
         "level": "中",
         "color": "#fd7e14",
-        "impacts": ["阻礙視野", "健康疑慮"],
+        "impacts": ["健康疑慮", "視野"],
         "suggested_distance": 900,
-        "keywords": ["基地台", "電塔", "變電所", "高壓電塔"]
+        "keywords": ["基地台", "電塔", "變電所", "高壓電塔"],
+        "base_weight": 8
     },
     "警察局/消防局": {
         "level": "低",
         "color": "#28a745",
-        "impacts": ["噪音", "緊張壓迫感"],
+        "impacts": ["噪音"],
         "suggested_distance": 300,
-        "keywords": ["警察局", "消防局", "派出所", "消防隊"]
+        "keywords": ["警察局", "消防局", "派出所", "消防隊"],
+        "base_weight": 4
     },
     "垃圾場/回收場": {
         "level": "中",
         "color": "#fd7e14",
-        "impacts": ["環境衛生"],
+        "impacts": ["環境衛生", "空氣品質"],
         "suggested_distance": 300,
-        "keywords": ["垃圾場", "回收場", "資源回收", "垃圾處理"]
+        "keywords": ["垃圾場", "回收場", "資源回收", "垃圾處理"],
+        "base_weight": 8
     },
     "市場(傳統市場/夜市)": {
         "level": "中",
         "color": "#fd7e14",
         "impacts": ["環境衛生", "交通", "噪音"],
         "suggested_distance": 300,
-        "keywords": ["傳統市場", "夜市", "菜市場", "早市", "黃昏市場"]
+        "keywords": ["傳統市場", "夜市", "菜市場", "早市", "黃昏市場"],
+        "base_weight": 6
     },
     "高架道路/地下道/捷運": {
         "level": "中",
         "color": "#fd7e14",
-        "impacts": ["噪音"],
+        "impacts": ["噪音", "交通"],
         "suggested_distance": 300,
-        "keywords": ["高架道路", "地下道", "捷運", "快速道路", "高速公路"]
+        "keywords": ["高架道路", "地下道", "捷運", "快速道路", "高速公路"],
+        "base_weight": 6
     },
     "特種行業/KTV/遊樂場": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["交通", "噪音", "安全"],
+        "impacts": ["噪音", "安全"],
         "suggested_distance": 600,
-        "keywords": ["KTV", "酒店", "舞廳", "夜店", "遊樂場", "特種行業"]
+        "keywords": ["KTV", "酒店", "舞廳", "夜店", "遊樂場", "特種行業"],
+        "base_weight": 7
     },
     "醫院": {
         "level": "中",
         "color": "#fd7e14",
-        "impacts": ["噪音", "緊張壓迫感"],
+        "impacts": ["噪音"],
         "suggested_distance": 300,
-        "keywords": ["醫院", "醫療中心", "綜合醫院"]
+        "keywords": ["醫院", "醫療中心", "綜合醫院"],
+        "base_weight": 5
     },
     "大型賣場/停車場": {
         "level": "中",
         "color": "#fd7e14",
-        "impacts": ["交通"],
+        "impacts": ["交通", "噪音"],
         "suggested_distance": 300,
-        "keywords": ["大賣場", "量販店", "購物中心", "停車場"]
+        "keywords": ["大賣場", "量販店", "購物中心", "停車場"],
+        "base_weight": 5
     },
     "交流道": {
         "level": "高",
         "color": "#dc3545",
         "impacts": ["交通", "噪音"],
         "suggested_distance": 900,
-        "keywords": ["交流道", "高速公路交流道"]
+        "keywords": ["交流道", "高速公路交流道"],
+        "base_weight": 8
     },
     "工業區/工廠": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["噪音", "空汙", "汙水"],
+        "impacts": ["噪音", "空氣品質", "汙水"],
         "suggested_distance": 900,
-        "keywords": ["工業區", "工廠", "工業園區", "加工區"]
+        "keywords": ["工業區", "工廠", "工業園區", "加工區"],
+        "base_weight": 9
     },
     "禮儀社/葬儀社": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["風水"],
+        "impacts": ["風水", "心理"],
         "suggested_distance": 1200,
-        "keywords": ["禮儀社", "葬儀社", "生命禮儀"]
+        "keywords": ["禮儀社", "葬儀社", "生命禮儀"],
+        "base_weight": 10
     },
     "宮廟/神壇": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["交通", "噪音", "空汙"],
+        "impacts": ["噪音", "交通", "空氣品質"],
         "suggested_distance": 1200,
-        "keywords": ["宮廟", "神壇", "寺廟", "媽祖廟", "土地公廟"]
+        "keywords": ["宮廟", "神壇", "寺廟", "媽祖廟", "土地公廟"],
+        "base_weight": 7
     },
     "焚化爐": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["環境衛生", "空汙", "噪音"],
+        "impacts": ["環境衛生", "空氣品質"],
         "suggested_distance": 900,
-        "keywords": ["焚化爐", "垃圾焚化"]
+        "keywords": ["焚化爐", "垃圾焚化"],
+        "base_weight": 9
     },
     "發電廠": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["健康疑慮", "阻礙視野"],
+        "impacts": ["健康疑慮", "視野"],
         "suggested_distance": 900,
-        "keywords": ["發電廠", "火力發電", "核電廠"]
+        "keywords": ["發電廠", "火力發電", "核電廠"],
+        "base_weight": 8
     },
     "監獄": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["風水"],
+        "impacts": ["風水", "心理"],
         "suggested_distance": 900,
-        "keywords": ["監獄", "看守所", "矯正署"]
+        "keywords": ["監獄", "看守所", "矯正署"],
+        "base_weight": 8
     },
     "汙水處理廠": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["空氣品質", "水質"],
+        "impacts": ["空氣品質", "環境衛生"],
         "suggested_distance": 1200,
-        "keywords": ["汙水處理廠", "水資源中心"]
+        "keywords": ["汙水處理廠", "水資源中心"],
+        "base_weight": 8
     },
     "飛機場": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["噪音", "飛安"],
+        "impacts": ["噪音", "安全"],
         "suggested_distance": 1200,
-        "keywords": ["機場", "航空站"]
+        "keywords": ["機場", "航空站"],
+        "base_weight": 8
     },
     "公墓/靈骨塔/殯儀館": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["風水"],
+        "impacts": ["風水", "心理"],
         "suggested_distance": 1200,
-        "keywords": ["公墓", "靈骨塔", "殯儀館", "墓園", "納骨塔"]
+        "keywords": ["公墓", "靈骨塔", "殯儀館", "墓園", "納骨塔"],
+        "base_weight": 10
     },
     "畜牧業": {
         "level": "高",
         "color": "#dc3545",
-        "impacts": ["環境衛生", "噪音"],
+        "impacts": ["環境衛生", "空氣品質", "噪音"],
         "suggested_distance": 1200,
-        "keywords": ["畜牧場", "養豬場", "養雞場", "牧場"]
+        "keywords": ["畜牧場", "養豬場", "養雞場", "牧場"],
+        "base_weight": 7
     }
 }
 
-# 建立反向映射和類別映射
-CHINESE_TO_CATEGORY = {}  # 中文關鍵字到主類別的映射
+# 影響類型權重設定（使用者可調整）
+IMPACT_WEIGHTS = {
+    "噪音": 1.0,
+    "空氣品質": 1.0,
+    "生命安全": 1.5,
+    "環境衛生": 1.0,
+    "風水": 1.0,
+    "心理": 1.0,
+    "交通": 0.8,
+    "視野": 0.6,
+    "健康疑慮": 1.2,
+    "安全": 1.3,
+    "汙水": 0.9
+}
+
+# 建立反向映射
+CHINESE_TO_CATEGORY = {}
 
 for category, items in PLACE_TYPES.items():
     for i in range(0, len(items), 2):
         if i+1 < len(items):
             chinese_name = items[i]
-            CHINESE_TO_CATEGORY[chinese_name] = category  # 建立中文映射
+            CHINESE_TO_CATEGORY[chinese_name] = category
