@@ -311,7 +311,7 @@ NUISANCE_TYPES = {
     },
     "汙水處理廠": {
         "level": "高",
-        "impacts": ["空氣品質", "環境衛生"],
+        "impacts": ["空氣品質", "環境衛生", "汙水"],
         "suggested_distance": 1200,
         "keywords": ["汙水處理廠", "水資源中心"]
     },
