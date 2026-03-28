@@ -701,11 +701,19 @@ class ComparisonAnalyzer:
                     st.session_state.last_selected_subtypes = subs.copy()
                     st.session_state.suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
                     
+                    # 清除所有類別的臨時標記和 checkbox 狀態
                     for cat in PLACE_TYPES.keys():
                         if f"all_{cat}" in st.session_state:
                             del st.session_state[f"all_{cat}"]
                         if f"clear_{cat}" in st.session_state:
                             del st.session_state[f"clear_{cat}"]
+                        
+                        # 清除此類別下所有設施的 checkbox 狀態
+                        items = PLACE_TYPES[cat]
+                        for item_idx, item in enumerate(items):
+                            key = f"sub_{cat}_{item_idx}"
+                            if key in st.session_state:
+                                del st.session_state[key]
                     
                     st.rerun()
         
@@ -808,6 +816,7 @@ class ComparisonAnalyzer:
         
         for cat in all_cats:
             with st.expander(f"📁 {cat}", expanded=True):
+                # 顯示此類別已選擇數量
                 current_selected_count = len(st.session_state.last_selected_subtypes.get(cat, []))
                 if current_selected_count > 0:
                     st.caption(f"✅ 此類別已選擇 {current_selected_count} 種")
@@ -825,6 +834,7 @@ class ComparisonAnalyzer:
                     if current_profile:
                         st.markdown(f"💡 **{current_profile}推薦**")
                 
+                # 取得此類別所有設施（去除重複）
                 items = []
                 seen = set()
                 for item in PLACE_TYPES[cat]:
@@ -832,6 +842,7 @@ class ComparisonAnalyzer:
                         items.append(item)
                         seen.add(item)
                 
+                # 取得優先/次要推薦清單
                 priority_list = []
                 secondary_list = []
                 if current_profile and current_profile in profiles:
@@ -839,17 +850,20 @@ class ComparisonAnalyzer:
                     priority_list = p.get("priority_categories", {}).get(cat, [])
                     secondary_list = p.get("secondary_categories", {}).get(cat, [])
                 
+                # 處理全選/清除
                 force_all = st.session_state.get(f"all_{cat}", False)
                 force_clear = st.session_state.get(f"clear_{cat}", False)
                 
                 if force_clear:
                     default_list = []
                 else:
+                    # 優先使用上次選擇
                     if cat in st.session_state.last_selected_subtypes:
                         default_list = st.session_state.last_selected_subtypes.get(cat, [])
                     else:
                         default_list = preset_subs.get(cat, []) if cat in preset_subs else []
                 
+                # 3欄布局
                 per_row = (len(items) + 2) // 3
                 for row in range(per_row):
                     cols = st.columns(3)
@@ -867,6 +881,7 @@ class ComparisonAnalyzer:
                                 rec_text = "📌 次要"
                                 rec_color = "#87CEEB"
                             
+                            # 預設值
                             default_val = False
                             if force_all:
                                 default_val = True
@@ -894,6 +909,7 @@ class ComparisonAnalyzer:
                                         selected_subs[cat] = []
                                     selected_subs[cat].append(name)
                 
+                # 清除標記
                 if f"all_{cat}" in st.session_state:
                     del st.session_state[f"all_{cat}"]
                 if f"clear_{cat}" in st.session_state:
@@ -902,6 +918,7 @@ class ComparisonAnalyzer:
                 if cat in selected_subs:
                     st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
         
+        # 移除重複的選擇
         for cat in selected_subs:
             selected_subs[cat] = list(dict.fromkeys(selected_subs[cat]))
         
