@@ -78,7 +78,8 @@ class ComparisonAnalyzer:
             'include_nuisance': False,
             'selected_nuisances': [],
             'last_selected_subtypes': {},
-            'custom_impact_weights': {}  # 使用者自訂的影響類型權重
+            'custom_impact_weights': {},  # 使用者自訂的影響類型權重
+            'facility_selection_version': 0  # 版本號，用於強制刷新設施選擇
         }
         for key, value in defaults.items():
             if key not in st.session_state:
@@ -272,21 +273,17 @@ class ComparisonAnalyzer:
     # ==================== 嫌惡設施權重設定 ====================
     
     def _render_impact_weight_settings(self):
-        """渲染影響類型權重設定介面 - 讓使用者選擇重視的項目並設定權重"""
+        """渲染影響類型權重設定介面"""
         st.markdown("#### ⚙️ 嫌惡設施影響權重設定")
         st.markdown("請選擇您最在意的影響類型，並設定權重（1-10分）")
         
-        # 獲取當前設定
         current_weights = st.session_state.get('custom_impact_weights', {})
         
         st.markdown("---")
-        
-        # 顯示權重設定說明
         st.info("💡 **說明**：勾選您重視的影響類型，並設定權重（1-10分）。\n\n權重越高，相關嫌惡設施的風險分數越高。")
         
         st.markdown("#### 📋 選擇您重視的影響類型並設定權重")
         
-        # 三欄布局顯示所有影響類型
         cols = st.columns(3)
         impact_list = list(IMPACT_TYPES.items())
         per_col = len(impact_list) // 3 + (1 if len(impact_list) % 3 > 0 else 0)
@@ -303,7 +300,6 @@ class ComparisonAnalyzer:
                     description = impact_info["description"]
                     color = impact_info["color"]
                     
-                    # 是否已選擇
                     is_selected = impact_name in current_weights
                     default_weight = current_weights.get(impact_name, 5)
                     
@@ -335,19 +331,14 @@ class ComparisonAnalyzer:
                         
                         st.markdown("---")
         
-        # 顯示選擇摘要
         if new_weights:
             st.markdown("#### 📊 您設定的權重")
-            
-            # 按權重排序
             sorted_weights = sorted(new_weights.items(), key=lambda x: x[1], reverse=True)
-            
             weight_cols = st.columns(3)
             for idx, (impact, weight) in enumerate(sorted_weights):
                 with weight_cols[idx % 3]:
                     st.markdown(f"**{impact}**：{weight} 分")
             
-            # 顯示受影響的嫌惡設施
             with st.expander("🔍 查看受影響的嫌惡設施", expanded=False):
                 for impact, weight in sorted_weights:
                     if impact in self._impact_to_nuisances:
@@ -357,13 +348,11 @@ class ComparisonAnalyzer:
                             st.markdown(f"  - {n}")
                         st.markdown("---")
         
-        # 儲存按鈕
         if st.button("✅ 套用權重設定", use_container_width=True, key="apply_weights"):
             st.session_state.custom_impact_weights = new_weights
             st.success(f"✅ 已儲存 {len(new_weights)} 項權重設定！")
             st.rerun()
         
-        # 重置按鈕
         if st.button("🔄 重置所有權重", use_container_width=True, key="reset_weights"):
             st.session_state.custom_impact_weights = {}
             st.success("✅ 已重置所有權重")
@@ -379,14 +368,11 @@ class ComparisonAnalyzer:
         nuisance_info = NUISANCE_TYPES[nuisance_name]
         impacts = nuisance_info.get("impacts", [])
         
-        # 取得使用者自訂權重
         custom_weights = st.session_state.get('custom_impact_weights', {})
         
-        # 如果使用者沒有設定任何權重，返回 0
         if not custom_weights:
             return 0
         
-        # 計算所有影響類型的權重總和
         total_weight = 0
         for impact in impacts:
             weight = custom_weights.get(impact, 0)
@@ -395,8 +381,7 @@ class ComparisonAnalyzer:
         return total_weight
     
     def _calculate_final_score(self, base_score, distance, same_type_count):
-        """計算嫌惡設施的最終風險分數（加入距離因子和數量加成）"""
-        # 距離因子
+        """計算嫌惡設施的最終風險分數"""
         if distance <= 300:
             distance_factor = 1.0
         elif distance <= 600:
@@ -406,43 +391,37 @@ class ComparisonAnalyzer:
         else:
             distance_factor = 0.3
         
-        # 單一設施分數
         facility_score = base_score * distance_factor
         
-        # 數量加成
         quantity_factor = 1 + (same_type_count - 1) * 0.1
-        quantity_factor = min(quantity_factor, 1.5)  # 最高 1.5
+        quantity_factor = min(quantity_factor, 1.5)
         
         return facility_score * quantity_factor
     
     def _render_nuisance_selection_with_weights(self):
-        """渲染嫌惡設施選擇（包含權重設定）"""
+        """渲染嫌惡設施選擇"""
         selected = []
         
         st.markdown("#### 選擇嫌惡設施類型（可複選）")
         
-        # 先顯示權重設定
         with st.expander("⚙️ 進階設定 - 調整嫌惡設施權重", expanded=False):
             self._render_impact_weight_settings()
         
         st.markdown("---")
         st.markdown("#### 選擇要分析的嫌惡設施")
         
-        # 計算每個嫌惡設施的基礎分數
         facility_base_scores = {}
         for name in NUISANCE_TYPES.keys():
             base_score = self._calculate_base_score(name)
-            if base_score > 0:  # 只顯示有影響的設施
+            if base_score > 0:
                 facility_base_scores[name] = base_score
         
-        # 按基礎分數排序
         sorted_facilities = sorted(facility_base_scores.items(), key=lambda x: x[1], reverse=True)
         
         if not sorted_facilities:
             st.info("👆 請先設定權重，才會顯示可選擇的嫌惡設施")
             return selected
         
-        # 兩欄布局顯示
         cols = st.columns(2)
         items = sorted_facilities
         mid = len(items) // 2 + len(items) % 2
@@ -458,7 +437,6 @@ class ComparisonAnalyzer:
                     color = nuisance_info.get("color", "#dc3545")
                     impacts = nuisance_info.get("impacts", [])
                     
-                    # 顯示基礎分數
                     st.markdown(f"""
                     <div style="border-left:4px solid {color}; padding-left:8px; margin-bottom:15px;">
                         <span style="font-weight:bold; font-size:16px;">{nuisance_name}</span>
@@ -701,13 +679,8 @@ class ComparisonAnalyzer:
                     st.session_state.last_selected_subtypes = subs.copy()
                     st.session_state.suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
                     
-                    # 清除所有 checkbox 狀態
-                    for cat in PLACE_TYPES.keys():
-                        items = PLACE_TYPES[cat]
-                        for item_idx, item in enumerate(items):
-                            key = f"sub_{cat}_{item_idx}"
-                            if key in st.session_state:
-                                del st.session_state[key]
+                    # 增加版本號，強制刷新所有 checkbox
+                    st.session_state.facility_selection_version += 1
                     
                     st.rerun()
         
@@ -798,11 +771,14 @@ class ComparisonAnalyzer:
                 st.rerun()
     
     def _render_all_facilities_selection(self, preset_subtypes=None):
-        """渲染所有設施選擇 - 無全選/清除按鈕"""
+        """渲染所有設施選擇 - 使用版本號強制刷新"""
         selected_subs = {}
         preset_subs = preset_subtypes or {}
         
         st.markdown("#### 選擇設施類型")
+        
+        # 獲取當前版本號
+        version = st.session_state.get('facility_selection_version', 0)
         
         all_cats = list(PLACE_TYPES.keys())
         current_profile = st.session_state.get('buyer_profile', '')
@@ -864,6 +840,7 @@ class ComparisonAnalyzer:
                             if name in default_list:
                                 default_val = True
                             
+                            # 在 key 中加入版本號，確保切換買家類型時強制刷新
                             with cols[ci]:
                                 if rec_text:
                                     st.markdown(f"""
@@ -874,9 +851,9 @@ class ComparisonAnalyzer:
                                         </span>
                                     </div>
                                     """, unsafe_allow_html=True)
-                                    cb = st.checkbox(" ", key=f"sub_{cat}_{idx}", label_visibility="collapsed", value=default_val)
+                                    cb = st.checkbox(" ", key=f"sub_{cat}_{idx}_v{version}", label_visibility="collapsed", value=default_val)
                                 else:
-                                    cb = st.checkbox(name, key=f"sub_{cat}_{idx}", value=default_val)
+                                    cb = st.checkbox(name, key=f"sub_{cat}_{idx}_v{version}", value=default_val)
                                 
                                 if cb:
                                     if cat not in selected_subs:
@@ -988,7 +965,6 @@ class ComparisonAnalyzer:
                 if s.get("include_nuisance", False) and s.get("selected_nuisances"):
                     st.write("🔍 步驟 2.5/4：查詢周邊嫌惡設施...")
                     
-                    # 預先計算每個設施類型的基礎分數
                     base_scores = {}
                     for nuisance in s["selected_nuisances"]:
                         base_scores[nuisance] = self._calculate_base_score(nuisance)
@@ -996,7 +972,6 @@ class ComparisonAnalyzer:
                     for idx, (name, info) in enumerate(houses_data.items()):
                         st.write(f"   - 查詢 {name} 周邊嫌惡設施...")
                         
-                        # 查詢每個選中的嫌惡設施
                         all_nuisances = []
                         for nuisance in s["selected_nuisances"]:
                             nuisances = self._query_nuisances_no_progress(
@@ -1012,13 +987,11 @@ class ComparisonAnalyzer:
                         
                         st.write(f"     找到 {len(all_nuisances)} 處嫌惡設施")
                         
-                        # 計算每個設施類型的數量
                         type_counts = {}
                         for n in all_nuisances:
                             n_type = n[0]
                             type_counts[n_type] = type_counts.get(n_type, 0) + 1
                         
-                        # 計算總風險分數
                         total_score = 0
                         for n in all_nuisances:
                             n_type = n[0]
@@ -1210,7 +1183,7 @@ class ComparisonAnalyzer:
                     "緯度": p[3],
                     "place_id": p[6]
                 }
-                if len(p) > 7:  # 有風險分數
+                if len(p) > 7:
                     row["風險分數"] = p[7]
                 rows.append(row)
         return pd.DataFrame(rows)
@@ -1249,7 +1222,7 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
         
-        # ====== 設施詳細資料表格 ======
+        # 設施詳細資料表格
         st.subheader("📋 設施詳細資料")
         
         df = res.get("facilities_table", pd.DataFrame())
@@ -1300,7 +1273,7 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
         
-        # ====== 設施統計 ======
+        # 設施統計
         st.subheader("📈 設施統計")
         
         if res["num_houses"] == 1:
@@ -1308,13 +1281,13 @@ class ComparisonAnalyzer:
         else:
             self._show_multi_stats(res, include_nuisance)
         
-        # ====== 地圖檢視 ======
+        # 地圖檢視
         self._display_maps(res)
         
-        # ====== 全部設施列表 ======
+        # 全部設施列表
         self._display_facilities_list_with_links(res, include_nuisance)
         
-        # ====== AI 智能分析 ======
+        # AI 智能分析
         self._display_ai_analysis(res)
     
     def _show_single_stats(self, res, include_nuisance=False):
