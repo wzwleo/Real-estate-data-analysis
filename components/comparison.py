@@ -701,14 +701,8 @@ class ComparisonAnalyzer:
                     st.session_state.last_selected_subtypes = subs.copy()
                     st.session_state.suggested_radius = profile_info.get("radius", DEFAULT_RADIUS)
                     
-                    # 清除所有類別的臨時標記和 checkbox 狀態
+                    # 清除所有 checkbox 狀態
                     for cat in PLACE_TYPES.keys():
-                        if f"all_{cat}" in st.session_state:
-                            del st.session_state[f"all_{cat}"]
-                        if f"clear_{cat}" in st.session_state:
-                            del st.session_state[f"clear_{cat}"]
-                        
-                        # 清除此類別下所有設施的 checkbox 狀態
                         items = PLACE_TYPES[cat]
                         for item_idx, item in enumerate(items):
                             key = f"sub_{cat}_{item_idx}"
@@ -804,7 +798,7 @@ class ComparisonAnalyzer:
                 st.rerun()
     
     def _render_all_facilities_selection(self, preset_subtypes=None):
-        """渲染所有設施選擇"""
+        """渲染所有設施選擇 - 無全選/清除按鈕"""
         selected_subs = {}
         preset_subs = preset_subtypes or {}
         
@@ -821,18 +815,9 @@ class ComparisonAnalyzer:
                 if current_selected_count > 0:
                     st.caption(f"✅ 此類別已選擇 {current_selected_count} 種")
                 
-                cc1, cc2, cc3 = st.columns([1, 1, 2])
-                with cc1:
-                    if st.button(f"全選 {cat}", key=f"all_{cat}", use_container_width=True):
-                        st.session_state[f"all_{cat}"] = True
-                        st.rerun()
-                with cc2:
-                    if st.button(f"清除 {cat}", key=f"clear_{cat}", use_container_width=True):
-                        st.session_state[f"clear_{cat}"] = True
-                        st.rerun()
-                with cc3:
-                    if current_profile:
-                        st.markdown(f"💡 **{current_profile}推薦**")
+                # 推薦提示
+                if current_profile:
+                    st.markdown(f"💡 **{current_profile}推薦**")
                 
                 # 取得此類別所有設施（去除重複）
                 items = []
@@ -850,18 +835,11 @@ class ComparisonAnalyzer:
                     priority_list = p.get("priority_categories", {}).get(cat, [])
                     secondary_list = p.get("secondary_categories", {}).get(cat, [])
                 
-                # 處理全選/清除
-                force_all = st.session_state.get(f"all_{cat}", False)
-                force_clear = st.session_state.get(f"clear_{cat}", False)
-                
-                if force_clear:
-                    default_list = []
+                # 預設選擇（來自買家類型推薦）
+                if cat in st.session_state.last_selected_subtypes:
+                    default_list = st.session_state.last_selected_subtypes.get(cat, [])
                 else:
-                    # 優先使用上次選擇
-                    if cat in st.session_state.last_selected_subtypes:
-                        default_list = st.session_state.last_selected_subtypes.get(cat, [])
-                    else:
-                        default_list = preset_subs.get(cat, []) if cat in preset_subs else []
+                    default_list = preset_subs.get(cat, []) if cat in preset_subs else []
                 
                 # 3欄布局
                 per_row = (len(items) + 2) // 3
@@ -883,11 +861,7 @@ class ComparisonAnalyzer:
                             
                             # 預設值
                             default_val = False
-                            if force_all:
-                                default_val = True
-                            elif name in default_list:
-                                default_val = True
-                            elif name in priority_list and not force_clear:
+                            if name in default_list:
                                 default_val = True
                             
                             with cols[ci]:
@@ -908,12 +882,6 @@ class ComparisonAnalyzer:
                                     if cat not in selected_subs:
                                         selected_subs[cat] = []
                                     selected_subs[cat].append(name)
-                
-                # 清除標記
-                if f"all_{cat}" in st.session_state:
-                    del st.session_state[f"all_{cat}"]
-                if f"clear_{cat}" in st.session_state:
-                    del st.session_state[f"clear_{cat}"]
                 
                 if cat in selected_subs:
                     st.caption(f"✅ 已選擇 {len(set(selected_subs[cat]))} 種")
