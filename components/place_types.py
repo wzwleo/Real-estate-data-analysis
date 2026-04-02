@@ -1,5 +1,4 @@
 # components/place_types.py
-
 # 生活機能類別
 # 以台灣房地產生活機能分析常用設施為主，保留 comparison.py 已使用的核心子項。
 PLACE_TYPES = {
