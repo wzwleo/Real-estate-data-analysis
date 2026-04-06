@@ -1,6 +1,6 @@
 # components/comparison.py
 import streamlit as st
-import pandas as pd
+import pandas as pd 
 import time
 import json
 import sys
@@ -27,6 +27,10 @@ try:
     from config import CATEGORY_COLORS, DEFAULT_RADIUS
     from components.place_types import PLACE_TYPES, CHINESE_TO_CATEGORY, NUISANCE_TYPES, IMPACT_TYPES
     from components.geocoding import geocode_address, haversine
+    try:
+        from components.favorites import FavoritesManager, normalize_property_id, build_property_key
+    except ImportError:
+        from favorites import FavoritesManager, normalize_property_id, build_property_key
     CONFIG_LOADED = True
 except ImportError as e:
     CONFIG_LOADED = False
@@ -37,11 +41,23 @@ except ImportError as e:
     CATEGORY_COLORS = {}
     DEFAULT_RADIUS = 500
     IMPACT_TYPES = {}
-
-try:
-    from components.favorites import FavoritesManager, normalize_property_id
-except ImportError:
-    from favorites import FavoritesManager, normalize_property_id
+    FavoritesManager = None
+    def normalize_property_id(value):
+        if value is None:
+            return ""
+        try:
+            if pd.isna(value):
+                return ""
+        except Exception:
+            pass
+        return str(value).strip()
+    def build_property_key(row_or_series):
+        property_id = normalize_property_id(getattr(row_or_series, 'get', lambda *a, **k: '')('編號', ''))
+        if property_id:
+            return property_id
+        title = str(getattr(row_or_series, 'get', lambda *a, **k: '')('標題', '')).strip()
+        address = str(getattr(row_or_series, 'get', lambda *a, **k: '')('地址', '')).strip()
+        return f"{title}|{address}"
 
 # 設定台灣時區
 try:
@@ -64,7 +80,6 @@ class ComparisonAnalyzer:
     
     def __init__(self):
         self._init_session_state()
-        self._ensure_analysis_store()
         # 建立影響類型到嫌惡設施的映射
         self._impact_to_nuisances = self._build_impact_mapping()
     
@@ -85,49 +100,13 @@ class ComparisonAnalyzer:
             'selected_nuisances': [],
             'last_selected_subtypes': {},
             'custom_impact_weights': {},  # 使用者自訂的影響類型權重
-            'facility_selection_version': 0  # 版本號，用於強制刷新設施選擇
+            'facility_selection_version': 0,  # 版本號，用於強制刷新設施選擇
+            'analysis_store': {},
         }
         for key, value in defaults.items():
             if key not in st.session_state:
                 st.session_state[key] = value
     
-    def _ensure_analysis_store(self):
-        """初始化並回填單屋深度分析快取。"""
-        if 'analysis_store' not in st.session_state:
-            st.session_state.analysis_store = {}
-        self._backfill_analysis_store_from_summary()
-
-    def _backfill_analysis_store_from_summary(self):
-        """將舊的 ai_results_summary 回填到 analysis_store。"""
-        summaries = st.session_state.get('ai_results_summary', [])
-        store = st.session_state.get('analysis_store', {})
-        for item in summaries:
-            if not isinstance(item, dict):
-                continue
-            basic = item.get('basic_info', {}) or {}
-            property_id = normalize_property_id(item.get('property_id') or basic.get('編號'))
-            if not property_id:
-                continue
-            if property_id not in store:
-                store[property_id] = {
-                    'property_id': property_id,
-                    'timestamp': item.get('timestamp', ''),
-                    'basic_info': basic,
-                    'analysis_data': item.get('analysis_data', {}),
-                    'scores': item.get('scores', {}),
-                    'total_score': item.get('total_score', 0),
-                    'texts': item.get('texts', {}),
-                }
-        st.session_state.analysis_store = store
-
-    def _get_depth_analysis_by_id(self, property_id):
-        """根據房屋編號取得深度分析資料。"""
-        self._ensure_analysis_store()
-        property_id = normalize_property_id(property_id)
-        if not property_id:
-            return None
-        return st.session_state.get('analysis_store', {}).get(property_id)
-
     def _build_impact_mapping(self):
         """建立影響類型到嫌惡設施的映射"""
         mapping = {}
@@ -140,21 +119,38 @@ class ComparisonAnalyzer:
     
     # ==================== 深度分析輔助函式 ====================
     
-    def _get_depth_analysis_by_title(self, title):
-        """舊資料 fallback：根據標題取得深度分析資料。"""
-        self._ensure_analysis_store()
-        for item in st.session_state.get('analysis_store', {}).values():
-            if item.get('basic_info', {}).get('標題') == title:
-                return item
+    def _ensure_analysis_store(self):
+        """把舊的 ai_results_summary 回填進 analysis_store。"""
+        if "analysis_store" not in st.session_state or not isinstance(st.session_state.analysis_store, dict):
+            st.session_state.analysis_store = {}
 
+        summaries = st.session_state.get('ai_results_summary', [])
+        for item in summaries:
+            property_id = normalize_property_id(item.get('property_id') or item.get('basic_info', {}).get('編號', ''))
+            if not property_id:
+                continue
+            if property_id not in st.session_state.analysis_store:
+                st.session_state.analysis_store[property_id] = item
+
+    def _get_depth_analysis_by_title(self, title):
+        """舊版 fallback：根據房屋標題從 ai_results_summary 取得深度分析資料。"""
         if 'ai_results_summary' not in st.session_state:
             return None
-
         for item in st.session_state.ai_results_summary:
             if item.get('basic_info', {}).get('標題') == title:
                 return item
         return None
-    
+
+    def _get_depth_analysis_by_id(self, property_id, title=None):
+        """優先用 property_id 找 analysis_store，找不到再 fallback 用舊標題。"""
+        self._ensure_analysis_store()
+        property_id = normalize_property_id(property_id)
+        if property_id and property_id in st.session_state.analysis_store:
+            return st.session_state.analysis_store[property_id]
+        if title:
+            return self._get_depth_analysis_by_title(title)
+        return None
+
     def _format_depth_summary(self, depth_item):
         """把深度分析數據轉成簡潔文字"""
         if not depth_item:
@@ -162,6 +158,16 @@ class ComparisonAnalyzer:
         
         try:
             data = depth_item['analysis_data']
+            total_score = depth_item.get('total_score')
+            scores = depth_item.get('scores', {})
+            score_lines = ''
+            if scores:
+                score_lines = ' / '.join([f"{k}:{v}" for k, v in scores.items()])
+            header = ''
+            if total_score is not None:
+                header = f"⭐ 本體總分：{float(total_score):.1f}/100\n"
+                if score_lines:
+                    header += f"📊 五項分數：{score_lines}\n"
             
             price = data['price_data']['目標房屋']['總價(萬)']
             price_pct = data['price_data']['價格分布']['價格百分位']
@@ -185,42 +191,57 @@ class ComparisonAnalyzer:
             
             return f"""
 【🏠 房屋深度分析】
-💰 價格：{price}萬（低於{price_pct:.0f}%的房屋，比市場中位數{price_direction}{abs(vs_median)}萬）
+{header}💰 價格：{price}萬（低於{price_pct:.0f}%的房屋，比市場中位數{price_direction}{abs(vs_median)}萬）
 📐 空間：使用率{usage:.0%}（高於{usage_pct:.0f}%的房屋）
 🕰 屋齡：{age}年（{age_cat}，比{100-age_pct:.0f}%的房屋新）
 🏢 樓層：{floor}樓（{floor_cat}，比{floor_pct:.0f}%的房屋{"低" if floor_pct < 50 else "高"}）
 🛋 格局：{layout}（市場排名第{layout_rank}，佔{layout_pct:.1f}%）
 """
-        except Exception as e:
+        except Exception:
             return ""
-    
-    def _render_depth_analysis_cards(self, depth_items):
-        """顯示單屋深度分析摘要卡片。"""
-        if not depth_items:
-            return
 
-        st.markdown("### 🏠 房屋本體深度分析摘要")
-        cols = st.columns(max(1, min(3, len(depth_items))))
-        for idx, (house_name, item) in enumerate(depth_items.items()):
-            basic = item.get('basic_info', {}) or {}
-            scores = item.get('scores', {}) or {}
-            total_score = item.get('total_score', 0)
-            texts = item.get('texts', {}) or {}
-            with cols[idx % len(cols)]:
-                st.markdown(f"#### {house_name}")
-                st.metric("本體總分", f"{float(total_score):.1f} / 100" if total_score not in [None, ''] else "未提供")
-                if scores:
-                    for score_name, score_value in scores.items():
-                        try:
-                            st.caption(f"{score_name}：{float(score_value):.1f}")
-                        except Exception:
-                            st.caption(f"{score_name}：{score_value}")
-                if texts.get('summary'):
-                    st.markdown("**綜合摘要**")
-                    st.write(texts['summary'])
-                else:
-                    st.caption("尚無綜合摘要")
+    def _render_depth_analysis_overview(self, res):
+        """顯示個別分析結果摘要，讓 comparison 吃到 solo 的結構化資料。"""
+        st.markdown("---")
+        st.subheader("🏠 房屋本體深度分析摘要")
 
+        has_any = False
+        for house_name, info in res.get("houses_data", {}).items():
+            depth_item = self._get_depth_analysis_by_id(info.get("property_id"), info.get("title"))
+            if not depth_item:
+                st.info(f"{house_name}（{info.get('title', '未知房屋')}）尚未建立個別分析結果，請先到『個別分析』完成並儲存。")
+                continue
+
+            has_any = True
+            basic = depth_item.get('basic_info', {})
+            scores = depth_item.get('scores', {})
+            total_score = depth_item.get('total_score')
+            texts = depth_item.get('analysis_text', {})
+
+            with st.expander(f"{house_name}｜{basic.get('標題', info.get('title', '未知房屋'))}", expanded=True):
+                col1, col2 = st.columns([1, 2])
+                with col1:
+                    if total_score is not None:
+                        st.metric("本體總分", f"{float(total_score):.1f} / 100")
+                    else:
+                        st.metric("本體總分", "無資料")
+                    st.caption(f"編號：{basic.get('編號', info.get('property_id', '未提供'))}")
+                    st.caption(f"類型：{basic.get('類型', '未提供')}")
+                    st.caption(f"建坪：{basic.get('建坪', '未提供')}")
+                    st.caption(f"格局：{basic.get('格局', '未提供')}")
+                with col2:
+                    if scores:
+                        score_df = pd.DataFrame({"面向": list(scores.keys()), "分數": list(scores.values())})
+                        st.dataframe(score_df, use_container_width=True, hide_index=True)
+                    else:
+                        st.info("尚無五大面向分數")
+
+                    summary_text = texts.get('summary', '')
+                    if summary_text:
+                        st.markdown("**綜合摘要**")
+                        st.write(summary_text)
+        if not has_any:
+            st.caption("目前比較結果尚未串接到任何個別分析資料。")
 
     # ==================== 買家類型定義 ====================
     
@@ -1299,7 +1320,8 @@ class ComparisonAnalyzer:
             with st.expander(f"📌 {profile} 分析重點", expanded=False):
                 for pt in pinfo.get("prompt_focus", []):
                     st.markdown(f"- {pt}")
-        
+
+        self._render_depth_analysis_overview(res)
         st.markdown("---")
         
         # 設施詳細資料表格
@@ -1760,30 +1782,21 @@ class ComparisonAnalyzer:
         icon = pinfo.get("icon", "👤")
         
         facilities_text, nuisance_text = self._format_facilities_for_prompt(res, include_nuisance)
-
-        self._ensure_analysis_store()
-        depth_items = {}
-        missing_depth = []
-        for house_name, info in res["houses_data"].items():
-            property_id = normalize_property_id(info.get('property_id', ''))
-            depth_item = self._get_depth_analysis_by_id(property_id) if property_id else None
-            if not depth_item:
-                depth_item = self._get_depth_analysis_by_title(info.get('title', ''))
-                if depth_item and property_id:
-                    st.session_state.analysis_store[property_id] = depth_item
-            if depth_item:
-                depth_items[house_name] = depth_item
+        
+        depth_texts = {}
+        if 'ai_results_summary' in st.session_state:
+            if mode == "單一房屋分析":
+                house_name = list(res["houses_data"].keys())[0]
+                info = res["houses_data"][house_name]
+                depth_item = self._get_depth_analysis_by_id(info.get('property_id'), info.get('title'))
+                if depth_item:
+                    depth_texts[house_name] = self._format_depth_summary(depth_item)
             else:
-                missing_depth.append(house_name)
-
-        if depth_items:
-            self._render_depth_analysis_cards(depth_items)
-            st.markdown("---")
-        if missing_depth:
-            st.warning("以下房屋尚未有單屋深度分析資料：" + "、".join(missing_depth))
-
-        depth_texts = {house_name: self._format_depth_summary(item) for house_name, item in depth_items.items()}
-
+                for house_name, info in res["houses_data"].items():
+                    depth_item = self._get_depth_analysis_by_id(info.get('property_id'), info.get('title'))
+                    if depth_item:
+                        depth_texts[house_name] = self._format_depth_summary(depth_item)
+        
         if mode == "單一房屋分析":
             if include_nuisance:
                 prompt = self._build_single_with_nuisance_prompt(res, facilities_text, nuisance_text, depth_texts, nuisance_scores, profile, icon, pinfo)
@@ -2086,9 +2099,25 @@ class ComparisonAnalyzer:
                 st.error(f"❌ Gemini API 錯誤：{e}")
     
     def _get_favorites_data(self):
-        """取得收藏"""
-        return FavoritesManager.get_favorites_data()
-    
+        """取得收藏。與 solo_analysis 共用同一套收藏邏輯。"""
+        if FavoritesManager is not None:
+            return FavoritesManager.get_favorites_data()
+
+        if 'favorites' not in st.session_state or not st.session_state.favorites:
+            return pd.DataFrame()
+        
+        df = None
+        if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+            df = st.session_state.all_properties_df
+        elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+            df = st.session_state.filtered_df
+        
+        if df is None or df.empty:
+            return pd.DataFrame()
+        
+        fav = {normalize_property_id(x) for x in st.session_state.favorites}
+        return df[df['編號'].apply(normalize_property_id).isin(fav)].copy()
+
     def _show_analysis_in_progress(self):
         """顯示分析進行中"""
         st.warning("🔍 分析進行中，請稍候...")
