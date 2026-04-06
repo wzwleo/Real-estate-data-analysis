@@ -2244,4 +2244,3 @@ def tab1_module():
                 # ── 除錯資訊 ──
                 st.write(st.session_state.ai_results_summary)
                 
-
