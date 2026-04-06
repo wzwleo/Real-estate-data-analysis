@@ -11,9 +11,24 @@ from scipy import stats
 
 try:
     from components.favorites import FavoritesManager, normalize_property_id
-except ImportError:
-    from favorites import FavoritesManager, normalize_property_id
+except Exception:
+    try:
+        from favorites import FavoritesManager, normalize_property_id
+    except Exception:
+        FavoritesManager = None
+        def normalize_property_id(value):
+            return "" if value is None else str(value).strip()
 
+
+def safe_generate(model, prompt, fallback_text):
+    """Gemini 容錯包裝：失敗時回退到本地文字"""
+    try:
+        response = model.generate_content(prompt)
+        text = getattr(response, "text", "") or ""
+        text = text.strip()
+        return text if text else fallback_text
+    except Exception:
+        return fallback_text
 
 # 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
@@ -934,108 +949,23 @@ def plot_space_efficiency_scatter(target_row, df, chart_key=None):
     
     st.plotly_chart(fig, key=chart_key)
 
-def _safe_generate(model, prompt, fallback_text):
-    try:
-        response = model.generate_content(prompt)
-        text = getattr(response, "text", "") or ""
-        text = text.strip()
-        return text if text else fallback_text
-    except Exception:
-        return fallback_text
-
-
-def _build_analysis_store_entry(result_payload):
-    selected_row = result_payload.get('selected_row', {}) or {}
-    property_id = normalize_property_id(selected_row.get('編號'))
-    return property_id, {
-        'property_id': property_id,
-        'basic_info': {
-            '編號': property_id,
-            '標題': selected_row.get('標題', '未提供'),
-            '地址': selected_row.get('地址', '未提供'),
-            '建坪': selected_row.get('建坪', '未提供'),
-            '實際坪數': selected_row.get('主+陽', '未提供'),
-            '格局': selected_row.get('格局', '未提供'),
-            '樓層': selected_row.get('樓層', '未提供'),
-            '屋齡': selected_row.get('屋齡', '未提供'),
-            '車位': selected_row.get('車位', '未提供'),
-            '類型': selected_row.get('類型', '未提供'),
-            '行政區': selected_row.get('行政區', '未提供'),
-            '總價': selected_row.get('總價(萬)', '未提供'),
-        },
-        'analysis_text': {
-            'price': result_payload.get('price_text', ''),
-            'space': result_payload.get('space_text', ''),
-            'age': result_payload.get('age_text', ''),
-            'floor': result_payload.get('floor_text', ''),
-            'layout': result_payload.get('layout_text', ''),
-            'summary': result_payload.get('summary_text', ''),
-        },
-        'analysis_data': {
-            'price_data': result_payload.get('analysis_payload'),
-            'space_data': result_payload.get('floor_area_payload'),
-            'age_data': result_payload.get('age_analysis_payload'),
-            'floor_data': result_payload.get('floor_analysis_payload'),
-            'layout_data': result_payload.get('layout_analysis_payload'),
-        },
-        'scores': result_payload.get('scores', {}),
-        'total_score': result_payload.get('total_score'),
-    }
-
-
-def _sync_analysis_store_from_result(result_payload):
-    st.session_state.setdefault('analysis_store', {})
-    property_id, entry = _build_analysis_store_entry(result_payload)
-    if property_id:
-        st.session_state['analysis_store'][property_id] = entry
-
-
-def _get_pending_ids():
-    return [normalize_property_id(x) for x in st.session_state.get('pending_solo_property_ids', []) if normalize_property_id(x)]
-
-
-def _pending_banner(current_property_id):
-    pending_ids = _get_pending_ids()
-    if not pending_ids:
-        return
-    if current_property_id and current_property_id in pending_ids:
-        idx = pending_ids.index(current_property_id) + 1
-        st.info(f"🧭 這間房屋是待補個別分析清單中的第 {idx}/{len(pending_ids)} 間。完成後可回到房屋比較。")
-    else:
-        st.warning(f"⚠️ 尚有 {len(pending_ids)} 間房屋待補個別分析。")
-
-
-def _resolve_pending_after_analysis(current_property_id):
-    pending_ids = _get_pending_ids()
-    if not current_property_id or current_property_id not in pending_ids:
-        return False
-
-    remaining_ids = [pid for pid in pending_ids if pid != current_property_id]
-    col_a, col_b = st.columns([1, 1])
-    with col_a:
-        if remaining_ids:
-            next_label = f"✅ 完成此間並前往下一間（剩 {len(remaining_ids)} 間）"
-        else:
-            next_label = "✅ 完成此間並返回房屋比較"
-        if st.button(next_label, use_container_width=True, key='pending_solo_continue'):
-            st.session_state['pending_solo_property_ids'] = remaining_ids
-            st.session_state.pop('solo_analysis_result', None)
-            if remaining_ids:
-                st.session_state['analysis_target'] = 'solo'
-                st.session_state['comparison_notice'] = f"已完成 1 間個別分析，尚有 {len(remaining_ids)} 間待補。"
-            else:
-                st.session_state['analysis_target'] = 'comparison'
-                st.session_state['comparison_notice'] = '已完成缺漏的個別分析，請回到房屋比較重新開始分析。'
-            st.rerun()
-    with col_b:
-        if st.button('留在本頁查看結果', use_container_width=True, key='pending_solo_stay'):
-            st.session_state['pending_solo_view_ack'] = True
-    return True
-
-
 def get_favorites_data():
     """取得收藏房產的資料"""
-    return FavoritesManager.get_favorites_data()
+    if 'favorites' not in st.session_state or not st.session_state.favorites:
+        return pd.DataFrame()
+
+    all_df = None
+    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+        all_df = st.session_state.all_properties_df
+    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+        all_df = st.session_state.filtered_df
+
+    if all_df is None or all_df.empty:
+        return pd.DataFrame()
+
+    fav_ids = st.session_state.favorites
+    fav_df = all_df[all_df['編號'].isin(fav_ids)].copy()
+    return fav_df
 
 def tab1_module():
     fav_df = get_favorites_data()
@@ -1043,28 +973,15 @@ def tab1_module():
         st.header("個別分析")
         st.info("⭐ 尚未有收藏房產，無法比較")
     else:
-        fav_df = fav_df.copy()
-        fav_df['__option_label__'] = fav_df.apply(lambda row: f"{row.get('標題', '未提供')} | {row.get('地址', '未提供')}", axis=1)
-        options = fav_df['__option_label__'].tolist()
-        pending_ids = _get_pending_ids()
-        default_index = 0
-        if pending_ids:
-            pending_id = pending_ids[0]
-            for idx, (_, row) in enumerate(fav_df.iterrows()):
-                if normalize_property_id(row.get('編號')) == pending_id:
-                    default_index = idx
-                    break
-
+        options = fav_df['標題']
         col1, col2 = st.columns([2, 1])
         with col1:
             st.header("個別分析")
         with col2:
-            choice = st.selectbox("選擇房屋", options, index=default_index if options else 0, key="analysis_solo")
-
+            choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+        
         # 篩選出選中的房子
-        selected_row = fav_df[fav_df['__option_label__'] == choice].iloc[0]
-        current_property_id = normalize_property_id(selected_row.get('編號'))
-        _pending_banner(current_property_id)
+        selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
         
         # ⭐ 補充：取得完整資料集
         all_df = None
@@ -1186,7 +1103,10 @@ def tab1_module():
         with col1:
             analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:    
-            # 使用前面已選定的 selected_row，避免 option label 與純標題比對不一致
+            # 篩選出選中的房子
+            selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
+            
+            # ⭐ 新增：取得房產編號並生成連結
             property_id = selected_row.get('編號', '')
             if property_id:
                 property_url = f"https://www.sinyi.com.tw/buy/house/{property_id}?breadcrumb=list"
@@ -2018,20 +1938,12 @@ def tab1_module():
 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    price_text = _safe_generate(model, price_prompt, "價格分析暫時無法產生，請參考圖表與數據。")
-                    space_text = _safe_generate(model, space_prompt, "坪數分析暫時無法產生，請參考圖表與數據。")
-                    age_text = _safe_generate(model, age_prompt, "屋齡分析暫時無法產生，請參考圖表與數據。")
-                    floor_text = _safe_generate(model, floor_prompt, "樓層分析暫時無法產生，請參考圖表與數據。")
-                    layout_text = _safe_generate(model, layout_prompt, "格局分析暫時無法產生，請參考圖表與數據。")
-                    summary_text = _safe_generate(model, summary_prompt, "綜合總結暫時無法產生，請綜合參考上方五大面向分析。")
-                    
-                    
-                    #price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    price_text = safe_generate(model, price_prompt, "價格分析暫時無法產生，請參考圖表與數據。")
+                    space_text = safe_generate(model, space_prompt, "坪數分析暫時無法產生，請參考圖表與數據。")
+                    age_text = safe_generate(model, age_prompt if age_analysis_payload else "", "屋齡分析暫時無法產生，請參考圖表與數據。") if age_analysis_payload else "（無屋齡資料）"
+                    floor_text = safe_generate(model, floor_prompt if floor_analysis_payload else "", "樓層分析暫時無法產生，請參考圖表與數據。") if floor_analysis_payload else "（無樓層資料）"
+                    layout_text = safe_generate(model, layout_prompt if layout_analysis_payload else "", "格局分析暫時無法產生，請參考圖表與數據。") if layout_analysis_payload else "（無格局資料）"
+                    summary_text = safe_generate(model, summary_prompt, "綜合總結暫時無法產生，請綜合參考五大面向圖表與分析文字。")
                     
                 # ── ✅ 在 session_state 存入前先算好分數 ──────────────────────────
                 # 給還沒算到的變數加預設值，避免 NameError
@@ -2060,7 +1972,10 @@ def tab1_module():
                 total_score = sum(scores.values()) / len(scores) * 10 
                 
                 # ✅ 分析完成後，存進 session_state
+                property_id = normalize_property_id(selected_row.get('編號', ''))
+                selected_row_dict = selected_row.to_dict()
                 st.session_state['solo_analysis_result'] = {
+                    'property_id':            property_id,
                     'price_text':             price_text,
                     'space_text':             space_text,
                     'age_text':               age_text,
@@ -2074,26 +1989,56 @@ def tab1_module():
                     'age_analysis_payload':   age_analysis_payload,
                     'floor_analysis_payload': floor_analysis_payload,
                     'layout_analysis_payload':layout_analysis_payload,
-                    'selected_row':           selected_row.to_dict(),
+                    'selected_row':           selected_row_dict,
                     'compare_base_df': (
                         all_df.to_dict('records')
                         if all_df is not None and not all_df.empty
                         else []
                     ),
                 }
-                _sync_analysis_store_from_result(st.session_state['solo_analysis_result'])
+
+                if 'analysis_store' not in st.session_state:
+                    st.session_state.analysis_store = {}
+                st.session_state.analysis_store[property_id] = {
+                    'property_id': property_id,
+                    'basic_info': {
+                        '編號': property_id,
+                        '標題': selected_row_dict.get('標題', '未提供'),
+                        '地址': selected_row_dict.get('地址', '未提供'),
+                        '類型': selected_row_dict.get('類型', '未提供'),
+                        '行政區': selected_row_dict.get('行政區', '未提供'),
+                        '建坪': selected_row_dict.get('建坪', '未提供'),
+                        '實際坪數': selected_row_dict.get('主+陽', '未提供'),
+                        '格局': selected_row_dict.get('格局', '未提供'),
+                        '樓層': selected_row_dict.get('樓層', '未提供'),
+                        '屋齡': selected_row_dict.get('屋齡', '未提供'),
+                        '車位': selected_row_dict.get('車位', '未提供'),
+                        '總價': selected_row_dict.get('總價(萬)', '未提供'),
+                    },
+                    'analysis_text': {
+                        'price': price_text,
+                        'space': space_text,
+                        'age': age_text,
+                        'floor': floor_text,
+                        'layout': layout_text,
+                        'summary': summary_text,
+                    },
+                    'analysis_data': {
+                        'price_data': analysis_payload,
+                        'space_data': floor_area_payload,
+                        'age_data': age_analysis_payload,
+                        'floor_data': floor_analysis_payload,
+                        'layout_data': layout_analysis_payload,
+                    },
+                    'scores': scores,
+                    'total_score': total_score,
+                }
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
         
         # ── ✅ 渲染區塊：只要 session_state 有結果就顯示，不依賴 analyze_clicked ──
-        r = None
         if 'solo_analysis_result' in st.session_state:
-            candidate_result = st.session_state['solo_analysis_result']
-            result_property_id = normalize_property_id((candidate_result.get('selected_row') or {}).get('編號'))
-            if result_property_id == current_property_id:
-                r = candidate_result
-
-        if r:
+            r = st.session_state['solo_analysis_result']
     
             # 還原資料（用於重新繪圖）
             _selected_row = pd.Series(r['selected_row'])
@@ -2178,8 +2123,6 @@ def tab1_module():
                     unsafe_allow_html=True
                 )
             
-            _resolve_pending_after_analysis(normalize_property_id(r['selected_row'].get('編號')))
-
             # ── 儲存按鈕 ──
             st.markdown("---")
             scores = r['scores']
@@ -2196,7 +2139,7 @@ def tab1_module():
                     
                 analysis_result = {
                     'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
-                    'property_id': normalize_property_id(r['selected_row'].get('編號')),
+                    'property_id': r.get('property_id', normalize_property_id(r['selected_row'].get('編號', ''))),
                     'house_title': r['selected_row'].get('標題', '未知房屋'),
                     'house_address': r['selected_row'].get('地址', '未提供'),
                     'house_data': {
@@ -2234,7 +2177,7 @@ def tab1_module():
                     
                     # 房屋基本資訊（不含總價）
                     'basic_info': {
-                        '編號': normalize_property_id(selected_row.get('編號')),
+                        '編號': r.get('property_id', normalize_property_id(r['selected_row'].get('編號', ''))),
                         '標題': selected_row.get('標題', '未提供'),
                         '類型': selected_row.get('類型', '未提供'),
                         '地址': selected_row.get('地址', '未提供'),
@@ -2257,7 +2200,17 @@ def tab1_module():
                 
                 st.session_state.ai_results_summary.append(analysis_summary)
                 st.session_state.ai_results.append(analysis_result)
-                _sync_analysis_store_from_result(r)
+
+                if 'analysis_store' not in st.session_state:
+                    st.session_state.analysis_store = {}
+                st.session_state.analysis_store[r.get('property_id', normalize_property_id(r['selected_row'].get('編號', '')))] = {
+                    'property_id': r.get('property_id', normalize_property_id(r['selected_row'].get('編號', ''))),
+                    'basic_info': analysis_summary['basic_info'],
+                    'analysis_text': analysis_result['ai_analysis'],
+                    'analysis_data': analysis_summary['analysis_data'],
+                    'scores': r['scores'],
+                    'total_score': r['total_score'],
+                }
             
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
