@@ -3,30 +3,6 @@ import pandas as pd
 import streamlit as st
 
 
-def normalize_property_id(value):
-    """統一房屋編號格式，避免字串/數字型別不一致。"""
-    if value is None:
-        return ""
-    try:
-        if pd.isna(value):
-            return ""
-    except Exception:
-        pass
-    return str(value).strip()
-
-
-def build_property_key(row_or_series):
-    """建立穩定的房屋識別 key。優先使用編號。"""
-    if row_or_series is None:
-        return ""
-    property_id = normalize_property_id(row_or_series.get('編號', ''))
-    if property_id:
-        return property_id
-    title = str(row_or_series.get('標題', '')).strip()
-    address = str(row_or_series.get('地址', '')).strip()
-    return f"{title}|{address}"
-
-
 class FavoritesManager:
     """管理收藏功能"""
     
@@ -45,6 +21,6 @@ class FavoritesManager:
         if all_df is None or all_df.empty:
             return pd.DataFrame()
         
-        fav_ids = {normalize_property_id(x) for x in st.session_state.favorites}
-        fav_df = all_df[all_df['編號'].apply(normalize_property_id).isin(fav_ids)].copy()
+        fav_ids = st.session_state.favorites
+        fav_df = all_df[all_df['編號'].astype(str).isin(map(str, fav_ids))].copy()
         return fav_df
