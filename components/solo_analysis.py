@@ -1923,15 +1923,22 @@ def tab1_module():
 
                         combined_prompt = f"""
                         你是一位專業的台灣房市分析顧問。
-                        請根據以下已完成的分析數據，一次輸出 JSON，鍵固定為：
-                        price, space, age, floor, layout, summary。
+                        請只輸出以下 6 行，不要 JSON，不要 markdown，不要前言，不要結尾：
+
+                        price=...
+                        space=...
+                        age=...
+                        floor=...
+                        layout=...
+                        summary=...
 
                         規則：
-                        1. 只輸出 JSON，不要加任何前言或 markdown。
-                        2. 每個欄位都用繁體中文。
-                        3. 每個欄位內容請控制在 60~120 字內，summary 可到 180 字。
-                        4. 只根據提供數據，不補充不存在資訊。
-                        5. 若某面向資料不足，請明確寫「資料不足，無法完整判斷」。
+                        1. 每一行都必須存在。
+                        2. 只使用繁體中文。
+                        3. 每行請控制在 50 字以內，summary 最多 80 字。
+                        4. 不要在 value 內換行。
+                        5. 不要輸出任何其他文字。
+                        6. 若某面向資料不足，請寫「資料不足，無法完整判斷」。
 
                         價格分析資料：
                         {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
@@ -1981,58 +1988,16 @@ def tab1_module():
                         "summary": f"本次分析改用本地規則摘要：價格面 {price_pos}、坪效面 {space_pos}、屋齡為{age_eval}、樓層為{floor_eval}。建議把總價、空間效率與後續持有成本一起看。"
                     }
 
-                def _extract_json_candidates(raw_text):
-                    text = (raw_text or "").strip()
-                    if not text:
-                        return []
-
-                    candidates = [text]
-
-                    fence_matches = re.findall(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
-                    for block in fence_matches:
-                        block = block.strip()
-                        if block:
-                            candidates.append(block)
-
-                    first_brace = text.find("{")
-                    if first_brace != -1:
-                        depth = 0
-                        start = None
-                        for i in range(first_brace, len(text)):
-                            ch = text[i]
-                            if ch == "{":
-                                if depth == 0:
-                                    start = i
-                                depth += 1
-                            elif ch == "}":
-                                depth -= 1
-                                if depth == 0 and start is not None:
-                                    candidates.append(text[start:i+1].strip())
-                                    break
-
-                    deduped = []
-                    seen = set()
-                    for item in candidates:
-                        if item not in seen:
-                            deduped.append(item)
-                            seen.add(item)
-                    return deduped
-
-                def _normalize_ai_bundle(candidate, fallback_bundle):
+                def _normalize_key_value_bundle(candidate, fallback_bundle):
                     required_keys = ["price", "space", "age", "floor", "layout", "summary"]
-                    if not isinstance(candidate, dict):
-                        return None, "AI 回傳不是 JSON 物件"
-
                     normalized = {}
                     non_empty_count = 0
                     missing_keys = []
 
                     for key in required_keys:
-                        value = candidate.get(key)
+                        value = candidate.get(key, "") if isinstance(candidate, dict) else ""
                         if isinstance(value, str):
                             value = value.strip()
-                        elif isinstance(value, (dict, list)):
-                            value = json.dumps(value, ensure_ascii=False)
                         elif value is None:
                             value = ""
                         else:
@@ -2047,38 +2012,62 @@ def tab1_module():
                         normalized[key] = value
 
                     if non_empty_count == 0:
-                        return None, "AI JSON 缺少有效內容"
+                        return None, "AI 沒有回傳有效的 key=value 內容"
 
                     note = None
                     if missing_keys:
-                        note = f"AI JSON 缺少欄位，已用本地摘要補齊：{', '.join(missing_keys)}"
+                        note = f"AI 回傳缺少欄位，已用本地摘要補齊：{', '.join(missing_keys)}"
                     return normalized, note
 
-                def _parse_ai_bundle(raw_text, fallback_bundle):
+                def _parse_key_value_bundle(raw_text, fallback_bundle):
                     parse_errors = []
-                    for candidate_text in _extract_json_candidates(raw_text):
-                        try:
-                            parsed = json.loads(candidate_text)
-                        except Exception as e:
-                            parse_errors.append(f"JSON 解析失敗：{e}")
+                    expected_keys = ["price", "space", "age", "floor", "layout", "summary"]
+                    text = (raw_text or "").strip()
+
+                    if not text:
+                        return None, None, ["AI 沒有回傳文字"]
+
+                    cleaned = text
+                    cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+                    cleaned = re.sub(r"\n?```$", "", cleaned)
+                    cleaned = cleaned.strip()
+
+                    parsed = {}
+                    for raw_line in cleaned.splitlines():
+                        line = raw_line.strip()
+                        if not line:
                             continue
+                        if "=" not in line:
+                            parse_errors.append(f"跳過非 key=value 行：{line}")
+                            continue
+                        key, value = line.split("=", 1)
+                        key = key.strip().lower()
+                        value = value.strip()
+                        if key not in expected_keys:
+                            parse_errors.append(f"跳過未知鍵：{line}")
+                            continue
+                        if not value:
+                            parse_errors.append(f"欄位值為空：{key}")
+                            continue
+                        parsed[key] = value
 
-                        normalized, note = _normalize_ai_bundle(parsed, fallback_bundle)
-                        if normalized is not None:
-                            return normalized, note, parse_errors
+                    normalized, note = _normalize_key_value_bundle(parsed, fallback_bundle)
+                    if normalized is not None:
+                        return normalized, note, parse_errors
 
-                        if note:
-                            parse_errors.append(note)
-
-                    if not raw_text or not raw_text.strip():
-                        parse_errors.append("AI 沒有回傳文字")
-                    else:
-                        parse_errors.append("找不到可解析的 JSON 區塊")
+                    parse_errors.append("找不到可用的 key=value 內容")
                     return None, None, parse_errors
 
                 compact_prompt = f"""
-                你是台灣房市分析顧問。只輸出 JSON，鍵固定為 price, space, age, floor, layout, summary。
-                每個值控制在 45~90 字，summary 不超過 120 字。
+                你是台灣房市分析顧問。
+                請只輸出 6 行，不要 JSON，不要 markdown，不要任何前言或結尾：
+                price=...
+                space=...
+                age=...
+                floor=...
+                layout=...
+                summary=...
+                每行使用繁體中文，控制在 40 字以內。
                 價格：{json.dumps(analysis_payload, ensure_ascii=False)}
                 坪數：{json.dumps(floor_area_payload, ensure_ascii=False)}
                 屋齡：{json.dumps(age_analysis_payload if age_analysis_payload else {}, ensure_ascii=False)}
@@ -2095,20 +2084,19 @@ def tab1_module():
                     gemini_notes = []
 
                     for prompt_name, prompt_text, max_tokens in [
-                        ("完整版", combined_prompt, 1000),
-                        ("精簡版", compact_prompt, 700),
+                        ("完整版", combined_prompt, 300),
+                        ("精簡版", compact_prompt, 180),
                     ]:
                         try:
                             response = model.generate_content(
                                 prompt_text,
                                 generation_config={
-                                    "temperature": 0.3,
+                                    "temperature": 0.2,
                                     "max_output_tokens": max_tokens,
-                                    "response_mime_type": "application/json",
                                 },
                             )
                             raw_response_text = getattr(response, "text", "")
-                            ai_bundle, note, parse_errors = _parse_ai_bundle(raw_response_text, fallback_bundle)
+                            ai_bundle, note, parse_errors = _parse_key_value_bundle(raw_response_text, fallback_bundle)
 
                             gemini_debug_logs.append({
                                 "prompt_name": prompt_name,
@@ -2151,7 +2139,7 @@ def tab1_module():
                                     for err in log["parse_errors"]:
                                         st.caption(f"解析訊息：{err}")
                                 raw_text = log["raw_response"] or "（無回應文字）"
-                                st.code(raw_text, language="json")
+                                st.code(raw_text, language="text")
 
                     price_text = ai_bundle.get("price", "資料不足，無法完整判斷。")
                     space_text = ai_bundle.get("space", "資料不足，無法完整判斷。")
