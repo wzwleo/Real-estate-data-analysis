@@ -1186,10 +1186,7 @@ def tab1_module():
         with col1:
             analyze_clicked = st.button("開始分析", use_container_width=True, key="solo_analysis_button")
         with col2:    
-            # 篩選出選中的房子
-            selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
-            
-            # ⭐ 新增：取得房產編號並生成連結
+            # 使用前面已選定的 selected_row，避免 option label 與純標題比對不一致
             property_id = selected_row.get('編號', '')
             if property_id:
                 property_url = f"https://www.sinyi.com.tw/buy/house/{property_id}?breadcrumb=list"
