@@ -7,12 +7,13 @@ import plotly.express as px
 import json
 import re
 import numpy as np
+import time
 from scipy import stats
 
 try:
-    from components.favorites import FavoritesManager
+    from components.favorites import FavoritesManager, normalize_property_id
 except ImportError:
-    from favorites import FavoritesManager
+    from favorites import FavoritesManager, normalize_property_id
 
 # 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
@@ -935,8 +936,21 @@ def plot_space_efficiency_scatter(target_row, df, chart_key=None):
 
 def get_favorites_data():
     """取得收藏房產的資料"""
-    return FavoritesManager.get_favorites_data()
+    if 'favorites' not in st.session_state or not st.session_state.favorites:
+        return pd.DataFrame()
 
+    all_df = None
+    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+        all_df = st.session_state.all_properties_df
+    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+        all_df = st.session_state.filtered_df
+
+    if all_df is None or all_df.empty:
+        return pd.DataFrame()
+
+    fav_ids = st.session_state.favorites
+    fav_df = all_df[all_df['編號'].isin(fav_ids)].copy()
+    return fav_df
 
 def tab1_module():
     fav_df = get_favorites_data()
@@ -1907,22 +1921,129 @@ def tab1_module():
                         請開始撰寫綜合總結。
                         """
 
-                        
+                        combined_prompt = f"""
+                        你是一位專業的台灣房市分析顧問。
+                        請根據以下已完成的分析數據，一次輸出 JSON，鍵固定為：
+                        price, space, age, floor, layout, summary。
+
+                        規則：
+                        1. 只輸出 JSON，不要加任何前言或 markdown。
+                        2. 每個欄位都用繁體中文。
+                        3. 每個欄位內容請控制在 60~120 字內，summary 可到 180 字。
+                        4. 只根據提供數據，不補充不存在資訊。
+                        5. 若某面向資料不足，請明確寫「資料不足，無法完整判斷」。
+
+                        價格分析資料：
+                        {json.dumps(analysis_payload, ensure_ascii=False, indent=2)}
+
+                        坪數分析資料：
+                        {json.dumps(floor_area_payload, ensure_ascii=False, indent=2)}
+
+                        屋齡分析資料：
+                        {json.dumps(age_analysis_payload if age_analysis_payload else {}, ensure_ascii=False, indent=2)}
+
+                        樓層分析資料：
+                        {json.dumps(floor_analysis_payload if floor_analysis_payload else {}, ensure_ascii=False, indent=2)}
+
+                        格局分析資料：
+                        {json.dumps(layout_analysis_payload if layout_analysis_payload else {}, ensure_ascii=False, indent=2)}
+                        """
+
+                def _parse_ai_bundle(raw_text):
+                    raw_text = (raw_text or "").strip()
+                    if raw_text.startswith("```json"):
+                        raw_text = raw_text.replace("```json", "", 1).replace("```", "").strip()
+                    elif raw_text.startswith("```"):
+                        raw_text = raw_text.replace("```", "").strip()
+
+                    try:
+                        parsed = json.loads(raw_text)
+                        if isinstance(parsed, dict):
+                            return parsed
+                    except Exception:
+                        pass
+                    return None
+
+                def _build_local_ai_bundle():
+                    price_pct = analysis_payload.get("價格分布", {}).get("價格百分位", 50)
+                    if price_pct <= 33:
+                        price_pos = "價格偏低"
+                    elif price_pct <= 66:
+                        price_pos = "價格落在主流帶"
+                    else:
+                        price_pos = "價格偏高"
+
+                    usage_pct = floor_area_payload.get("坪數分布", {}).get("使用率百分位", 50)
+                    if usage_pct <= 33:
+                        space_pos = "空間效率偏低"
+                    elif usage_pct <= 66:
+                        space_pos = "空間效率中等"
+                    else:
+                        space_pos = "空間效率偏高"
+
+                    age_eval = (age_analysis_payload or {}).get("屋齡分布", {}).get("屋齡評估", "資料不足")
+                    floor_eval = (floor_analysis_payload or {}).get("樓層分布", {}).get("樓層評估", "資料不足")
+                    layout_rank = (layout_analysis_payload or {}).get("格局排名", {}).get("格局資料量排名", "未知")
+                    layout_share = (layout_analysis_payload or {}).get("格局排名", {}).get("相同格局占比(%)", "未知")
+                    market_flag = analysis_payload.get("市場密集度", {}).get("是否位於主流價格帶", "未知")
+
+                    return {
+                        "price": f"{price_pos}，價格百分位約 {price_pct}% ，{market_flag}市場主流交易區間，可作為價格判斷參考。",
+                        "space": f"{space_pos}，使用率百分位約 {usage_pct}% ，可與同區同類型物件互相比較坪效表現。",
+                        "age": f"屋齡評估為{age_eval}，建議結合維護成本與後續整修需求一起評估，不宜只看總價。",
+                        "floor": f"樓層定位屬於{floor_eval}，需搭配採光、通風、出入便利性與市場接受度一起判斷。",
+                        "layout": f"格局供給排名第 {layout_rank}，相同格局占比約 {layout_share}% ，可作為流通性與市場接受度參考。",
+                        "summary": f"本次分析改用本地規則摘要：價格面 {price_pos}、坪效面 {space_pos}、屋齡為{age_eval}、樓層為{floor_eval}。建議把總價、空間效率與後續持有成本一起看。"
+                    }
+
+                compact_prompt = f"""
+                你是台灣房市分析顧問。只輸出 JSON，鍵固定為 price, space, age, floor, layout, summary。
+                每個值控制在 45~90 字，summary 不超過 120 字。
+                價格：{json.dumps(analysis_payload, ensure_ascii=False)}
+                坪數：{json.dumps(floor_area_payload, ensure_ascii=False)}
+                屋齡：{json.dumps(age_analysis_payload if age_analysis_payload else {}, ensure_ascii=False)}
+                樓層：{json.dumps(floor_analysis_payload if floor_analysis_payload else {}, ensure_ascii=False)}
+                格局：{json.dumps(layout_analysis_payload if layout_analysis_payload else {}, ensure_ascii=False)}
+                """
+
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    price_response = model.generate_content(price_prompt)
-                    space_response = model.generate_content(space_prompt)
-                    age_response = model.generate_content(age_prompt)
-                    floor_response = model.generate_content(floor_prompt)
-                    layout_response = model.generate_content(layout_prompt)
-                    summary_response = model.generate_content(summary_prompt)
-                    
-                    
-                    #price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    genai.configure(api_key=gemini_key)
+                    ai_bundle = None
+                    gemini_errors = []
+
+                    for prompt_text, max_tokens in [
+                        (combined_prompt, 1000),
+                        (compact_prompt, 700),
+                    ]:
+                        try:
+                            response = model.generate_content(
+                                prompt_text,
+                                generation_config={
+                                    "temperature": 0.3,
+                                    "max_output_tokens": max_tokens,
+                                    "response_mime_type": "application/json",
+                                },
+                            )
+                            ai_bundle = _parse_ai_bundle(getattr(response, "text", ""))
+                            if ai_bundle:
+                                break
+                            gemini_errors.append("AI 回傳格式異常")
+                        except Exception as gemini_error:
+                            gemini_errors.append(str(gemini_error))
+                            time.sleep(1.2)
+
+                    if ai_bundle is None:
+                        ai_bundle = _build_local_ai_bundle()
+                        if gemini_errors:
+                            st.warning("⚠️ AI 服務逾時或回傳異常，已改用本地規則摘要。")
+                            st.caption(f"最後一次 Gemini 錯誤：{gemini_errors[-1]}")
+
+                    price_text = ai_bundle.get("price", "資料不足，無法完整判斷。")
+                    space_text = ai_bundle.get("space", "資料不足，無法完整判斷。")
+                    age_text = ai_bundle.get("age", "資料不足，無法完整判斷。")
+                    floor_text = ai_bundle.get("floor", "資料不足，無法完整判斷。")
+                    layout_text = ai_bundle.get("layout", "資料不足，無法完整判斷。")
+                    summary_text = ai_bundle.get("summary", "資料不足，無法完整判斷。")
                     
                 # ── ✅ 在 session_state 存入前先算好分數 ──────────────────────────
                 # 給還沒算到的變數加預設值，避免 NameError
@@ -1951,15 +2072,13 @@ def tab1_module():
                 total_score = sum(scores.values()) / len(scores) * 10 
                 
                 # ✅ 分析完成後，存進 session_state
-                property_id = FavoritesManager.build_property_key(selected_row)
                 st.session_state['solo_analysis_result'] = {
-                    'property_id':            property_id,
-                    'price_text':             price_response.text,
-                    'space_text':             space_response.text,
-                    'age_text':               age_response.text,
-                    'floor_text':             floor_response.text,
-                    'layout_text':            layout_response.text,
-                    'summary_text':           summary_response.text,
+                    'price_text':             price_text,
+                    'space_text':             space_text,
+                    'age_text':               age_text,
+                    'floor_text':             floor_text,
+                    'layout_text':            layout_text,
+                    'summary_text':           summary_text,
                     'scores':                 scores,
                     'total_score':            total_score,
                     'analysis_payload':       analysis_payload,
@@ -2076,43 +2195,58 @@ def tab1_module():
                     st.session_state.ai_results = []
                 if "ai_results_summary" not in st.session_state:
                     st.session_state.ai_results_summary = []
+                if "analysis_store" not in st.session_state:
+                    st.session_state.analysis_store = {}
 
-                    
-                timestamp = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
-                property_id = r.get('property_id') or FavoritesManager.build_property_key(pd.Series(r['selected_row']))
-
+                property_id = normalize_property_id(selected_row.get('編號', ''))
+                basic_info = {
+                    '編號': property_id,
+                    '標題': selected_row.get('標題', '未提供'),
+                    '類型': selected_row.get('類型', '未提供'),
+                    '地址': selected_row.get('地址', '未提供'),
+                    '行政區': selected_row.get('行政區', '未提供'),
+                    '建坪': selected_row.get('建坪', '未提供'),
+                    '實際坪數': selected_row.get('主+陽', '未提供'),
+                    '格局': selected_row.get('格局', '未提供'),
+                    '樓層': selected_row.get('樓層', '未提供'),
+                    '屋齡': selected_row.get('屋齡', '未提供'),
+                    '車位': selected_row.get('車位', '未提供'),
+                    '總價': selected_row.get('總價(萬)', '未提供'),
+                }
+                texts = {
+                    'price': r['price_text'],
+                    'space': r['space_text'],
+                    'age': r['age_text'],
+                    'floor': r['floor_text'],
+                    'layout': r['layout_text'],
+                    'summary': r['summary_text'],
+                }
+                analysis_data = {
+                    'price_data': r['analysis_payload'],
+                    'space_data': r['floor_area_payload'],
+                    'age_data': r['age_analysis_payload'],
+                    'floor_data': r['floor_analysis_payload'],
+                    'layout_data': r['layout_analysis_payload'],
+                }
                 analysis_result = {
-                    'timestamp': timestamp,
                     'property_id': property_id,
-                    'house_title': r['selected_row'].get('標題', '未知房屋'),
-                    'house_address': r['selected_row'].get('地址', '未提供'),
+                    'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'house_title': basic_info['標題'],
+                    'house_address': basic_info['地址'],
                     'house_data': {
+                        '總價(萬)': basic_info['總價'],
+                        '建坪': basic_info['建坪'],
+                        '實際坪數': basic_info['實際坪數'],
+                        '格局': basic_info['格局'],
+                        '樓層': basic_info['樓層'],
+                        '屋齡': basic_info['屋齡'],
+                        '車位': basic_info['車位'],
+                        '類型': basic_info['類型'],
+                        '行政區': basic_info['行政區'],
                         '編號': property_id,
-                        '總價(萬)': r['selected_row'].get('總價(萬)', '未提供'),
-                        '建坪': r['selected_row'].get('建坪', '未提供'),
-                        '實際坪數': r['selected_row'].get('主+陽', '未提供'),
-                        '格局': r['selected_row'].get('格局', '未提供'),
-                        '樓層': r['selected_row'].get('樓層', '未提供'),
-                        '屋齡': r['selected_row'].get('屋齡', '未提供'),
-                        '車位': r['selected_row'].get('車位', '未提供'),
-                        '類型': r['selected_row'].get('類型', '未提供'),
-                        '行政區': r['selected_row'].get('行政區', '未提供'),
                     },
-                    'ai_analysis': {
-                        'price': r['price_text'],
-                        'space': r['space_text'],
-                        'age': r['age_text'],
-                        'floor': r['floor_text'],
-                        'layout': r['layout_text'],
-                        'summary': r['summary_text'],
-                    },
-                    'analysis_data': {
-                        'price_data': r['analysis_payload'],
-                        'space_data': r['floor_area_payload'],
-                        'age_data': r['age_analysis_payload'],
-                        'floor_data': r['floor_analysis_payload'],
-                        'layout_data': r['layout_analysis_payload'],
-                    },
+                    'ai_analysis': texts,
+                    'analysis_data': analysis_data,
                     'compare_base_df': r['compare_base_df'],
                     'selected_row': r['selected_row'],
                     'scores': r['scores'],
@@ -2120,50 +2254,25 @@ def tab1_module():
                 }
                 analysis_summary = {
                     'property_id': property_id,
-                    'updated_at': timestamp,
-                    'basic_info': {
-                        '編號': property_id,
-                        '標題': selected_row.get('標題', '未提供'),
-                        '類型': selected_row.get('類型', '未提供'),
-                        '地址': selected_row.get('地址', '未提供'),
-                        '建坪': selected_row.get('建坪', '未提供'),
-                        '實際坪數': selected_row.get('主+陽', '未提供'),
-                        '格局': selected_row.get('格局', '未提供'),
-                        '樓層': selected_row.get('樓層', '未提供'),
-                        '屋齡': selected_row.get('屋齡', '未提供'),
-                        '車位': selected_row.get('車位', '未提供'),
-                        '總價': selected_row.get('總價(萬)', '未提供'),
-                    },
+                    'timestamp': analysis_result['timestamp'],
+                    'basic_info': basic_info,
+                    'analysis_data': analysis_data,
                     'scores': r['scores'],
                     'total_score': r['total_score'],
-                    'analysis_text': {
-                        'price': r['price_text'],
-                        'space': r['space_text'],
-                        'age': r['age_text'],
-                        'floor': r['floor_text'],
-                        'layout': r['layout_text'],
-                        'summary': r['summary_text'],
-                    },
-                    'analysis_data': {
-                        'price_data': r['analysis_payload'],
-                        'space_data': r['floor_area_payload'],
-                        'age_data': r['age_analysis_payload'],
-                        'floor_data': r['floor_analysis_payload'],
-                        'layout_data': r['layout_analysis_payload'],
-                    }
+                    'texts': texts,
                 }
 
-                if 'analysis_store' not in st.session_state:
-                    st.session_state.analysis_store = {}
-                st.session_state.analysis_store[property_id] = analysis_summary
-
-                st.session_state.ai_results_summary = [
-                    item for item in st.session_state.ai_results_summary
-                    if str(item.get('property_id') or item.get('basic_info', {}).get('編號', '')) != property_id
-                ]
                 st.session_state.ai_results_summary.append(analysis_summary)
                 st.session_state.ai_results.append(analysis_result)
-            
+                st.session_state.analysis_store[property_id] = {
+                    'property_id': property_id,
+                    'timestamp': analysis_result['timestamp'],
+                    'basic_info': basic_info,
+                    'analysis_data': analysis_data,
+                    'scores': r['scores'],
+                    'total_score': r['total_score'],
+                    'texts': texts,
+                }
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
 
