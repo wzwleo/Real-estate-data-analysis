@@ -955,7 +955,7 @@ class ComparisonAnalyzer:
         """執行分析核心"""
         try:
             s = st.session_state.analysis_settings
-            fav_df = pd.read_json(s["fav"], orient='split')
+            fav_df = pd.read_json(io.StringIO(s["fav"]), orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
                 # 步驟1：解析地址
