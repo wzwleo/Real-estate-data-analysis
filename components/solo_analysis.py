@@ -9,6 +9,11 @@ import re
 import numpy as np
 from scipy import stats
 
+try:
+    from components.favorites import FavoritesManager
+except ImportError:
+    from favorites import FavoritesManager
+
 # 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
     "Taichung-city_buy_properties.csv": "台中市",
@@ -930,21 +935,8 @@ def plot_space_efficiency_scatter(target_row, df, chart_key=None):
 
 def get_favorites_data():
     """取得收藏房產的資料"""
-    if 'favorites' not in st.session_state or not st.session_state.favorites:
-        return pd.DataFrame()
+    return FavoritesManager.get_favorites_data()
 
-    all_df = None
-    if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
-        all_df = st.session_state.all_properties_df
-    elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-        all_df = st.session_state.filtered_df
-
-    if all_df is None or all_df.empty:
-        return pd.DataFrame()
-
-    fav_ids = st.session_state.favorites
-    fav_df = all_df[all_df['編號'].isin(fav_ids)].copy()
-    return fav_df
 
 def tab1_module():
     fav_df = get_favorites_data()
@@ -1959,7 +1951,9 @@ def tab1_module():
                 total_score = sum(scores.values()) / len(scores) * 10 
                 
                 # ✅ 分析完成後，存進 session_state
+                property_id = FavoritesManager.build_property_key(selected_row)
                 st.session_state['solo_analysis_result'] = {
+                    'property_id':            property_id,
                     'price_text':             price_response.text,
                     'space_text':             space_response.text,
                     'age_text':               age_response.text,
@@ -2084,11 +2078,16 @@ def tab1_module():
                     st.session_state.ai_results_summary = []
 
                     
+                timestamp = pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')
+                property_id = r.get('property_id') or FavoritesManager.build_property_key(pd.Series(r['selected_row']))
+
                 analysis_result = {
-                    'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'timestamp': timestamp,
+                    'property_id': property_id,
                     'house_title': r['selected_row'].get('標題', '未知房屋'),
                     'house_address': r['selected_row'].get('地址', '未提供'),
                     'house_data': {
+                        '編號': property_id,
                         '總價(萬)': r['selected_row'].get('總價(萬)', '未提供'),
                         '建坪': r['selected_row'].get('建坪', '未提供'),
                         '實際坪數': r['selected_row'].get('主+陽', '未提供'),
@@ -2120,9 +2119,10 @@ def tab1_module():
                     'total_score': r['total_score'],
                 }
                 analysis_summary = {
-                    
-                    # 房屋基本資訊（不含總價）
+                    'property_id': property_id,
+                    'updated_at': timestamp,
                     'basic_info': {
+                        '編號': property_id,
                         '標題': selected_row.get('標題', '未提供'),
                         '類型': selected_row.get('類型', '未提供'),
                         '地址': selected_row.get('地址', '未提供'),
@@ -2134,6 +2134,16 @@ def tab1_module():
                         '車位': selected_row.get('車位', '未提供'),
                         '總價': selected_row.get('總價(萬)', '未提供'),
                     },
+                    'scores': r['scores'],
+                    'total_score': r['total_score'],
+                    'analysis_text': {
+                        'price': r['price_text'],
+                        'space': r['space_text'],
+                        'age': r['age_text'],
+                        'floor': r['floor_text'],
+                        'layout': r['layout_text'],
+                        'summary': r['summary_text'],
+                    },
                     'analysis_data': {
                         'price_data': r['analysis_payload'],
                         'space_data': r['floor_area_payload'],
@@ -2142,7 +2152,15 @@ def tab1_module():
                         'layout_data': r['layout_analysis_payload'],
                     }
                 }
-                
+
+                if 'analysis_store' not in st.session_state:
+                    st.session_state.analysis_store = {}
+                st.session_state.analysis_store[property_id] = analysis_summary
+
+                st.session_state.ai_results_summary = [
+                    item for item in st.session_state.ai_results_summary
+                    if str(item.get('property_id') or item.get('basic_info', {}).get('編號', '')) != property_id
+                ]
                 st.session_state.ai_results_summary.append(analysis_summary)
                 st.session_state.ai_results.append(analysis_result)
             
