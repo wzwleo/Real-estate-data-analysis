@@ -1949,21 +1949,6 @@ def tab1_module():
                         {json.dumps(layout_analysis_payload if layout_analysis_payload else {}, ensure_ascii=False, indent=2)}
                         """
 
-                def _parse_ai_bundle(raw_text):
-                    raw_text = (raw_text or "").strip()
-                    if raw_text.startswith("```json"):
-                        raw_text = raw_text.replace("```json", "", 1).replace("```", "").strip()
-                    elif raw_text.startswith("```"):
-                        raw_text = raw_text.replace("```", "").strip()
-
-                    try:
-                        parsed = json.loads(raw_text)
-                        if isinstance(parsed, dict):
-                            return parsed
-                    except Exception:
-                        pass
-                    return None
-
                 def _build_local_ai_bundle():
                     price_pct = analysis_payload.get("價格分布", {}).get("價格百分位", 50)
                     if price_pct <= 33:
@@ -1996,6 +1981,101 @@ def tab1_module():
                         "summary": f"本次分析改用本地規則摘要：價格面 {price_pos}、坪效面 {space_pos}、屋齡為{age_eval}、樓層為{floor_eval}。建議把總價、空間效率與後續持有成本一起看。"
                     }
 
+                def _extract_json_candidates(raw_text):
+                    text = (raw_text or "").strip()
+                    if not text:
+                        return []
+
+                    candidates = [text]
+
+                    fence_matches = re.findall(r"```(?:json)?\s*(.*?)\s*```", text, flags=re.DOTALL | re.IGNORECASE)
+                    for block in fence_matches:
+                        block = block.strip()
+                        if block:
+                            candidates.append(block)
+
+                    first_brace = text.find("{")
+                    if first_brace != -1:
+                        depth = 0
+                        start = None
+                        for i in range(first_brace, len(text)):
+                            ch = text[i]
+                            if ch == "{":
+                                if depth == 0:
+                                    start = i
+                                depth += 1
+                            elif ch == "}":
+                                depth -= 1
+                                if depth == 0 and start is not None:
+                                    candidates.append(text[start:i+1].strip())
+                                    break
+
+                    deduped = []
+                    seen = set()
+                    for item in candidates:
+                        if item not in seen:
+                            deduped.append(item)
+                            seen.add(item)
+                    return deduped
+
+                def _normalize_ai_bundle(candidate, fallback_bundle):
+                    required_keys = ["price", "space", "age", "floor", "layout", "summary"]
+                    if not isinstance(candidate, dict):
+                        return None, "AI 回傳不是 JSON 物件"
+
+                    normalized = {}
+                    non_empty_count = 0
+                    missing_keys = []
+
+                    for key in required_keys:
+                        value = candidate.get(key)
+                        if isinstance(value, str):
+                            value = value.strip()
+                        elif isinstance(value, (dict, list)):
+                            value = json.dumps(value, ensure_ascii=False)
+                        elif value is None:
+                            value = ""
+                        else:
+                            value = str(value).strip()
+
+                        if value:
+                            non_empty_count += 1
+                        else:
+                            missing_keys.append(key)
+                            value = fallback_bundle[key]
+
+                        normalized[key] = value
+
+                    if non_empty_count == 0:
+                        return None, "AI JSON 缺少有效內容"
+
+                    note = None
+                    if missing_keys:
+                        note = f"AI JSON 缺少欄位，已用本地摘要補齊：{', '.join(missing_keys)}"
+                    return normalized, note
+
+                def _parse_ai_bundle(raw_text, fallback_bundle):
+                    parse_errors = []
+                    for candidate_text in _extract_json_candidates(raw_text):
+                        try:
+                            parsed = json.loads(candidate_text)
+                        except Exception as e:
+                            parse_errors.append(f"JSON 解析失敗：{e}")
+                            continue
+
+                        normalized, note = _normalize_ai_bundle(parsed, fallback_bundle)
+                        if normalized is not None:
+                            return normalized, note, parse_errors
+
+                        if note:
+                            parse_errors.append(note)
+
+                    if not raw_text or not raw_text.strip():
+                        parse_errors.append("AI 沒有回傳文字")
+                    else:
+                        parse_errors.append("找不到可解析的 JSON 區塊")
+                    return None, None, parse_errors
+
                 compact_prompt = f"""
                 你是台灣房市分析顧問。只輸出 JSON，鍵固定為 price, space, age, floor, layout, summary。
                 每個值控制在 45~90 字，summary 不超過 120 字。
@@ -2008,12 +2088,15 @@ def tab1_module():
 
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
                     genai.configure(api_key=gemini_key)
+                    fallback_bundle = _build_local_ai_bundle()
                     ai_bundle = None
                     gemini_errors = []
+                    gemini_debug_logs = []
+                    gemini_notes = []
 
-                    for prompt_text, max_tokens in [
-                        (combined_prompt, 1000),
-                        (compact_prompt, 700),
+                    for prompt_name, prompt_text, max_tokens in [
+                        ("完整版", combined_prompt, 1000),
+                        ("精簡版", compact_prompt, 700),
                     ]:
                         try:
                             response = model.generate_content(
@@ -2024,19 +2107,51 @@ def tab1_module():
                                     "response_mime_type": "application/json",
                                 },
                             )
-                            ai_bundle = _parse_ai_bundle(getattr(response, "text", ""))
+                            raw_response_text = getattr(response, "text", "")
+                            ai_bundle, note, parse_errors = _parse_ai_bundle(raw_response_text, fallback_bundle)
+
+                            gemini_debug_logs.append({
+                                "prompt_name": prompt_name,
+                                "raw_response": raw_response_text,
+                                "parse_errors": parse_errors,
+                            })
+
+                            if note:
+                                gemini_notes.append(note)
+
                             if ai_bundle:
                                 break
-                            gemini_errors.append("AI 回傳格式異常")
+
+                            if parse_errors:
+                                gemini_errors.append(parse_errors[-1])
+                            else:
+                                gemini_errors.append("AI 回傳格式異常")
                         except Exception as gemini_error:
                             gemini_errors.append(str(gemini_error))
+                            gemini_debug_logs.append({
+                                "prompt_name": prompt_name,
+                                "raw_response": "",
+                                "parse_errors": [str(gemini_error)],
+                            })
                             time.sleep(1.2)
 
                     if ai_bundle is None:
-                        ai_bundle = _build_local_ai_bundle()
+                        ai_bundle = fallback_bundle
                         if gemini_errors:
                             st.warning("⚠️ AI 服務逾時或回傳異常，已改用本地規則摘要。")
                             st.caption(f"最後一次 Gemini 錯誤：{gemini_errors[-1]}")
+                    elif gemini_notes:
+                        st.info(f"ℹ️ {gemini_notes[-1]}")
+
+                    if gemini_debug_logs and (gemini_errors or gemini_notes):
+                        with st.expander("🔍 查看 Gemini 原始回應與解析紀錄", expanded=False):
+                            for idx, log in enumerate(gemini_debug_logs, start=1):
+                                st.markdown(f"**第 {idx} 次嘗試：{log['prompt_name']}**")
+                                if log["parse_errors"]:
+                                    for err in log["parse_errors"]:
+                                        st.caption(f"解析訊息：{err}")
+                                raw_text = log["raw_response"] or "（無回應文字）"
+                                st.code(raw_text, language="json")
 
                     price_text = ai_bundle.get("price", "資料不足，無法完整判斷。")
                     space_text = ai_bundle.get("space", "資料不足，無法完整判斷。")
