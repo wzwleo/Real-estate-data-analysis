@@ -9,6 +9,27 @@ import re
 import numpy as np
 from scipy import stats
 
+try:
+    from components.favorites import FavoritesManager, normalize_property_id
+except Exception:
+    try:
+        from favorites import FavoritesManager, normalize_property_id
+    except Exception:
+        FavoritesManager = None
+        def normalize_property_id(value):
+            return "" if value is None else str(value).strip()
+
+
+def safe_generate(model, prompt, fallback_text):
+    """Gemini 容錯包裝：失敗時回退到本地文字"""
+    try:
+        response = model.generate_content(prompt)
+        text = getattr(response, "text", "") or ""
+        text = text.strip()
+        return text if text else fallback_text
+    except Exception:
+        return fallback_text
+
 # 在檔案開頭, name_map 下方加入反向對照表
 name_map = {
     "Taichung-city_buy_properties.csv": "台中市",
@@ -1917,20 +1938,12 @@ def tab1_module():
 
                         
                 with st.spinner("🧠AI 正在解讀圖表並產生分析結論..."):
-                    price_response = model.generate_content(price_prompt)
-                    space_response = model.generate_content(space_prompt)
-                    age_response = model.generate_content(age_prompt)
-                    floor_response = model.generate_content(floor_prompt)
-                    layout_response = model.generate_content(layout_prompt)
-                    summary_response = model.generate_content(summary_prompt)
-                    
-                    
-                    #price_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #space_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #age_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #floor_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #layout_response = type("obj", (object,), {"text":"❌ AI 分析已暫時關閉"})()
-                    #summary_response = type("obj", (object,), {"text":"❌ AI 綜合總結已暫時關閉"})()
+                    price_text = safe_generate(model, price_prompt, "價格分析暫時無法產生，請參考圖表與數據。")
+                    space_text = safe_generate(model, space_prompt, "坪數分析暫時無法產生，請參考圖表與數據。")
+                    age_text = safe_generate(model, age_prompt if age_analysis_payload else "", "屋齡分析暫時無法產生，請參考圖表與數據。") if age_analysis_payload else "（無屋齡資料）"
+                    floor_text = safe_generate(model, floor_prompt if floor_analysis_payload else "", "樓層分析暫時無法產生，請參考圖表與數據。") if floor_analysis_payload else "（無樓層資料）"
+                    layout_text = safe_generate(model, layout_prompt if layout_analysis_payload else "", "格局分析暫時無法產生，請參考圖表與數據。") if layout_analysis_payload else "（無格局資料）"
+                    summary_text = safe_generate(model, summary_prompt, "綜合總結暫時無法產生，請綜合參考五大面向圖表與分析文字。")
                     
                 # ── ✅ 在 session_state 存入前先算好分數 ──────────────────────────
                 # 給還沒算到的變數加預設值，避免 NameError
@@ -1959,13 +1972,16 @@ def tab1_module():
                 total_score = sum(scores.values()) / len(scores) * 10 
                 
                 # ✅ 分析完成後，存進 session_state
+                property_id = normalize_property_id(selected_row.get('編號', ''))
+                selected_row_dict = selected_row.to_dict()
                 st.session_state['solo_analysis_result'] = {
-                    'price_text':             price_response.text,
-                    'space_text':             space_response.text,
-                    'age_text':               age_response.text,
-                    'floor_text':             floor_response.text,
-                    'layout_text':            layout_response.text,
-                    'summary_text':           summary_response.text,
+                    'property_id':            property_id,
+                    'price_text':             price_text,
+                    'space_text':             space_text,
+                    'age_text':               age_text,
+                    'floor_text':             floor_text,
+                    'layout_text':            layout_text,
+                    'summary_text':           summary_text,
                     'scores':                 scores,
                     'total_score':            total_score,
                     'analysis_payload':       analysis_payload,
@@ -1973,12 +1989,49 @@ def tab1_module():
                     'age_analysis_payload':   age_analysis_payload,
                     'floor_analysis_payload': floor_analysis_payload,
                     'layout_analysis_payload':layout_analysis_payload,
-                    'selected_row':           selected_row.to_dict(),
+                    'selected_row':           selected_row_dict,
                     'compare_base_df': (
                         all_df.to_dict('records')
                         if all_df is not None and not all_df.empty
                         else []
                     ),
+                }
+
+                if 'analysis_store' not in st.session_state:
+                    st.session_state.analysis_store = {}
+                st.session_state.analysis_store[property_id] = {
+                    'property_id': property_id,
+                    'basic_info': {
+                        '編號': property_id,
+                        '標題': selected_row_dict.get('標題', '未提供'),
+                        '地址': selected_row_dict.get('地址', '未提供'),
+                        '類型': selected_row_dict.get('類型', '未提供'),
+                        '行政區': selected_row_dict.get('行政區', '未提供'),
+                        '建坪': selected_row_dict.get('建坪', '未提供'),
+                        '實際坪數': selected_row_dict.get('主+陽', '未提供'),
+                        '格局': selected_row_dict.get('格局', '未提供'),
+                        '樓層': selected_row_dict.get('樓層', '未提供'),
+                        '屋齡': selected_row_dict.get('屋齡', '未提供'),
+                        '車位': selected_row_dict.get('車位', '未提供'),
+                        '總價': selected_row_dict.get('總價(萬)', '未提供'),
+                    },
+                    'analysis_text': {
+                        'price': price_text,
+                        'space': space_text,
+                        'age': age_text,
+                        'floor': floor_text,
+                        'layout': layout_text,
+                        'summary': summary_text,
+                    },
+                    'analysis_data': {
+                        'price_data': analysis_payload,
+                        'space_data': floor_area_payload,
+                        'age_data': age_analysis_payload,
+                        'floor_data': floor_analysis_payload,
+                        'layout_data': layout_analysis_payload,
+                    },
+                    'scores': scores,
+                    'total_score': total_score,
                 }
             except Exception as e:
                 st.error(f"❌ 分析過程發生錯誤：{e}")
@@ -2086,6 +2139,7 @@ def tab1_module():
                     
                 analysis_result = {
                     'timestamp': pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'property_id': r.get('property_id', normalize_property_id(r['selected_row'].get('編號', ''))),
                     'house_title': r['selected_row'].get('標題', '未知房屋'),
                     'house_address': r['selected_row'].get('地址', '未提供'),
                     'house_data': {
@@ -2123,6 +2177,7 @@ def tab1_module():
                     
                     # 房屋基本資訊（不含總價）
                     'basic_info': {
+                        '編號': r.get('property_id', normalize_property_id(r['selected_row'].get('編號', ''))),
                         '標題': selected_row.get('標題', '未提供'),
                         '類型': selected_row.get('類型', '未提供'),
                         '地址': selected_row.get('地址', '未提供'),
@@ -2145,6 +2200,17 @@ def tab1_module():
                 
                 st.session_state.ai_results_summary.append(analysis_summary)
                 st.session_state.ai_results.append(analysis_result)
+
+                if 'analysis_store' not in st.session_state:
+                    st.session_state.analysis_store = {}
+                st.session_state.analysis_store[r.get('property_id', normalize_property_id(r['selected_row'].get('編號', '')))] = {
+                    'property_id': r.get('property_id', normalize_property_id(r['selected_row'].get('編號', ''))),
+                    'basic_info': analysis_summary['basic_info'],
+                    'analysis_text': analysis_result['ai_analysis'],
+                    'analysis_data': analysis_summary['analysis_data'],
+                    'scores': r['scores'],
+                    'total_score': r['total_score'],
+                }
             
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
@@ -2152,3 +2218,4 @@ def tab1_module():
                 # ── 除錯資訊 ──
                 st.write(st.session_state.ai_results_summary)
                 
+
