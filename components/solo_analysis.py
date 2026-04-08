@@ -2165,20 +2165,31 @@ def tab1_module():
                 weights_detail_df = pd.concat([weights_detail_df, total_row], ignore_index=True)
                 
                 st.dataframe(weights_detail_df, use_container_width=True, hide_index=True)
+
+
+                # 1. 建立計算過程的字串，例如: "6.8 * 30 + 5.5 * 25 + ..."
+                calculation_process = " + ".join([f"{r['scores'][k]} * {weights_used[k]}" for k in r['scores'].keys()])
+                
+                # 2. 獲取總分（延用剛才計算出的總計值）
+                final_total_score = final_df.iloc[-1]['加權分數']
                 
                 st.info(f"""
-                **計算公式：** 總分 = Σ(原始分數 × 權重%) × 10
+
+                **五項原始分數**
+                **💰 價格競爭力** = 10 - {r['price_percentile']:.1f} / 10 = **{r['scores']['價格競爭力']:.1f}**
                 
-                **五項原始分數：**
-                💰 價格競爭力 = 10 - {price_percentile:.1f} / 10 = **{r['scores']['價格競爭力']:.1f}**
-                📐 空間效率   = ({target_usage_rate:.2f} / {median_usage:.2f}) × 5 = **{r['scores']['空間效率']:.1f}**
-                🕰️ 屋齡優勢   = 10 - {age_percentile:.1f} / 10 = **{r['scores']['屋齡優勢']:.1f}**
-                🏢 樓層定位   = 10 - |{floor_percentile:.1f} - 50| / 5 = **{r['scores']['樓層定位']:.1f}**
-                🛋️ 格局流動性 = {same_layout_pct:.1f} / 3 = **{r['scores']['格局流動性']:.1f}**
+                **📐 空間效率**   = ({r['target_usage_rate']:.2f} / {r['median_usage']:.2f}) × 5 = **{r['scores']['空間效率']:.1f}**
+
+                **🕰️ 屋齡優勢**   = 10 - {r['age_percentile']:.1f} / 10 = **{r['scores']['屋齡優勢']:.1f}**
+                
+                **🏢 樓層定位**   = 10 - |{r['floor_percentile']:.1f} - 50| / 5 = **{r['scores']['樓層定位']:.1f}**
+                
+                **🛋️ 格局流動性** = {r['same_layout_pct']:.1f} / 3 = **{r['scores']['格局流動性']:.1f}**
+                
+                **總分計算公式：** 總分 = Σ(原始分數 × 權重%) × 10
                 
                 **加權計算：**
-                加權總和 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f}
-                最終分數 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f} × 10 = **{r['total_score']:.1f}**
+                加權總和 = {calculation_process} = {final_total_score}
                 """)
                 
             # ── 儲存按鈕 ──
