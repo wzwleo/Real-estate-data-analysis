@@ -54,120 +54,51 @@ def render_sidebar():
     
     with st.sidebar.expander("🎚️ 評分權重設定", expanded=False):
         # 初始化預設權重
-        if 'score_weights' not in st.session_state:
-            st.session_state.score_weights = {
-                "價格競爭力": 30,
-                "空間效率": 25,
-                "屋齡優勢": 20,
-                "樓層定位": 15,
-                "格局流動性": 10
+        default_weights = {
+                "w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10
+            }
+            
+        for key, val in default_weights.items():
+            if key not in st.session_state:
+                st.session_state[key] = val
+        
+        with st.sidebar.expander("🎚️ 評分權重設定", expanded=True):
+            st.caption("💡 總和需為 100%")
+                
+            # 2. 模板選擇邏輯
+            preset = st.selectbox(
+                "快速選擇模板",
+                ["自訂", "👨‍👩‍👧‍👦 小家庭首購", "💼 投資客導向", "👴 退休族優先"],
+                key="weight_preset"
+            )
+                
+            # 定義模板數據
+            templates = {
+                "👨‍👩‍👧‍👦 小家庭首購": [40, 15, 15, 10, 20],
+                "💼 投資客導向": [35, 15, 20, 10, 20],
+                "👴 退休族優先": [20, 20, 25, 25, 10]
             }
         
-        st.write("調整各項指標的重要性")
-        st.caption("💡 總和需為 100%")
+            # 如果選了模板，直接更新 session_state 裡的 slider key
+            if preset in templates:
+                vals = templates[preset]
+                st.session_state.w_price = vals[0]
+                st.session_state.w_space = vals[1]
+                st.session_state.w_age = vals[2]
+                st.session_state.w_floor = vals[3]
+                st.session_state.w_layout = vals[4]
         
-        # 預設模板選擇
-        preset = st.selectbox(
-            "快速選擇模板",
-            [
-                "自訂",
-                "👨‍👩‍👧‍👦 小家庭首購",
-                "💼 投資客導向",
-                "👴 退休族優先",
-                "🏃 年輕族群"
-            ],
-            key="weight_preset"
-        )
-        
-        # 根據模板設定權重
-        if preset == "👨‍👩‍👧‍👦 小家庭首購":
-            template_weights = {
-                "價格競爭力": 40,
-                "空間效率": 15,
-                "屋齡優勢": 15,
-                "樓層定位": 10,
-                "格局流動性": 20
-            }
-        elif preset == "💼 投資客導向":
-            template_weights = {
-                "價格競爭力": 35,
-                "空間效率": 15,
-                "屋齡優勢": 20,
-                "樓層定位": 10,
-                "格局流動性": 20
-            }
-        elif preset == "👴 退休族優先":
-            template_weights = {
-                "價格競爭力": 20,
-                "空間效率": 20,
-                "屋齡優勢": 25,
-                "樓層定位": 25,
-                "格局流動性": 10
-            }
-        elif preset == "🏃 年輕族群":
-            template_weights = {
-                "價格競爭力": 35,
-                "空間效率": 30,
-                "屋齡優勢": 10,
-                "樓層定位": 15,
-                "格局流動性": 10
-            }
-        else:  # 自訂
-            template_weights = st.session_state.score_weights
-        
-        # 使用 slider 調整權重
-        weight_price = st.slider(
-            "💰 價格競爭力",
-            min_value=0,
-            max_value=100,
-            value=template_weights["價格競爭力"],
-            step=5,
-            help="價格越便宜，分數越高",
-            key="weight_price_slider"
-        )
-        
-        weight_space = st.slider(
-            "📐 空間效率",
-            min_value=0,
-            max_value=100,
-            value=template_weights["空間效率"],
-            step=5,
-            help="公設比越低，分數越高",
-            key="weight_space_slider"
-        )
-        
-        weight_age = st.slider(
-            "🕰️ 屋齡優勢",
-            min_value=0,
-            max_value=100,
-            value=template_weights["屋齡優勢"],
-            step=5,
-            help="屋齡越新，分數越高",
-            key="weight_age_slider"
-        )
-        
-        weight_floor = st.slider(
-            "🏢 樓層定位",
-            min_value=0,
-            max_value=100,
-            value=template_weights["樓層定位"],
-            step=5,
-            help="中樓層分數最高",
-            key="weight_floor_slider"
-        )
-        
-        weight_layout = st.slider(
-            "🛋️ 格局流動性",
-            min_value=0,
-            max_value=100,
-            value=template_weights["格局流動性"],
-            step=5,
-            help="主流格局分數越高",
-            key="weight_layout_slider"
-        )
-        
-        # 計算總和
-        total_weight = weight_price + weight_space + weight_age + weight_floor + weight_layout
+            # 3. Slider 直接綁定 key
+            # 注意：這裡不再傳入 value 參數，因為 key 會自動接管
+            st.slider("💰 價格競爭力", 0, 100, step=5, key="w_price")
+            st.slider("📐 空間效率", 0, 100, step=5, key="w_space")
+            st.slider("🕰️ 屋齡優勢", 0, 100, step=5, key="w_age")
+            st.slider("🏢 樓層定位", 0, 100, step=5, key="w_floor")
+            st.slider("🛋️ 格局流動性", 0, 100, step=5, key="w_layout")
+            
+            total_weight = (st.session_state.w_price + st.session_state.w_space + 
+                            st.session_state.w_age + st.session_state.w_floor + 
+                            st.session_state.w_layout)
         
         # 顯示總和與狀態
         if total_weight == 100:
@@ -180,36 +111,26 @@ def render_sidebar():
         # 操作按鈕
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("💾 套用", use_container_width=True, key="apply_weights"):
+            if st.button("💾 套用", use_container_width=True):
                 if total_weight == 100:
+                    # 這裡存入最終要給分析邏輯使用的 score_weights
                     st.session_state.score_weights = {
-                        "價格競爭力": weight_price,
-                        "空間效率": weight_space,
-                        "屋齡優勢": weight_age,
-                        "樓層定位": weight_floor,
-                        "格局流動性": weight_layout
+                        "價格競爭力": st.session_state.w_price,
+                        "空間效率": st.session_state.w_space,
+                        "屋齡優勢": st.session_state.w_age,
+                        "樓層定位": st.session_state.w_floor,
+                        "格局流動性": st.session_state.w_layout
                     }
-                    st.success("✅ 權重已更新！")
-                    # 清除分析結果，讓使用者重新分析
-                    if 'solo_analysis_result' in st.session_state:
-                        del st.session_state['solo_analysis_result']
+                    st.success("✅ 已套用")
                     st.rerun()
                 else:
-                    st.error("❌ 總權重必須為 100%")
-        
+                    st.error("❌ 總重需為 100%")
+                
         with col2:
-            if st.button("🔄 重設", use_container_width=True, key="reset_weights"):
-                st.session_state.score_weights = {
-                    "價格競爭力": 30,
-                    "空間效率": 25,
-                    "屋齡優勢": 20,
-                    "樓層定位": 15,
-                    "格局流動性": 10
-                }
-                st.success("✅ 已重設！")
-                # 清除分析結果
-                if 'solo_analysis_result' in st.session_state:
-                    del st.session_state['solo_analysis_result']
+            if st.button("🔄 重設", use_container_width=True):
+                # 重設所有 Slider key 到初始值
+                for key, val in default_weights.items():
+                    st.session_state[key] = val
                 st.rerun()
         
 
