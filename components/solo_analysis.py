@@ -8,7 +8,7 @@ import json
 import re
 import numpy as np
 from scipy import stats
-import math
+
 
 try:
     from components.favorites import FavoritesManager, normalize_property_id
