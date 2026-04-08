@@ -54,44 +54,58 @@ def render_sidebar():
     
     with st.sidebar.expander("🎚️ 評分權重設定", expanded=True):
             
-            # 定義預設值
-            default_weights = {"w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10}
+            # 1. 定義數據中心
+            system_default = {"w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10}
+            
             templates = {
-                "自訂": None,
+                "自訂": [30, 25, 20, 15, 10], # 自訂的基礎值同系統預設
                 "👨‍👩‍👧‍👦 小家庭首購": [40, 15, 15, 10, 20],
                 "💼 投資客導向": [35, 15, 20, 10, 20],
                 "👴 退休族優先": [20, 20, 25, 25, 10]
             }
             preset_list = list(templates.keys())
     
-            # 1. 初始化 Session State (如果還沒建立)
-            for k, v in default_weights.items():
-                if k not in st.session_state:
-                    st.session_state[k] = v
+            # 初始化 Session State
+            if 'w_price' not in st.session_state:
+                for k, v in system_default.items(): st.session_state[k] = v
             if 'preset_index' not in st.session_state:
                 st.session_state.preset_index = 0
     
-            # --- 關鍵修復：定義 Callback 函式 ---
+            # --- 核心邏輯：Callback 函式 ---
+            
             def on_reset():
-                """按下重設按鈕時執行的動作"""
-                for k, v in default_weights.items():
-                    st.session_state[k] = v
-                st.session_state.preset_index = 0
+                """智慧重設邏輯"""
+                # 取得當前選單選中的名稱 (利用下面 selectbox 的 key)
+                current_preset = st.session_state.temp_preset_key
+                
+                # 取得該模板對應的分數
+                target_vals = templates.get(current_preset, templates["自訂"])
+                
+                # 更新 Slider 數值
+                st.session_state.w_price = target_vals[0]
+                st.session_state.w_space = target_vals[1]
+                st.session_state.w_age = target_vals[2]
+                st.session_state.w_floor = target_vals[3]
+                st.session_state.w_layout = target_vals[4]
+                # 清除成功訊息標記
+                if 'apply_success' in st.session_state:
+                    st.session_state.apply_success = False
     
             def on_preset_change():
-                """下拉選單切換時執行的動作"""
-                # 從 session_state 獲取當前選單的值 (需搭配下面 selectbox 的 key)
+                """切換模板時立即同步數值"""
                 new_preset = st.session_state.temp_preset_key
                 st.session_state.preset_index = preset_list.index(new_preset)
-                if new_preset != "自訂":
-                    vals = templates[new_preset]
-                    st.session_state.w_price = vals[0]
-                    st.session_state.w_space = vals[1]
-                    st.session_state.w_age = vals[2]
-                    st.session_state.w_floor = vals[3]
-                    st.session_state.w_layout = vals[4]
+                
+                vals = templates[new_preset]
+                st.session_state.w_price = vals[0]
+                st.session_state.w_space = vals[1]
+                st.session_state.w_age = vals[2]
+                st.session_state.w_floor = vals[3]
+                st.session_state.w_layout = vals[4]
+                # 切換模板時也重設成功訊息
+                st.session_state.apply_success = False
     
-            # 2. 渲染下拉選單 (加入 on_change)
+            # 2. 下拉選單
             st.selectbox(
                 "快速選擇模板", 
                 preset_list, 
@@ -100,7 +114,7 @@ def render_sidebar():
                 on_change=on_preset_change
             )
     
-            # 3. 渲染所有 Slider (直接綁定 key)
+            # 3. Slider 區域
             st.slider("💰 價格競爭力", 0, 100, step=5, key="w_price")
             st.slider("📐 空間效率", 0, 100, step=5, key="w_space")
             st.slider("🕰️ 屋齡優勢", 0, 100, step=5, key="w_age")
@@ -113,14 +127,13 @@ def render_sidebar():
     
             st.divider()
     
-            # 4. 操作按鈕
+            # 4. 按鈕區域
             col1, col2 = st.columns(2)
             
-            # 重設按鈕 (加入 on_click)
             with col2:
+                # 這裡的 on_click 會觸發上面寫好的智慧重設
                 st.button("🔄 重設", use_container_width=True, on_click=on_reset)
     
-            # 套用按鈕
             with col1:
                 if st.button("💾 套用", use_container_width=True):
                     if total_weight == 100:
@@ -131,16 +144,15 @@ def render_sidebar():
                             "樓層定位": st.session_state.w_floor,
                             "格局流動性": st.session_state.w_layout
                         }
-                        st.session_state.apply_success = True # 標記成功
+                        st.session_state.apply_success = True
                     else:
                         st.session_state.apply_success = False
     
-            # 5. 顯示結果
-            if 'apply_success' in st.session_state:
-                if st.session_state.apply_success:
-                    st.success("✅ 權重已更新！")
-                elif total_weight != 100:
-                    st.error(f"❌ 總和需為 100% (目前 {total_weight}%)")
+            # 5. 訊息顯示 (位於按鈕下方)
+            if st.session_state.get('apply_success'):
+                st.success("✅ 權重已更新！")
+            elif total_weight != 100:
+                st.error(f"❌ 總和需為 100% (目前 {total_weight}%)")
         
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
