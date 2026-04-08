@@ -2139,11 +2139,6 @@ def tab1_module():
                     unsafe_allow_html=True
                 )
                 
-                # ✅ 顯示使用的權重
-                st.caption("📊 本次分析使用的權重")
-                weights_used = r.get('weights_used', {})
-                for name, weight in weights_used.items():
-                    st.caption(f"• {name}：{weight}%")
                     
             # ✅ 詳細權重資訊
             with st.expander("🔍 查看評分計算詳情"):
