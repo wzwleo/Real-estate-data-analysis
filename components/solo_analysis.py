@@ -1999,6 +1999,7 @@ def tab1_module():
                     'summary_text':           summary_text,
                     'scores':                 scores,
                     'total_score':            total_score,
+                    'weights_used':           weights_used,  # ✅ 補上這行
                     'analysis_payload':       analysis_payload,
                     'floor_area_payload':     floor_area_payload,
                     'age_analysis_payload':   age_analysis_payload,
