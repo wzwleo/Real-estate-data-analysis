@@ -53,43 +53,38 @@ def render_sidebar():
             st.success("✅ Google Maps API KEY 已設定")
     
     with st.sidebar.expander("🎚️ 評分權重設定", expanded=False):
-        # 初始化預設權重
-        default_weights = {
+            # 1. 初始化預設值
+            default_weights = {
                 "w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10
             }
             
-        for key, val in default_weights.items():
-            if key not in st.session_state:
-                st.session_state[key] = val
-        
-        with st.sidebar.expander("🎚️ 評分權重設定", expanded=True):
+            for key, val in default_weights.items():
+                if key not in st.session_state:
+                    st.session_state[key] = val
+    
             st.caption("💡 總和需為 100%")
-                
-            # 2. 模板選擇邏輯
-            preset = st.selectbox(
-                "快速選擇模板",
-                ["自訂", "👨‍👩‍👧‍👦 小家庭首購", "💼 投資客導向", "👴 退休族優先"],
-                key="weight_preset"
-            )
-                
-            # 定義模板數據
+            
+            # 2. 模板選擇
             templates = {
+                "自訂": None,
                 "👨‍👩‍👧‍👦 小家庭首購": [40, 15, 15, 10, 20],
                 "💼 投資客導向": [35, 15, 20, 10, 20],
                 "👴 退休族優先": [20, 20, 25, 25, 10]
             }
-        
-            # 如果選了模板，直接更新 session_state 裡的 slider key
-            if preset in templates:
+            
+            # 使用 index 來確保 selectbox 能正確顯示「自訂」或當前模板
+            preset = st.selectbox("快速選擇模板", list(templates.keys()), key="weight_preset")
+            
+            # 如果使用者選了模板（且不是「自訂」），強制更新 session_state 中的 slider 值
+            if preset != "自訂":
                 vals = templates[preset]
                 st.session_state.w_price = vals[0]
                 st.session_state.w_space = vals[1]
                 st.session_state.w_age = vals[2]
                 st.session_state.w_floor = vals[3]
                 st.session_state.w_layout = vals[4]
-        
-            # 3. Slider 直接綁定 key
-            # 注意：這裡不再傳入 value 參數，因為 key 會自動接管
+            
+            # 3. Slider 直接綁定 Session State Key
             st.slider("💰 價格競爭力", 0, 100, step=5, key="w_price")
             st.slider("📐 空間效率", 0, 100, step=5, key="w_space")
             st.slider("🕰️ 屋齡優勢", 0, 100, step=5, key="w_age")
@@ -99,39 +94,38 @@ def render_sidebar():
             total_weight = (st.session_state.w_price + st.session_state.w_space + 
                             st.session_state.w_age + st.session_state.w_floor + 
                             st.session_state.w_layout)
-        
-        # 顯示總和與狀態
-        if total_weight == 100:
-            st.success(f"✅ 總權重：{total_weight}%")
-        elif total_weight < 100:
-            st.warning(f"⚠️ 總權重：{total_weight}%（還差 {100 - total_weight}%）")
-        else:
-            st.error(f"❌ 總權重：{total_weight}%（超過 {total_weight - 100}%）")
-        
-        # 操作按鈕
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("💾 套用", use_container_width=True):
-                if total_weight == 100:
-                    # 這裡存入最終要給分析邏輯使用的 score_weights
-                    st.session_state.score_weights = {
-                        "價格競爭力": st.session_state.w_price,
-                        "空間效率": st.session_state.w_space,
-                        "屋齡優勢": st.session_state.w_age,
-                        "樓層定位": st.session_state.w_floor,
-                        "格局流動性": st.session_state.w_layout
-                    }
-                    st.success("✅ 已套用")
+            
+            # 狀態顯示
+            if total_weight == 100:
+                st.success(f"✅ 總權重：{total_weight}%")
+            else:
+                st.error(f"❌ 總權重：{total_weight}%")
+            
+            # 4. 按鈕邏輯
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("💾 套用", use_container_width=True):
+                    if total_weight == 100:
+                        st.session_state.score_weights = {
+                            "價格競爭力": st.session_state.w_price,
+                            "空間效率": st.session_state.w_space,
+                            "屋齡優勢": st.session_state.w_age,
+                            "樓層定位": st.session_state.w_floor,
+                            "格局流動性": st.session_state.w_layout
+                        }
+                        st.toast("權重已儲存")
+                        st.rerun()
+                    else:
+                        st.error("總重需為 100%")
+            
+            with col2:
+                if st.button("🔄 重設", use_container_width=True):
+                    # 強制重設 session_state 的值
+                    for key, val in default_weights.items():
+                        st.session_state[key] = val
+                    # 同時將下拉選單改回自訂
+                    st.session_state.weight_preset = "自訂"
                     st.rerun()
-                else:
-                    st.error("❌ 總重需為 100%")
-                
-        with col2:
-            if st.button("🔄 重設", use_container_width=True):
-                # 重設所有 Slider key 到初始值
-                for key, val in default_weights.items():
-                    st.session_state[key] = val
-                st.rerun()
         
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
