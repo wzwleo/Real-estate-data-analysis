@@ -53,13 +53,12 @@ def render_sidebar():
             st.success("✅ Google Maps API KEY 已設定")
     
     with st.sidebar.expander("🎚️ 評分權重設定", expanded=True):
-            # 1. 初始化所有狀態 (在 Widget 出現前完成)
+            # 1. 初始化狀態
             default_weights = {"w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10}
             
             if 'w_price' not in st.session_state:
                 for k, v in default_weights.items(): st.session_state[k] = v
             
-            # 用來控制 selectbox 顯示位置的 state
             if 'preset_index' not in st.session_state:
                 st.session_state.preset_index = 0 
     
@@ -71,14 +70,14 @@ def render_sidebar():
             }
             preset_list = list(templates.keys())
     
-            # 2. 渲染下拉選單 (使用 index 避開 key 鎖死問題)
+            # 2. 模板選擇選單
             selected_preset = st.selectbox(
                 "快速選擇模板", 
                 preset_list, 
                 index=st.session_state.preset_index
             )
     
-            # 如果選單被手動切換了，更新 index 並處理數值
+            # 邏輯處理：如果手動切換了模板
             if preset_list.index(selected_preset) != st.session_state.preset_index:
                 st.session_state.preset_index = preset_list.index(selected_preset)
                 if selected_preset != "自訂":
@@ -87,30 +86,38 @@ def render_sidebar():
                     st.session_state.w_floor, st.session_state.w_layout = vals
                 st.rerun()
     
-            # 3. 渲染按鈕 (放在 Slider 上方或下方皆可)
-            col1, col2 = st.columns(2)
-            
-            if col2.button("🔄 重設", use_container_width=True):
-                for k, v in default_weights.items():
-                    st.session_state[k] = v
-                st.session_state.preset_index = 0 # 強制跳回「自訂」
-                st.rerun()
-    
-            # 4. 渲染 Slider
+            # 3. 渲染所有 Slider
             st.slider("💰 價格競爭力", 0, 100, step=5, key="w_price")
             st.slider("📐 空間效率", 0, 100, step=5, key="w_space")
             st.slider("🕰️ 屋齡優勢", 0, 100, step=5, key="w_age")
             st.slider("🏢 樓層定位", 0, 100, step=5, key="w_floor")
             st.slider("🛋️ 格局流動性", 0, 100, step=5, key="w_layout")
             
+            # 計算總和
             total_weight = (st.session_state.w_price + st.session_state.w_space + 
                             st.session_state.w_age + st.session_state.w_floor + 
                             st.session_state.w_layout)
     
-            # 5. 套用邏輯
-            if total_weight == 100:
-                st.success(f"✅ 總權重：{total_weight}%")
-                if col1.button("💾 套用", use_container_width=True):
+            st.divider() # 增加視覺分割線
+    
+            # 4. 最底部的操作按鈕
+            col1, col2 = st.columns(2)
+            
+            # 套用按鈕與成功訊息顯示容器
+            with col1:
+                apply_clicked = st.button("💾 套用設定", use_container_width=True)
+            
+            # 重設按鈕
+            with col2:
+                if st.button("🔄 恢復預設", use_container_width=True):
+                    for k, v in default_weights.items():
+                        st.session_state[k] = v
+                    st.session_state.preset_index = 0
+                    st.rerun()
+    
+            # 5. 狀態顯示區域 (確保顯示在按鈕正下方)
+            if apply_clicked:
+                if total_weight == 100:
                     st.session_state.score_weights = {
                         "價格競爭力": st.session_state.w_price,
                         "空間效率": st.session_state.w_space,
@@ -118,9 +125,12 @@ def render_sidebar():
                         "樓層定位": st.session_state.w_floor,
                         "格局流動性": st.session_state.w_layout
                     }
-                    st.toast("✅ 權重已更新")
-            else:
-                st.error(f"❌ 總權重：{total_weight}%")
+                    # 使用 success 顯示在按鈕下方
+                    st.success("✅ 權重已更新！")
+                else:
+                    st.error(f"❌ 總和為 {total_weight}%，請調整至 100%")
+            elif total_weight != 100:
+                st.warning(f"⚠️ 目前總和：{total_weight}%")
         
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
