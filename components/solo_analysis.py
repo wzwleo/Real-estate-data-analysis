@@ -2152,13 +2152,18 @@ def tab1_module():
                     '加權分數': [r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]
                 })
                 
-                # 加上總計列
+                # 2. 計算總和並乘以 10，格式化為小數點後一位
+                total_weighted_sum = sum(weights_detail_df['加權分數'])
+                final_score = round(total_weighted_sum * 10, 1)
+                
+                # 3. 加上總計列
                 total_row = pd.DataFrame({
                     '評分項目': ['總計'],
                     '原始分數 (0-10)': ['—'],
                     '權重 (%)': [sum(weights_used.values())],
-                    '加權分數': [sum(weights_detail_df['加權分數'])]
+                    '加權分數': [final_score]  # 這裡已經是乘以10後的結果
                 })
+                
                 weights_detail_df = pd.concat([weights_detail_df, total_row], ignore_index=True)
                 
                 st.dataframe(weights_detail_df, use_container_width=True, hide_index=True)
