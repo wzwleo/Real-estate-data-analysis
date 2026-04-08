@@ -2174,19 +2174,27 @@ def tab1_module():
                 # 3. 準備計算過程字串 (例如: "6.8 * 30 + 5.5 * 25...")
                 calculation_process = " + ".join([f"{r['scores'][k]} * {weights_used[k]}" for k in r['scores'].keys()])
                 final_total_score = weights_display_df.iloc[-1]['加權分數']
+
+                # 在計算分數的地方，確保存入 r
+                r['price_p'] = price_p
+                r['age_p'] = age_p
+                r['floor_p'] = floor_p
+                r['target_usage_rate'] = target_usage_rate
+                r['median_usage'] = median_usage
+                r['same_layout_pct'] = same_layout_pct
                 
                 # 4. 呈現 st.info
                 st.info(f"""
                 **五項原始分數**
-                **💰 價格競爭力** = 10 - {price_p:.1f} / 10 = **{r['scores']['價格競爭力']:.1f}**
+                **💰 價格競爭力** = 10 - {r.get('price_p', 0):.1f} / 10 = **{r['scores'].get('價格競爭力', 0):.1f}**
                 
-                **📐 空間效率** = ({target_usage_rate:.2f} / {median_usage:.2f}) × 5 = **{r['scores']['空間效率']:.1f}**
+                **📐 空間效率** = ({r.get('target_usage_rate', 0):.2f} / {r.get('median_usage', 0):.2f}) × 5 = **{r['scores'].get('空間效率', 0):.1f}**
                 
-                **🕰️ 屋齡優勢** = 10 - {age_p:.1f} / 10 = **{r['scores']['屋齡優勢']:.1f}**
+                **🕰️ 屋齡優勢** = 10 - {r.get('age_p', 0):.1f} / 10 = **{r['scores'].get('屋齡優勢', 0):.1f}**
                 
-                **🏢 樓層定位** = 10 - |{floor_p:.1f} - 50| / 5 = **{r['scores']['樓層定位']:.1f}**
+                **🏢 樓層定位** = 10 - |{r.get('floor_p', 0):.1f} - 50| / 5 = **{r['scores'].get('樓層定位', 0):.1f}**
                 
-                **🛋️ 格局流動性** = {same_layout_pct:.1f} / 3 = **{r['scores']['格局流動性']:.1f}**
+                **🛋️ 格局流動性** = {r.get('same_layout_pct', 0):.1f} / 3 = **{r['scores'].get('格局流動性', 0):.1f}**
                 
                 ---
                 **總分計算公式：** 總分 = Σ(原始分數 × 權重)
