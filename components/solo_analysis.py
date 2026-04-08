@@ -2169,8 +2169,15 @@ def tab1_module():
                 st.info(f"""
                 **計算公式：** 總分 = Σ(原始分數 × 權重%) × 10
                 
-                **範例：**  
-                加權總和 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f}  
+                **五項原始分數：**
+                💰 價格競爭力 = 10 - {price_percentile:.1f} / 10 = **{r['scores']['價格競爭力']:.1f}**
+                📐 空間效率   = ({target_usage_rate:.2f} / {median_usage:.2f}) × 5 = **{r['scores']['空間效率']:.1f}**
+                🕰️ 屋齡優勢   = 10 - {age_percentile:.1f} / 10 = **{r['scores']['屋齡優勢']:.1f}**
+                🏢 樓層定位   = 10 - |{floor_percentile:.1f} - 50| / 5 = **{r['scores']['樓層定位']:.1f}**
+                🛋️ 格局流動性 = {same_layout_pct:.1f} / 3 = **{r['scores']['格局流動性']:.1f}**
+                
+                **加權計算：**
+                加權總和 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f}
                 最終分數 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f} × 10 = **{r['total_score']:.1f}**
                 """)
                 
