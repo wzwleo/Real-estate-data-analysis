@@ -41,7 +41,13 @@ def render_property_list():
     if 'filtered_df' not in st.session_state or st.session_state.filtered_df.empty:
         return
 
-    df = st.session_state.filtered_df
+    # --- 關鍵修改處：去重 ---
+    df = st.session_state.filtered_df.copy() # 建議用 copy 避免更動到原始 session_state
+    
+    # 根據「編號」去重，保留第一筆出現的資料
+    df = df.drop_duplicates(subset=['編號'], keep='first')
+    # ----------------------
+    
     search_params = st.session_state.search_params
 
     current_page_data, current_page, total_pages, total_items = display_pagination(df, items_per_page=10)
