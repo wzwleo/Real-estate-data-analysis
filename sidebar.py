@@ -52,7 +52,7 @@ def render_sidebar():
             st.session_state["GOOGLE_MAPS_KEY"] = google_maps_input
             st.success("✅ Google Maps API KEY 已設定")
     
-    with st.sidebar.expander("🎚️ 客製化購屋喜好", expanded=True):
+    with st.sidebar.expander("🎚️ 客製化購屋喜好"):
             
             # 1. 定義數據中心
             system_default = {"w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10}
