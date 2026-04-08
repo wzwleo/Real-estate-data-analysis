@@ -298,7 +298,8 @@ def plot_floor_distribution(target_row, df, chart_key=None):
         if pd.isna(x):
             return np.nan
         try:
-            return int(str(x).split('樓')[0])
+            match = re.search(r'\d+', str(x))
+            return int(match.group()) if match else np.nan
         except:
             return np.nan
 
