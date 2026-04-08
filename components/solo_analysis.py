@@ -1969,7 +1969,22 @@ def tab1_module():
                     "樓層定位":   round(score_floor, 1),
                     "格局流動性": round(score_layout, 1)
                 }
-                total_score = sum(scores.values()) / len(scores) * 10 
+
+                # ✅ 使用側邊欄設定的權重
+                weights = st.session_state.get('score_weights', {
+                    "價格競爭力": 30,
+                    "空間效率": 25,
+                    "屋齡優勢": 20,
+                    "樓層定位": 15,
+                    "格局流動性": 10
+                })
+
+                # 加權計算（原始分數 * 權重百分比）
+                weighted_total = sum(scores[k] * (weights[k] / 100) for k in scores)
+                total_score = weighted_total * 10  # 轉換成 100 分制
+
+                # 儲存使用的權重（供後續顯示）
+                weights_used = weights.copy() 
                 
                 # ✅ 分析完成後，存進 session_state
                 property_id = normalize_property_id(selected_row.get('編號', ''))
@@ -2122,7 +2137,41 @@ def tab1_module():
                     """,
                     unsafe_allow_html=True
                 )
-            
+                
+                # ✅ 顯示使用的權重
+                st.caption("📊 本次分析使用的權重")
+                weights_used = r.get('weights_used', {})
+                for name, weight in weights_used.items():
+                    st.caption(f"• {name}：{weight}%")
+                    
+            # ✅ 詳細權重資訊
+            with st.expander("🔍 查看評分計算詳情"):
+                weights_detail_df = pd.DataFrame({
+                    '評分項目': list(r['scores'].keys()),
+                    '原始分數 (0-10)': [r['scores'][k] for k in r['scores'].keys()],
+                    '權重 (%)': [weights_used[k] for k in r['scores'].keys()],
+                    '加權分數': [r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]
+                })
+                
+                # 加上總計列
+                total_row = pd.DataFrame({
+                    '評分項目': ['總計'],
+                    '原始分數 (0-10)': ['—'],
+                    '權重 (%)': [sum(weights_used.values())],
+                    '加權分數': [sum(weights_detail_df['加權分數'])]
+                })
+                weights_detail_df = pd.concat([weights_detail_df, total_row], ignore_index=True)
+                
+                st.dataframe(weights_detail_df, use_container_width=True, hide_index=True)
+                
+                st.info(f"""
+                **計算公式：** 總分 = Σ(原始分數 × 權重%) × 10
+                
+                **範例：**  
+                加權總和 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f}  
+                最終分數 = {sum([r['scores'][k] * weights_used[k] / 100 for k in r['scores'].keys()]):.2f} × 10 = **{r['total_score']:.1f}**
+                """)
+                
             # ── 儲存按鈕 ──
             st.markdown("---")
             scores = r['scores']
