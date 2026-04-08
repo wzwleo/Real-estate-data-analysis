@@ -53,15 +53,9 @@ def render_sidebar():
             st.success("✅ Google Maps API KEY 已設定")
     
     with st.sidebar.expander("🎚️ 評分權重設定", expanded=True):
-            # 1. 初始化狀態
+            
+            # 定義預設值
             default_weights = {"w_price": 30, "w_space": 25, "w_age": 20, "w_floor": 15, "w_layout": 10}
-            
-            if 'w_price' not in st.session_state:
-                for k, v in default_weights.items(): st.session_state[k] = v
-            
-            if 'preset_index' not in st.session_state:
-                st.session_state.preset_index = 0 
-    
             templates = {
                 "自訂": None,
                 "👨‍👩‍👧‍👦 小家庭首購": [40, 15, 15, 10, 20],
@@ -70,67 +64,83 @@ def render_sidebar():
             }
             preset_list = list(templates.keys())
     
-            # 2. 模板選擇選單
-            selected_preset = st.selectbox(
+            # 1. 初始化 Session State (如果還沒建立)
+            for k, v in default_weights.items():
+                if k not in st.session_state:
+                    st.session_state[k] = v
+            if 'preset_index' not in st.session_state:
+                st.session_state.preset_index = 0
+    
+            # --- 關鍵修復：定義 Callback 函式 ---
+            def on_reset():
+                """按下重設按鈕時執行的動作"""
+                for k, v in default_weights.items():
+                    st.session_state[k] = v
+                st.session_state.preset_index = 0
+    
+            def on_preset_change():
+                """下拉選單切換時執行的動作"""
+                # 從 session_state 獲取當前選單的值 (需搭配下面 selectbox 的 key)
+                new_preset = st.session_state.temp_preset_key
+                st.session_state.preset_index = preset_list.index(new_preset)
+                if new_preset != "自訂":
+                    vals = templates[new_preset]
+                    st.session_state.w_price = vals[0]
+                    st.session_state.w_space = vals[1]
+                    st.session_state.w_age = vals[2]
+                    st.session_state.w_floor = vals[3]
+                    st.session_state.w_layout = vals[4]
+    
+            # 2. 渲染下拉選單 (加入 on_change)
+            st.selectbox(
                 "快速選擇模板", 
                 preset_list, 
-                index=st.session_state.preset_index
+                index=st.session_state.preset_index,
+                key="temp_preset_key",
+                on_change=on_preset_change
             )
     
-            # 邏輯處理：如果手動切換了模板
-            if preset_list.index(selected_preset) != st.session_state.preset_index:
-                st.session_state.preset_index = preset_list.index(selected_preset)
-                if selected_preset != "自訂":
-                    vals = templates[selected_preset]
-                    st.session_state.w_price, st.session_state.w_space, st.session_state.w_age, \
-                    st.session_state.w_floor, st.session_state.w_layout = vals
-                st.rerun()
-    
-            # 3. 渲染所有 Slider
+            # 3. 渲染所有 Slider (直接綁定 key)
             st.slider("💰 價格競爭力", 0, 100, step=5, key="w_price")
             st.slider("📐 空間效率", 0, 100, step=5, key="w_space")
             st.slider("🕰️ 屋齡優勢", 0, 100, step=5, key="w_age")
             st.slider("🏢 樓層定位", 0, 100, step=5, key="w_floor")
             st.slider("🛋️ 格局流動性", 0, 100, step=5, key="w_layout")
             
-            # 計算總和
             total_weight = (st.session_state.w_price + st.session_state.w_space + 
                             st.session_state.w_age + st.session_state.w_floor + 
                             st.session_state.w_layout)
     
-            st.divider() # 增加視覺分割線
+            st.divider()
     
-            # 4. 最底部的操作按鈕
+            # 4. 操作按鈕
             col1, col2 = st.columns(2)
             
-            # 套用按鈕與成功訊息顯示容器
-            with col1:
-                apply_clicked = st.button("💾 套用設定", use_container_width=True)
-            
-            # 重設按鈕
+            # 重設按鈕 (加入 on_click)
             with col2:
-                if st.button("🔄 恢復預設", use_container_width=True):
-                    for k, v in default_weights.items():
-                        st.session_state[k] = v
-                    st.session_state.preset_index = 0
-                    st.rerun()
+                st.button("🔄 重設", use_container_width=True, on_click=on_reset)
     
-            # 5. 狀態顯示區域 (確保顯示在按鈕正下方)
-            if apply_clicked:
-                if total_weight == 100:
-                    st.session_state.score_weights = {
-                        "價格競爭力": st.session_state.w_price,
-                        "空間效率": st.session_state.w_space,
-                        "屋齡優勢": st.session_state.w_age,
-                        "樓層定位": st.session_state.w_floor,
-                        "格局流動性": st.session_state.w_layout
-                    }
-                    # 使用 success 顯示在按鈕下方
+            # 套用按鈕
+            with col1:
+                if st.button("💾 套用", use_container_width=True):
+                    if total_weight == 100:
+                        st.session_state.score_weights = {
+                            "價格競爭力": st.session_state.w_price,
+                            "空間效率": st.session_state.w_space,
+                            "屋齡優勢": st.session_state.w_age,
+                            "樓層定位": st.session_state.w_floor,
+                            "格局流動性": st.session_state.w_layout
+                        }
+                        st.session_state.apply_success = True # 標記成功
+                    else:
+                        st.session_state.apply_success = False
+    
+            # 5. 顯示結果
+            if 'apply_success' in st.session_state:
+                if st.session_state.apply_success:
                     st.success("✅ 權重已更新！")
-                else:
-                    st.error(f"❌ 總和為 {total_weight}%，請調整至 100%")
-            elif total_weight != 100:
-                st.warning(f"⚠️ 目前總和：{total_weight}%")
+                elif total_weight != 100:
+                    st.error(f"❌ 總和需為 100% (目前 {total_weight}%)")
         
 
     if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
