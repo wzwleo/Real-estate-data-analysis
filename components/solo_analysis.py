@@ -2139,7 +2139,9 @@ def tab1_module():
                     unsafe_allow_html=True
                 )
                 
-                    
+
+                weights_used = r.get('weights_used', {}) 
+                
             # ✅ 詳細權重資訊
             with st.expander("🔍 查看評分計算詳情"):
                 weights_detail_df = pd.DataFrame({
