@@ -2652,8 +2652,7 @@ def render_float_chat():
 
     gemini_key = st.session_state.get("GEMINI_KEY", "")
     has_context = bool(context)
-    
-    # 預設問題
+
     preset_questions = [
         "這間房子適合首購族嗎？",
         "跟同區相比有什麼潛在風險？",
@@ -2666,24 +2665,37 @@ def render_float_chat():
         for q in preset_questions
     ])
 
-    # context 做 JS 字串跳脫
     import json
     context_js = json.dumps(context)
     gemini_key_js = json.dumps(gemini_key)
+    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
 
-    html_code = f"""
-<!DOCTYPE html>
+    html_code = f"""<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: transparent; font-family: sans-serif; height: 1px; overflow: hidden; }}
+  body {{
+    background: transparent;
+    font-family: sans-serif;
+    overflow: hidden;
+  }}
+
+  #chat-container {{
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 16px;
+    pointer-events: none;
+  }}
 
   #fab {{
-    position: fixed;
-    bottom: 28px;
-    right: 28px;
+    pointer-events: all;
     width: 54px;
     height: 54px;
     border-radius: 50%;
@@ -2693,25 +2705,22 @@ def render_float_chat():
     border: none;
     cursor: pointer;
     box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-    z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
     transition: background 0.2s, transform 0.15s;
+    flex-shrink: 0;
   }}
   #fab:hover {{ background: #388E3C; transform: scale(1.08); }}
 
   #chat-window {{
-    position: fixed;
-    bottom: 92px;
-    right: 28px;
+    pointer-events: all;
     width: 340px;
-    height: 520px;
+    height: 500px;
     background: #1a1a1a;
     border: 1.5px solid #4CAF50;
     border-radius: 16px;
     box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    z-index: 9998;
     display: none;
     flex-direction: column;
     overflow: hidden;
@@ -2817,29 +2826,28 @@ def render_float_chat():
 </head>
 <body>
 
-<button id="fab" onclick="toggleChat()">💬</button>
-
-<div id="chat-window">
-  <div class="chat-header">
-    <div>
-      🤖 AI 房產顧問
-      <div class="chat-header-sub">{'✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'}</div>
+<div id="chat-container">
+  <div id="chat-window">
+    <div class="chat-header">
+      <div>
+        🤖 AI 房產顧問
+        <div class="chat-header-sub">{has_context_str}</div>
+      </div>
+      <button class="close-btn" onclick="toggleChat()">✕</button>
     </div>
-    <button class="close-btn" onclick="toggleChat()">✕</button>
+    <div class="chat-body" id="chat-body">
+      <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
+    </div>
+    <div class="preset-area">
+      {preset_btns_html}
+    </div>
+    <div class="input-area">
+      <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
+      <button id="send-btn" onclick="sendMsg()">送出</button>
+    </div>
   </div>
 
-  <div class="chat-body" id="chat-body">
-    <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
-  </div>
-
-  <div class="preset-area">
-    {preset_btns_html}
-  </div>
-
-  <div class="input-area">
-    <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
-    <button id="send-btn" onclick="sendMsg()">送出</button>
-  </div>
+  <button id="fab" onclick="toggleChat()">💬</button>
 </div>
 
 <script>
@@ -2902,9 +2910,6 @@ async function sendMsg() {{
   input.value = '';
   btn.disabled = true;
 
-  // typing indicator
-  const hint = document.getElementById('empty-hint');
-  if (hint) hint.remove();
   const body = document.getElementById('chat-body');
   const typing = document.createElement('div');
   typing.className = 'typing';
@@ -2940,9 +2945,8 @@ async function sendMsg() {{
 }}
 </script>
 </body>
-</html>
-"""
+</html>"""
 
     import streamlit.components.v1 as components
-    components.html(html_code, height=60, scrolling=False)
+    components.html(html_code, height=620, scrolling=False)
 
