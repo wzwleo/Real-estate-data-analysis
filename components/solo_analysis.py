@@ -2622,37 +2622,36 @@ def tab1_module():
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
-    """浮動 AI 聊天視窗"""
+    """真正的浮動聊天視窗，用 HTML + JS 直接呼叫 Gemini API"""
     
-    # 取得當前分析結果作為背景知識
+    # 取得背景資料
     context = ""
     if 'solo_analysis_result' in st.session_state:
         r = st.session_state['solo_analysis_result']
         selected = r.get('selected_row', {})
-        context = f"""
-        你是一位台灣房市分析顧問，以下是使用者目前正在分析的房屋資料，請根據這些資料回答問題。
-        
-        【房屋基本資訊】
-        標題：{selected.get('標題', '未提供')}
-        地址：{selected.get('地址', '未提供')}
-        類型：{selected.get('類型', '未提供')}
-        行政區：{selected.get('行政區', '未提供')}
-        總價：{selected.get('總價(萬)', '未提供')} 萬
-        建坪：{selected.get('建坪', '未提供')} 坪
-        實際坪數：{selected.get('主+陽', '未提供')} 坪
-        格局：{selected.get('格局', '未提供')}
-        樓層：{selected.get('樓層', '未提供')}
-        屋齡：{selected.get('屋齡', '未提供')}
-        綜合評分：{r.get('total_score', '未提供')} 分
-        
-        【AI 分析結論】
-        價格分析：{r.get('price_text', '')}
-        坪數分析：{r.get('space_text', '')}
-        屋齡分析：{r.get('age_text', '')}
-        樓層分析：{r.get('floor_text', '')}
-        格局分析：{r.get('layout_text', '')}
-        綜合總結：{r.get('summary_text', '')}
-        """
+        context = f"""你是一位台灣房市分析顧問，以下是使用者目前正在分析的房屋資料，請根據這些資料回答問題。
+【房屋基本資訊】
+標題：{selected.get('標題', '未提供')}
+地址：{selected.get('地址', '未提供')}
+類型：{selected.get('類型', '未提供')}
+行政區：{selected.get('行政區', '未提供')}
+總價：{selected.get('總價(萬)', '未提供')} 萬
+建坪：{selected.get('建坪', '未提供')} 坪
+實際坪數：{selected.get('主+陽', '未提供')} 坪
+格局：{selected.get('格局', '未提供')}
+樓層：{selected.get('樓層', '未提供')}
+屋齡：{selected.get('屋齡', '未提供')}
+綜合評分：{r.get('total_score', '未提供')} 分
+【AI 分析結論】
+價格分析：{r.get('price_text', '')}
+坪數分析：{r.get('space_text', '')}
+屋齡分析：{r.get('age_text', '')}
+樓層分析：{r.get('floor_text', '')}
+格局分析：{r.get('layout_text', '')}
+綜合總結：{r.get('summary_text', '')}"""
+
+    gemini_key = st.session_state.get("GEMINI_KEY", "")
+    has_context = bool(context)
     
     # 預設問題
     preset_questions = [
@@ -2663,259 +2662,287 @@ def render_float_chat():
         "有什麼需要特別注意的地方？",
     ]
     preset_btns_html = "".join([
-        f'<button class="preset-btn" onclick="fillInput(this)">{q}</button>'
+        f'<button class="preset-btn" onclick="fillInput(`{q}`)">{q}</button>'
         for q in preset_questions
     ])
 
-    # 對話紀錄初始化
-    if 'float_chat_history' not in st.session_state:
-        st.session_state.float_chat_history = []
+    # context 做 JS 字串跳脫
+    import json
+    context_js = json.dumps(context)
+    gemini_key_js = json.dumps(gemini_key)
 
-    # 處理送出訊息
-    if 'float_chat_input' in st.session_state and st.session_state.get('float_chat_submit'):
-        user_msg = st.session_state.float_chat_input
-        if user_msg.strip():
-            gemini_key = st.session_state.get("GEMINI_KEY", "")
-            if gemini_key:
-                import google.generativeai as genai
-                genai.configure(api_key=gemini_key)
-                model = genai.GenerativeModel("gemini-2.5-flash")
-                
-                # 組合歷史對話
-                history_text = "\n".join([
-                    f"{'使用者' if m['role']=='user' else 'AI'}：{m['content']}"
-                    for m in st.session_state.float_chat_history[-6:]  # 只取最近6則
-                ])
-                
-                prompt = f"""
-                {context}
-                
-                【對話紀錄】
-                {history_text}
-                
-                【使用者問題】
-                {user_msg}
-                
-                請用繁體中文回答，簡潔清楚，不超過 200 字。
-                """
-                
-                try:
-                    response = model.generate_content(prompt)
-                    ai_reply = response.text.strip()
-                except Exception:
-                    ai_reply = "抱歉，目前無法取得回應，請稍後再試。"
-                
-                st.session_state.float_chat_history.append(
-                    {'role': 'user', 'content': user_msg}
-                )
-                st.session_state.float_chat_history.append(
-                    {'role': 'ai', 'content': ai_reply}
-                )
-        
-        st.session_state.float_chat_submit = False
-        st.session_state.float_chat_input = ""
+    html_code = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ background: transparent; font-family: sans-serif; }}
 
-    # 組合對話紀錄 HTML
-    chat_history_html = ""
-    for msg in st.session_state.float_chat_history:
-        if msg['role'] == 'user':
-            chat_history_html += f"""
-            <div class="msg-row user-row">
-                <div class="msg user-msg">{msg['content']}</div>
-            </div>"""
-        else:
-            chat_history_html += f"""
-            <div class="msg-row ai-row">
-                <div class="msg ai-msg">{msg['content']}</div>
-            </div>"""
+  #fab {{
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: #4CAF50;
+    color: white;
+    font-size: 24px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+  }}
+  #fab:hover {{ background: #388E3C; transform: scale(1.08); }}
 
-    # 浮動視窗 HTML + CSS
-    st.markdown(f"""
-    <style>
-    #float-chat-btn {{
-        position: fixed;
-        bottom: 32px;
-        right: 32px;
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        background: #4CAF50;
-        color: white;
-        font-size: 26px;
-        border: none;
-        cursor: pointer;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        z-index: 9999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.2s;
-    }}
-    #float-chat-btn:hover {{ background: #388E3C; }}
+  #chat-window {{
+    position: fixed;
+    bottom: 92px;
+    right: 28px;
+    width: 340px;
+    height: 520px;
+    background: #1a1a1a;
+    border: 1.5px solid #4CAF50;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    z-index: 9998;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }}
+  #chat-window.open {{ display: flex; }}
 
-    #float-chat-window {{
-        position: fixed;
-        bottom: 100px;
-        right: 32px;
-        width: 360px;
-        max-height: 560px;
-        background: #1e1e1e;
-        border: 1px solid #4CAF50;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-        z-index: 9998;
-        display: none;
-        flex-direction: column;
-        overflow: hidden;
-    }}
-    #float-chat-window.open {{ display: flex; }}
+  .chat-header {{
+    background: #4CAF50;
+    color: white;
+    padding: 11px 14px;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }}
+  .chat-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
+  .close-btn {{
+    background: none; border: none; color: white;
+    font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
+  }}
 
-    .chat-header {{
-        background: #4CAF50;
-        color: white;
-        padding: 12px 16px;
-        font-weight: bold;
-        font-size: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }}
-    .chat-header span {{ font-size: 12px; opacity: 0.85; }}
-    .close-btn {{
-        background: none;
-        border: none;
-        color: white;
-        font-size: 20px;
-        cursor: pointer;
-        line-height: 1;
-    }}
+  .chat-body {{
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }}
+  .chat-body::-webkit-scrollbar {{ width: 4px; }}
+  .chat-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
 
-    .chat-body {{
-        flex: 1;
-        overflow-y: auto;
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-height: 200px;
-        max-height: 300px;
-    }}
+  .msg-row {{ display: flex; }}
+  .user-row {{ justify-content: flex-end; }}
+  .ai-row   {{ justify-content: flex-start; }}
+  .msg {{
+    max-width: 82%;
+    padding: 7px 11px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }}
+  .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
+  .ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
+  .typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
+  .empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
 
-    .preset-area {{
-        padding: 8px 12px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        border-top: 1px solid #333;
-    }}
-    .preset-btn {{
-        background: #2a2a2a;
-        color: #aaa;
-        border: 1px solid #444;
-        border-radius: 12px;
-        padding: 4px 10px;
-        font-size: 11px;
-        cursor: pointer;
-        transition: all 0.15s;
-    }}
-    .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
+  .preset-area {{
+    padding: 6px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    border-top: 1px solid #2a2a2a;
+    flex-shrink: 0;
+  }}
+  .preset-btn {{
+    background: #222; color: #999;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    padding: 3px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }}
+  .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
 
-    .msg-row {{ display: flex; }}
-    .user-row {{ justify-content: flex-end; }}
-    .ai-row {{ justify-content: flex-start; }}
-    .msg {{
-        max-width: 80%;
-        padding: 8px 12px;
-        border-radius: 12px;
-        font-size: 13px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-    }}
-    .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 4px; }}
-    .ai-msg {{ background: #2a2a2a; color: #ddd; border-bottom-left-radius: 4px; }}
+  .input-area {{
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid #2a2a2a;
+    flex-shrink: 0;
+    align-items: center;
+  }}
+  #msg-input {{
+    flex: 1;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 12.5px;
+    padding: 6px 10px;
+    outline: none;
+    resize: none;
+    height: 34px;
+    line-height: 1.4;
+  }}
+  #msg-input:focus {{ border-color: #4CAF50; }}
+  #send-btn {{
+    background: #4CAF50; color: white;
+    border: none; border-radius: 8px;
+    padding: 6px 12px; font-size: 13px;
+    cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s;
+  }}
+  #send-btn:hover {{ background: #388E3C; }}
+  #send-btn:disabled {{ background: #444; cursor: not-allowed; }}
+</style>
+</head>
+<body>
 
-    .empty-hint {{
-        color: #666;
-        font-size: 12px;
-        text-align: center;
-        margin: auto;
-    }}
-    </style>
+<button id="fab" onclick="toggleChat()">💬</button>
 
-    <!-- 浮動按鈕 -->
-    <button id="float-chat-btn" onclick="toggleChat()" title="AI 諮詢">💬</button>
-
-    <!-- 聊天視窗 -->
-    <div id="float-chat-window">
-        <div class="chat-header">
-            🤖 AI 房產顧問
-            <span>{'已載入分析資料' if context else '尚無分析資料'}</span>
-            <button class="close-btn" onclick="toggleChat()">✕</button>
-        </div>
-        <div class="chat-body" id="chat-body">
-            {'<div class="empty-hint">請輸入問題，或點選下方快速提問</div>' if not chat_history_html else chat_history_html}
-        </div>
-        <div class="preset-area">
-            {preset_btns_html}
-        </div>
+<div id="chat-window">
+  <div class="chat-header">
+    <div>
+      🤖 AI 房產顧問
+      <div class="chat-header-sub">{'✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'}</div>
     </div>
+    <button class="close-btn" onclick="toggleChat()">✕</button>
+  </div>
 
-    <script>
-    function toggleChat() {{
-        const win = document.getElementById('float-chat-window');
-        win.classList.toggle('open');
-        if (win.classList.contains('open')) {{
-            const body = document.getElementById('chat-body');
-            body.scrollTop = body.scrollHeight;
-        }}
-    }}
-    function fillInput(btn) {{
-        // 將預設問題填入 Streamlit 的 text_input
-        const inputs = window.parent.document.querySelectorAll('input[type="text"]');
-        // 找到 float_chat_input 的輸入框
-        for (let inp of inputs) {{
-            if (inp.closest('[data-testid="stTextInput"]')) {{
-                const nativeInput = inp;
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.parent.HTMLInputElement.prototype, 'value').set;
-                nativeInputValueSetter.call(nativeInput, btn.textContent);
-                nativeInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                break;
-            }}
-        }}
-    }}
-    // 自動捲到最底部
-    const chatBody = document.getElementById('chat-body');
-    if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
-    </script>
-    """, unsafe_allow_html=True)
+  <div class="chat-body" id="chat-body">
+    <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
+  </div>
 
-    # Streamlit 輸入區（隱藏在頁面最底部）
-    st.markdown("""
-    <style>
-    /* 把輸入區縮到最小，視覺上不干擾 */
-    div[data-testid="stTextInput"] > div > div > input {
-        font-size: 13px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+  <div class="preset-area">
+    {preset_btns_html}
+  </div>
 
-    col1, col2 = st.columns([5, 1])
-    with col1:
-        st.text_input(
-            "💬",
-            key="float_chat_input",
-            placeholder="輸入問題或點選上方快速提問...",
-            label_visibility="collapsed",
-        )
-    with col2:
-        if st.button("送出", key="float_chat_send", use_container_width=True):
-            st.session_state.float_chat_submit = True
-            st.rerun()
-    
-    # 清除對話按鈕
-    if st.session_state.float_chat_history:
-        if st.button("🗑️ 清除對話紀錄", key="clear_float_chat"):
-            st.session_state.float_chat_history = []
-            st.rerun()
+  <div class="input-area">
+    <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
+    <button id="send-btn" onclick="sendMsg()">送出</button>
+  </div>
+</div>
+
+<script>
+const GEMINI_KEY = {gemini_key_js};
+const CONTEXT    = {context_js};
+
+function toggleChat() {{
+  const win = document.getElementById('chat-window');
+  win.classList.toggle('open');
+  if (win.classList.contains('open')) {{
+    scrollBottom();
+    document.getElementById('msg-input').focus();
+  }}
+}}
+
+function fillInput(text) {{
+  document.getElementById('msg-input').value = text;
+  document.getElementById('msg-input').focus();
+}}
+
+function handleKey(e) {{
+  if (e.key === 'Enter' && !e.shiftKey) {{
+    e.preventDefault();
+    sendMsg();
+  }}
+}}
+
+function scrollBottom() {{
+  const body = document.getElementById('chat-body');
+  body.scrollTop = body.scrollHeight;
+}}
+
+function appendMsg(role, text) {{
+  const hint = document.getElementById('empty-hint');
+  if (hint) hint.remove();
+
+  const body = document.getElementById('chat-body');
+  const row  = document.createElement('div');
+  row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
+  const bubble = document.createElement('div');
+  bubble.className = 'msg ' + (role === 'user' ? 'user-msg' : 'ai-msg');
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  body.appendChild(row);
+  scrollBottom();
+  return bubble;
+}}
+
+async function sendMsg() {{
+  const input = document.getElementById('msg-input');
+  const btn   = document.getElementById('send-btn');
+  const text  = input.value.trim();
+  if (!text) return;
+  if (!GEMINI_KEY) {{
+    appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
+    return;
+  }}
+
+  appendMsg('user', text);
+  input.value = '';
+  btn.disabled = true;
+
+  // typing indicator
+  const hint = document.getElementById('empty-hint');
+  if (hint) hint.remove();
+  const body = document.getElementById('chat-body');
+  const typing = document.createElement('div');
+  typing.className = 'typing';
+  typing.id = 'typing';
+  typing.textContent = 'AI 思考中...';
+  body.appendChild(typing);
+  scrollBottom();
+
+  try {{
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{GEMINI_KEY}}`,
+      {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{
+          contents: [{{
+            parts: [{{ text: CONTEXT + '\\n\\n【使用者問題】\\n' + text + '\\n\\n請用繁體中文回答，簡潔清楚，不超過 200 字。' }}]
+          }}]
+        }})
+      }}
+    );
+    const data = await res.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
+    document.getElementById('typing')?.remove();
+    appendMsg('ai', reply);
+  }} catch(e) {{
+    document.getElementById('typing')?.remove();
+    appendMsg('ai', '抱歉，發生錯誤：' + e.message);
+  }}
+
+  btn.disabled = false;
+  scrollBottom();
+}}
+</script>
+</body>
+</html>
+"""
+
+    import streamlit.components.v1 as components
+    components.html(html_code, height=0, scrolling=False)
 
