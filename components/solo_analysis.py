@@ -2620,5 +2620,302 @@ def tab1_module():
                     
                     st.markdown("**目標房屋詳細分數：**")
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
+        render_float_chat()
+def render_float_chat():
+    """浮動 AI 聊天視窗"""
+    
+    # 取得當前分析結果作為背景知識
+    context = ""
+    if 'solo_analysis_result' in st.session_state:
+        r = st.session_state['solo_analysis_result']
+        selected = r.get('selected_row', {})
+        context = f"""
+        你是一位台灣房市分析顧問，以下是使用者目前正在分析的房屋資料，請根據這些資料回答問題。
+        
+        【房屋基本資訊】
+        標題：{selected.get('標題', '未提供')}
+        地址：{selected.get('地址', '未提供')}
+        類型：{selected.get('類型', '未提供')}
+        行政區：{selected.get('行政區', '未提供')}
+        總價：{selected.get('總價(萬)', '未提供')} 萬
+        建坪：{selected.get('建坪', '未提供')} 坪
+        實際坪數：{selected.get('主+陽', '未提供')} 坪
+        格局：{selected.get('格局', '未提供')}
+        樓層：{selected.get('樓層', '未提供')}
+        屋齡：{selected.get('屋齡', '未提供')}
+        綜合評分：{r.get('total_score', '未提供')} 分
+        
+        【AI 分析結論】
+        價格分析：{r.get('price_text', '')}
+        坪數分析：{r.get('space_text', '')}
+        屋齡分析：{r.get('age_text', '')}
+        樓層分析：{r.get('floor_text', '')}
+        格局分析：{r.get('layout_text', '')}
+        綜合總結：{r.get('summary_text', '')}
+        """
+    
+    # 預設問題
+    preset_questions = [
+        "這間房子適合首購族嗎？",
+        "跟同區相比有什麼潛在風險？",
+        "這個價格合理嗎？",
+        "未來轉售容易嗎？",
+        "有什麼需要特別注意的地方？",
+    ]
+    preset_btns_html = "".join([
+        f'<button class="preset-btn" onclick="fillInput(this)">{q}</button>'
+        for q in preset_questions
+    ])
+
+    # 對話紀錄初始化
+    if 'float_chat_history' not in st.session_state:
+        st.session_state.float_chat_history = []
+
+    # 處理送出訊息
+    if 'float_chat_input' in st.session_state and st.session_state.get('float_chat_submit'):
+        user_msg = st.session_state.float_chat_input
+        if user_msg.strip():
+            gemini_key = st.session_state.get("GEMINI_KEY", "")
+            if gemini_key:
+                import google.generativeai as genai
+                genai.configure(api_key=gemini_key)
+                model = genai.GenerativeModel("gemini-2.5-flash")
                 
+                # 組合歷史對話
+                history_text = "\n".join([
+                    f"{'使用者' if m['role']=='user' else 'AI'}：{m['content']}"
+                    for m in st.session_state.float_chat_history[-6:]  # 只取最近6則
+                ])
+                
+                prompt = f"""
+                {context}
+                
+                【對話紀錄】
+                {history_text}
+                
+                【使用者問題】
+                {user_msg}
+                
+                請用繁體中文回答，簡潔清楚，不超過 200 字。
+                """
+                
+                try:
+                    response = model.generate_content(prompt)
+                    ai_reply = response.text.strip()
+                except Exception:
+                    ai_reply = "抱歉，目前無法取得回應，請稍後再試。"
+                
+                st.session_state.float_chat_history.append(
+                    {'role': 'user', 'content': user_msg}
+                )
+                st.session_state.float_chat_history.append(
+                    {'role': 'ai', 'content': ai_reply}
+                )
+        
+        st.session_state.float_chat_submit = False
+        st.session_state.float_chat_input = ""
+
+    # 組合對話紀錄 HTML
+    chat_history_html = ""
+    for msg in st.session_state.float_chat_history:
+        if msg['role'] == 'user':
+            chat_history_html += f"""
+            <div class="msg-row user-row">
+                <div class="msg user-msg">{msg['content']}</div>
+            </div>"""
+        else:
+            chat_history_html += f"""
+            <div class="msg-row ai-row">
+                <div class="msg ai-msg">{msg['content']}</div>
+            </div>"""
+
+    # 浮動視窗 HTML + CSS
+    st.markdown(f"""
+    <style>
+    #float-chat-btn {{
+        position: fixed;
+        bottom: 32px;
+        right: 32px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #4CAF50;
+        color: white;
+        font-size: 26px;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s;
+    }}
+    #float-chat-btn:hover {{ background: #388E3C; }}
+
+    #float-chat-window {{
+        position: fixed;
+        bottom: 100px;
+        right: 32px;
+        width: 360px;
+        max-height: 560px;
+        background: #1e1e1e;
+        border: 1px solid #4CAF50;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+        z-index: 9998;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+    }}
+    #float-chat-window.open {{ display: flex; }}
+
+    .chat-header {{
+        background: #4CAF50;
+        color: white;
+        padding: 12px 16px;
+        font-weight: bold;
+        font-size: 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }}
+    .chat-header span {{ font-size: 12px; opacity: 0.85; }}
+    .close-btn {{
+        background: none;
+        border: none;
+        color: white;
+        font-size: 20px;
+        cursor: pointer;
+        line-height: 1;
+    }}
+
+    .chat-body {{
+        flex: 1;
+        overflow-y: auto;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 200px;
+        max-height: 300px;
+    }}
+
+    .preset-area {{
+        padding: 8px 12px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        border-top: 1px solid #333;
+    }}
+    .preset-btn {{
+        background: #2a2a2a;
+        color: #aaa;
+        border: 1px solid #444;
+        border-radius: 12px;
+        padding: 4px 10px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }}
+    .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
+
+    .msg-row {{ display: flex; }}
+    .user-row {{ justify-content: flex-end; }}
+    .ai-row {{ justify-content: flex-start; }}
+    .msg {{
+        max-width: 80%;
+        padding: 8px 12px;
+        border-radius: 12px;
+        font-size: 13px;
+        line-height: 1.5;
+        white-space: pre-wrap;
+    }}
+    .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 4px; }}
+    .ai-msg {{ background: #2a2a2a; color: #ddd; border-bottom-left-radius: 4px; }}
+
+    .empty-hint {{
+        color: #666;
+        font-size: 12px;
+        text-align: center;
+        margin: auto;
+    }}
+    </style>
+
+    <!-- 浮動按鈕 -->
+    <button id="float-chat-btn" onclick="toggleChat()" title="AI 諮詢">💬</button>
+
+    <!-- 聊天視窗 -->
+    <div id="float-chat-window">
+        <div class="chat-header">
+            🤖 AI 房產顧問
+            <span>{'已載入分析資料' if context else '尚無分析資料'}</span>
+            <button class="close-btn" onclick="toggleChat()">✕</button>
+        </div>
+        <div class="chat-body" id="chat-body">
+            {'<div class="empty-hint">請輸入問題，或點選下方快速提問</div>' if not chat_history_html else chat_history_html}
+        </div>
+        <div class="preset-area">
+            {preset_btns_html}
+        </div>
+    </div>
+
+    <script>
+    function toggleChat() {{
+        const win = document.getElementById('float-chat-window');
+        win.classList.toggle('open');
+        if (win.classList.contains('open')) {{
+            const body = document.getElementById('chat-body');
+            body.scrollTop = body.scrollHeight;
+        }}
+    }}
+    function fillInput(btn) {{
+        // 將預設問題填入 Streamlit 的 text_input
+        const inputs = window.parent.document.querySelectorAll('input[type="text"]');
+        // 找到 float_chat_input 的輸入框
+        for (let inp of inputs) {{
+            if (inp.closest('[data-testid="stTextInput"]')) {{
+                const nativeInput = inp;
+                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                    window.parent.HTMLInputElement.prototype, 'value').set;
+                nativeInputValueSetter.call(nativeInput, btn.textContent);
+                nativeInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
+                break;
+            }}
+        }}
+    }}
+    // 自動捲到最底部
+    const chatBody = document.getElementById('chat-body');
+    if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
+    </script>
+    """, unsafe_allow_html=True)
+
+    # Streamlit 輸入區（隱藏在頁面最底部）
+    st.markdown("""
+    <style>
+    /* 把輸入區縮到最小，視覺上不干擾 */
+    div[data-testid="stTextInput"] > div > div > input {
+        font-size: 13px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    col1, col2 = st.columns([5, 1])
+    with col1:
+        st.text_input(
+            "💬",
+            key="float_chat_input",
+            placeholder="輸入問題或點選上方快速提問...",
+            label_visibility="collapsed",
+        )
+    with col2:
+        if st.button("送出", key="float_chat_send", use_container_width=True):
+            st.session_state.float_chat_submit = True
+            st.rerun()
+    
+    # 清除對話按鈕
+    if st.session_state.float_chat_history:
+        if st.button("🗑️ 清除對話紀錄", key="clear_float_chat"):
+            st.session_state.float_chat_history = []
+            st.rerun()                
 
