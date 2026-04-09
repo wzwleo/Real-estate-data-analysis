@@ -2449,7 +2449,7 @@ def tab1_module():
  
 # ── 以下為獨立渲染區塊，放在 `if save_button:` 區塊「外面」、但在 tab1_module 內 ──
 # （與 `if 'solo_analysis_result' in st.session_state:` 同層級，緊接其後）
- 
+         
         # ── 排名分析區塊 ──────────────────────────────────────────────────────
         if 'solo_analysis_result' in st.session_state:
             r = st.session_state['solo_analysis_result']
@@ -2944,5 +2944,5 @@ async function sendMsg() {{
 """
 
     import streamlit.components.v1 as components
-    components.html(html_code, height=0, scrolling=False)
+    components.html(html_code, height=1, scrolling=False)
 
