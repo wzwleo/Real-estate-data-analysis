@@ -3,35 +3,23 @@ import pandas as pd
 from utils import display_pagination
 
 def display_pagination(df, items_per_page=10):
-    """
-    分頁功能，根據當前頁面返回對應的數據
-    """
-    # 初始化 current_search_page（僅在首次運行時）
     if 'current_search_page' not in st.session_state:
         st.session_state.current_search_page = 1
 
     current_page = st.session_state.current_search_page
     total_items = len(df)
     total_pages = (total_items + items_per_page - 1) // items_per_page
-
-    # 確保 current_page 在有效範圍內
     current_page = max(1, min(current_page, total_pages))
-
-    # 更新 session_state 以確保一致性
     st.session_state.current_search_page = current_page
 
-    # 計算當前頁面的數據範圍
     start_idx = (current_page - 1) * items_per_page
     end_idx = min(start_idx + items_per_page, total_items)
-
     current_page_data = df.iloc[start_idx:end_idx]
 
     return current_page_data, current_page, total_pages, total_items
 
+
 def render_property_list():
-    """
-    渲染房產列表和分頁功能
-    """
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
 
@@ -41,28 +29,48 @@ def render_property_list():
     if 'filtered_df' not in st.session_state or st.session_state.filtered_df.empty:
         return
 
-    # --- 關鍵修改處：去重 ---
-    df = st.session_state.filtered_df.copy() # 建議用 copy 避免更動到原始 session_state
-    
-    # 根據「編號」去重，保留第一筆出現的資料
+    df = st.session_state.filtered_df.copy()
     df = df.drop_duplicates(subset=['編號'], keep='first')
-    # ----------------------
-    
+
     search_params = st.session_state.search_params
 
-    current_page_data, current_page, total_pages, total_items = display_pagination(df, items_per_page=10)
+    # ── 標題列 + 排序選單 ──────────────────────────────
+    sort_options = {
+        "(預設) 價錢由低到高":  ("總價(萬)", True),
+        "價錢由高到低":         ("總價(萬)", False),
+        "屋齡由低到高":         ("屋齡",    True),
+        "屋齡由高到低":         ("屋齡",    False),
+        "建坪由低到高":         ("建坪",    True),
+        "建坪由高到低":         ("建坪",    False),
+    }
 
-    st.subheader(f"🏠 {search_params['city']}房產列表")
+    title_col, sort_col = st.columns([3, 2])
+    with title_col:
+        st.subheader(f"🏠 {search_params['city']}房產列表")
+    with sort_col:
+        selected_sort = st.selectbox(
+            "排序方式",
+            options=list(sort_options.keys()),
+            index=0,
+            key="sort_selector",
+            label_visibility="collapsed"   # 隱藏標籤，讓版面更簡潔
+        )
+
+    # 套用排序
+    sort_col_name, ascending = sort_options[selected_sort]
+    if sort_col_name in df.columns:
+        df = df.sort_values(by=sort_col_name, ascending=ascending, na_position='last')
+    # ────────────────────────────────────────────────────
+
+    current_page_data, current_page, total_pages, total_items = display_pagination(df, items_per_page=10)
 
     for idx, (index, row) in enumerate(current_page_data.iterrows()):
         render_property_card(row, current_page, idx)
 
     render_pagination_controls(current_page, total_pages, total_items)
 
+
 def render_property_card(row, current_page, idx):
-    """
-    渲染單個房產卡片
-    """
     with st.container():
         global_idx = (current_page - 1) * 10 + idx + 1
 
@@ -84,14 +92,12 @@ def render_property_card(row, current_page, idx):
         with col1:
             property_id = row['編號']
             is_fav = property_id in st.session_state.favorites
-
             if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"filter_fav_{property_id}"):
                 if is_fav:
                     st.session_state.favorites.remove(property_id)
                 else:
                     st.session_state.favorites.add(property_id)
                 st.rerun()
-
         with col7:
             property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
             st.markdown(
@@ -102,10 +108,8 @@ def render_property_card(row, current_page, idx):
 
         st.markdown("---")
 
+
 def render_pagination_controls(current_page, total_pages, total_items):
-    """
-    渲染分頁控制按鈕
-    """
     if total_pages <= 1:
         return
 
@@ -115,29 +119,24 @@ def render_pagination_controls(current_page, total_pages, total_items):
         if st.button("⏮️ 第一頁", disabled=(current_page == 1), key="first_page"):
             st.session_state.current_search_page = 1
             st.rerun()
-
     with col2:
         if st.button("⏪ 上一頁", disabled=(current_page == 1), key="prev_page"):
             st.session_state.current_search_page = max(1, current_page - 1)
             st.rerun()
-
     with col3:
-        # 頁面跳轉選擇器
         new_page = st.selectbox(
             "選擇頁面",
             options=range(1, total_pages + 1),
             index=current_page - 1,
-            key=f"page_selector_{current_page}"  # 動態 key 避免衝突
+            key=f"page_selector_{current_page}"
         )
         if new_page != current_page:
             st.session_state.current_search_page = new_page
             st.rerun()
-
     with col4:
         if st.button("下一頁 ⏩", disabled=(current_page == total_pages), key="next_page"):
-            st.session_state.current_search_page = current_page + 1  # 直接使用 current_page + 1
+            st.session_state.current_search_page = current_page + 1
             st.rerun()
-
     with col5:
         if st.button("最後一頁 ⏭️", disabled=(current_page == total_pages), key="last_page"):
             st.session_state.current_search_page = total_pages
