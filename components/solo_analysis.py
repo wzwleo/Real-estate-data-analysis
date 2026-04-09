@@ -2517,7 +2517,21 @@ def tab1_module():
  
                 numeric_cols = ['總價(萬)', '建坪', '價格競爭力', '空間效率',
                                 '屋齡優勢', '樓層定位', '格局流動性', '總分']
+                
                 top10 = df_rank.head(10)[show_cols].copy()
+                
+                # ★ 把 top10 裡目標房屋那列的分數替換成 r['total_score']，確保與雷達圖一致
+                target_mask = top10['標題'] == target_title
+                if target_mask.any():
+                    score_cols = ['價格競爭力', '空間效率', '屋齡優勢', '樓層定位', '格局流動性', '總分']
+                    for col in score_cols:
+                        if col not in top10.columns:
+                            continue
+                        if col == '總分':
+                            top10.loc[target_mask, col] = r['total_score']
+                        elif col in r['scores']:
+                            top10.loc[target_mask, col] = r['scores'][col]
+                
                 for col in numeric_cols:
                     if col in top10.columns:
                         top10[col] = top10[col].apply(
