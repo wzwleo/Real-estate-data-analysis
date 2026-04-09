@@ -72,20 +72,6 @@ def _get_compare_df(df_all, district, type_main):
     ].copy()
  
 def _score_one(row, df_all, weights):
-    """
-    計算單筆房屋的五大面向分數與加權總分。
-    與 Notebook score_one() 邏輯完全一致。
- 
-    Parameters
-    ----------
-    row      : dict-like（pd.Series 或 dict）
-    df_all   : 比較母體 DataFrame（已包含同區同類型資料）
-    weights  : dict，五大面向權重，合計應為 100
- 
-    Returns
-    -------
-    dict，包含各面向分數與總分
-    """
     result = {
         '標題':       row.get('標題', ''),
         '地址':       row.get('地址', ''),
@@ -104,42 +90,39 @@ def _score_one(row, df_all, weights):
         '總分':       np.nan,
         '比較母體數': 0,
     }
- 
-    district    = row.get('行政區', '')
-    target_type = str(row.get('類型', '')).strip()
-    type_main   = _get_type_main(target_type)
+
     target_price = pd.to_numeric(row.get('總價(萬)', np.nan), errors='coerce')
     target_area  = pd.to_numeric(row.get('建坪', np.nan), errors='coerce')
- 
+
     if pd.isna(target_price) or pd.isna(target_area) or target_area == 0:
         return result
- 
-    compare_df = _get_compare_df(df_all, district, type_main)
-    compare_df = compare_df.copy()
-    compare_df['_總價']   = pd.to_numeric(compare_df['總價(萬)'], errors='coerce')
-    compare_df['_建坪']   = pd.to_numeric(compare_df['建坪'],     errors='coerce')
+
+    # ★ 直接用傳入的 df_all 當比較母體，不再重新篩選
+    compare_df = df_all.copy()
+    compare_df['_總價'] = pd.to_numeric(compare_df['總價(萬)'], errors='coerce')
+    compare_df['_建坪'] = pd.to_numeric(compare_df['建坪'],     errors='coerce')
     compare_df = compare_df.dropna(subset=['_總價', '_建坪'])
- 
+
     n = len(compare_df)
     if n == 0:
         return result
     result['比較母體數'] = n
- 
+
     # 1. 價格競爭力
     price_percentile = (compare_df['_總價'] < target_price).sum() / n * 100
     score_price = max(0.0, min(10.0, 10 - price_percentile / 10))
- 
+
     # 2. 空間效率
     score_space = 5.0
     actual = pd.to_numeric(row.get('主+陽', np.nan), errors='coerce')
     if not pd.isna(actual) and float(actual) > 0:
         target_usage_rate = float(actual) / float(target_area)
-        compare_df['_實際'] = pd.to_numeric(compare_df.get('主+陽', np.nan), errors='coerce')
+        compare_df['_實際']   = pd.to_numeric(compare_df['主+陽'], errors='coerce')
         compare_df['_使用率'] = compare_df['_實際'] / compare_df['_建坪']
         median_usage = compare_df['_使用率'].median()
         if not pd.isna(median_usage) and median_usage > 0:
             score_space = max(0.0, min(10.0, (target_usage_rate / median_usage) * 5))
- 
+
     # 3. 屋齡優勢
     score_age = 5.0
     compare_df['_屋齡'] = compare_df['屋齡'].apply(_parse_age_rank)
@@ -148,7 +131,7 @@ def _score_one(row, df_all, weights):
     if len(df_age) > 0 and not pd.isna(target_age):
         age_percentile = (df_age['_屋齡'] < target_age).sum() / len(df_age) * 100
         score_age = max(0.0, min(10.0, 10 - age_percentile / 10))
- 
+
     # 4. 樓層定位
     score_floor = 5.0
     compare_df['_樓層'] = compare_df['樓層'].apply(_parse_floor_rank)
@@ -157,16 +140,16 @@ def _score_one(row, df_all, weights):
     if len(df_floor) > 0 and not pd.isna(target_floor):
         floor_percentile = (df_floor['_樓層'] < target_floor).sum() / len(df_floor) * 100
         score_floor = max(0.0, min(10.0, 10 - abs(floor_percentile - 50) / 5))
- 
+
     # 5. 格局流動性
     score_layout = 0.0
     target_layout = str(row.get('格局', '')).strip()
-    if target_layout and '格局' in compare_df.columns:   # ← 改成 compare_df
+    if target_layout and '格局' in compare_df.columns:
         same_cnt = (compare_df['格局'].astype(str).str.strip() == target_layout).sum()
         same_pct = same_cnt / n * 100
         score_layout = max(0.0, min(10.0, same_pct / 3))
- 
-    # ★ 先用原始分數（未 round）計算總分，最後才 round 一次
+
+    # 用原始分數計算總分，最後才 round 一次
     weighted_total = (
         score_price  * (weights['價格競爭力'] / 100) +
         score_space  * (weights['空間效率']   / 100) +
@@ -174,9 +157,8 @@ def _score_one(row, df_all, weights):
         score_floor  * (weights['樓層定位']   / 100) +
         score_layout * (weights['格局流動性'] / 100)
     )
-    total_score = round(weighted_total * 10, 1)  # ★ 只在這裡 round 一次
-    
-    # result 裡的各面向分數只是顯示用，round(1) 即可
+    total_score = round(weighted_total * 10, 1)
+
     result.update({
         '價格競爭力': round(score_price,  1),
         '空間效率':   round(score_space,  1),
@@ -189,37 +171,30 @@ def _score_one(row, df_all, weights):
  
  
 def run_ranking(selected_row, all_df, weights):
-    """
-    對同區同類型所有房屋進行評分排名。
- 
-    Returns
-    -------
-    df_result : DataFrame（已排序），含排名、各面向分數、總分
-    target_rank : int，目標房屋排名
-    target_score : float，目標房屋總分
-    """
     target_district = selected_row.get('行政區', '')
     target_type     = _get_type_main(str(selected_row.get('類型', '')).strip())
- 
+
+    # df_pool 篩出同區同類型，直接傳給 _score_one 當比較母體
     df_pool = all_df[
         (all_df['行政區'] == target_district) &
         (all_df['類型'].astype(str).str.contains(target_type, case=False, na=False))
     ].copy()
- 
+
     if df_pool.empty:
         return pd.DataFrame(), None, None
- 
+
+    # ★ 傳入 df_pool，_score_one 直接用，不再重篩
     records = [_score_one(row, df_pool, weights) for _, row in df_pool.iterrows()]
     df_result = pd.DataFrame(records)
     df_result = df_result.sort_values('總分', ascending=False).reset_index(drop=True)
     df_result.insert(0, '排名', df_result.index + 1)
- 
+
     target_title = selected_row.get('標題', '')
     target_rows  = df_result[df_result['標題'] == target_title]
- 
+
     if target_rows.empty:
         return df_result, None, None
- 
+
     target_rank  = int(target_rows['排名'].iloc[0])
     target_score = float(target_rows['總分'].iloc[0])
     return df_result, target_rank, target_score
