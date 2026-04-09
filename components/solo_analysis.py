@@ -2548,9 +2548,29 @@ def tab1_module():
                 # 如果目標房屋不在前十，額外顯示其排名列
                 if t_rank is not None and t_rank > 10:
                     st.info(f"💡 目標房屋「{target_title}」排名第 {t_rank} 名，不在前 10 名內")
-                    target_row_df = df_rank[df_rank['標題'] == target_title][show_cols]
-                    if not target_row_df.empty:
-                        st.markdown("**目標房屋詳細分數：**")
-                        st.dataframe(target_row_df, use_container_width=True, hide_index=True)
+                    
+                    # ★ 改成直接用 r['scores'] 和 r['total_score']，而非從 df_rank 撈
+                    target_display_df = pd.DataFrame([{
+                        '排名':       t_rank,
+                        '標題':       _selected_row_for_rank.get('標題', ''),
+                        '行政區':     _selected_row_for_rank.get('行政區', ''),
+                        '總價(萬)':   _selected_row_for_rank.get('總價(萬)', ''),
+                        '建坪':       _selected_row_for_rank.get('建坪', ''),
+                        '格局':       _selected_row_for_rank.get('格局', ''),
+                        '樓層':       _selected_row_for_rank.get('樓層', ''),
+                        '屋齡':       _selected_row_for_rank.get('屋齡', ''),
+                        '價格競爭力': r['scores']['價格競爭力'],
+                        '空間效率':   r['scores']['空間效率'],
+                        '屋齡優勢':   r['scores']['屋齡優勢'],
+                        '樓層定位':   r['scores']['樓層定位'],
+                        '格局流動性': r['scores']['格局流動性'],
+                        '總分':       r['total_score'],
+                    }])
+                    
+                    # 只保留 show_cols 裡存在的欄位，維持欄位順序一致
+                    target_display_df = target_display_df[[c for c in show_cols if c in target_display_df.columns]]
+                    
+                    st.markdown("**目標房屋詳細分數：**")
+                    st.dataframe(target_display_df, use_container_width=True, hide_index=True)
                 
 
