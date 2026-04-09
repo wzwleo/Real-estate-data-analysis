@@ -48,12 +48,14 @@ def _parse_age_rank(x):
     return float(match.group(1)) if match else np.nan
  
 def _parse_floor_rank(x):
-    """樓層字串轉數字"""
+    """樓層字串轉數字（與範例 parse_floor 一致）"""
     if pd.isna(x):
         return np.nan
     try:
-        match = re.search(r'\d+', str(x))
-        return int(match.group()) if match else np.nan
+        # 先嘗試 split('樓') 取第一段，與範例程式邏輯一致
+        parts = str(x).split('樓')
+        val = re.search(r'\d+', parts[0])
+        return int(val.group()) if val else np.nan
     except Exception:
         return np.nan
  
@@ -159,7 +161,7 @@ def _score_one(row, df_all, weights):
     # 5. 格局流動性
     score_layout = 0.0
     target_layout = str(row.get('格局', '')).strip()
-    if target_layout and '格局' in compare_df.columns:
+    if target_layout and '格局' in compare_df.columns:   # ← 改成 compare_df
         same_cnt = (compare_df['格局'].astype(str).str.strip() == target_layout).sum()
         same_pct = same_cnt / n * 100
         score_layout = max(0.0, min(10.0, same_pct / 3))
@@ -2517,7 +2519,14 @@ def tab1_module():
                 # 只保留存在的欄位
                 show_cols = [c for c in show_cols if c in df_rank.columns]
  
+                numeric_cols = ['總價(萬)', '建坪', '價格競爭力', '空間效率',
+                                '屋齡優勢', '樓層定位', '格局流動性', '總分']
                 top10 = df_rank.head(10)[show_cols].copy()
+                for col in numeric_cols:
+                    if col in top10.columns:
+                        top10[col] = top10[col].apply(
+                            lambda v: round(float(v), 1) if pd.notna(v) and str(v) not in ('', '—') else v
+                        )
  
                 # 高亮目標房屋
                 def highlight_target(row):
