@@ -2494,7 +2494,13 @@ def tab1_module():
                         _all_df_for_rank,
                         _weights_for_rank,
                     )
-                st.session_state['df_rank']  = df_rank.to_dict('records') if not df_rank.empty else []
+                
+                # ★ 補回編號欄位
+                if not df_rank.empty and '編號' not in df_rank.columns and '編號' in _all_df_for_rank.columns:
+                    id_map = _all_df_for_rank[['標題', '編號']].drop_duplicates('標題')
+                    df_rank = df_rank.merge(id_map, on='標題', how='left')
+                
+                st.session_state['df_rank']  = df_rank.to_dict('records')
                 st.session_state['t_rank']   = t_rank
                 st.session_state['t_score']  = t_score
  
@@ -2545,35 +2551,51 @@ def tab1_module():
                 styled = top10.style.apply(highlight_target, axis=1)
                 st.dataframe(styled, use_container_width=True, hide_index=True)
                 
-                # ★ 新增：前十名快速加入收藏
+                # ★ 快速加入收藏（每列 3 個）
                 st.markdown("#### ⭐ 快速加入收藏")
                 
-                # 每行放 2 個按鈕
-                btn_cols = st.columns(2)
-                for idx, (_, house_row) in enumerate(df_rank.head(10).iterrows()):
-                    house_title = house_row.get('標題', '')
-                    house_id    = normalize_property_id(
-                        df_rank[df_rank['標題'] == house_title]['編號'].iloc[0]
-                        if '編號' in df_rank.columns and not df_rank[df_rank['標題'] == house_title].empty
-                        else ''
-                    )
+                top10_list = df_rank.head(10).to_dict('records')
+                
+                for row_start in range(0, len(top10_list), 3):
+                    row_houses = top10_list[row_start:row_start + 3]
+                    cols = st.columns(3)
                     
-                    # 判斷是否已收藏
-                    is_fav = house_id in st.session_state.get('favorites', set())
-                    btn_label = f"{'✅' if is_fav else '⭐'} #{house_row.get('排名', idx+1)} {house_title[:12]}..."
-                    
-                    with btn_cols[idx % 2]:
-                        if st.button(
-                            btn_label,
-                            key=f"rank_fav_{idx}_{house_id}",
-                            use_container_width=True,
-                            disabled=is_fav,  # 已收藏則變灰不可點
-                        ):
-                            if 'favorites' not in st.session_state:
-                                st.session_state.favorites = set()
-                            st.session_state.favorites.add(house_id)
-                            st.success(f"✅ 已加入收藏：{house_title}")
-                            st.rerun()
+                    for col_idx, house_row in enumerate(row_houses):
+                        global_idx = row_start + col_idx
+                        house_title = str(house_row.get('標題', ''))
+                        house_rank  = house_row.get('排名', global_idx + 1)
+                        
+                        # 從 _all_df_for_rank 取得編號
+                        matched = _all_df_for_rank[_all_df_for_rank['標題'] == house_title]
+                        if not matched.empty and '編號' in matched.columns:
+                            house_id = normalize_property_id(matched.iloc[0]['編號'])
+                        else:
+                            house_id = normalize_property_id(house_row.get('編號', ''))
+                        
+                        # 判斷是否已收藏
+                        current_favs = st.session_state.get('favorites', [])
+                        if isinstance(current_favs, set):
+                            current_favs = list(current_favs)
+                            st.session_state.favorites = current_favs
+                        is_fav = house_id in current_favs
+                
+                        short_title = house_title[:10] + '...' if len(house_title) > 10 else house_title
+                        btn_label = f"{'✅' if is_fav else '⭐'} #{house_rank} {short_title}"
+                        
+                        with cols[col_idx]:
+                            if st.button(
+                                btn_label,
+                                key=f"rank_fav_{global_idx}_{house_id}",  # 每個按鈕獨立 key
+                                use_container_width=True,
+                                disabled=is_fav,
+                            ):
+                                # ★ 用重新賦值而非 .add()，確保 Streamlit 偵測到變動
+                                new_favs = list(st.session_state.get('favorites', []))
+                                if house_id and house_id not in new_favs:
+                                    new_favs.append(house_id)
+                                    st.session_state.favorites = new_favs
+                                    st.success(f"✅ 已加入收藏：{house_title}")
+                                    st.rerun()
                             
                 # 如果目標房屋不在前十，額外顯示其排名列
                 if t_rank is not None and t_rank > 10:
