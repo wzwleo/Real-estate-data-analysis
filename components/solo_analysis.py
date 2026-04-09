@@ -2622,8 +2622,8 @@ def tab1_module():
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
-    """浮動 AI 聊天視窗"""
-    
+    """使用 st.popover 實作 AI 聊天視窗"""
+
     # 取得當前分析結果作為背景知識
     context = ""
     if 'solo_analysis_result' in st.session_state:
@@ -2653,269 +2653,151 @@ def render_float_chat():
         格局分析：{r.get('layout_text', '')}
         綜合總結：{r.get('summary_text', '')}
         """
-    
-    # 預設問題
-    preset_questions = [
-        "這間房子適合首購族嗎？",
-        "跟同區相比有什麼潛在風險？",
-        "這個價格合理嗎？",
-        "未來轉售容易嗎？",
-        "有什麼需要特別注意的地方？",
-    ]
-    preset_btns_html = "".join([
-        f'<button class="preset-btn" onclick="fillInput(this)">{q}</button>'
-        for q in preset_questions
-    ])
 
     # 對話紀錄初始化
     if 'float_chat_history' not in st.session_state:
         st.session_state.float_chat_history = []
 
-    # 處理送出訊息
-    if 'float_chat_input' in st.session_state and st.session_state.get('float_chat_submit'):
-        user_msg = st.session_state.float_chat_input
-        if user_msg.strip():
+    # 處理送出（在 popover 外處理，避免 rerun 關閉 popover）
+    if st.session_state.get('float_chat_submit'):
+        user_msg = st.session_state.get('float_chat_input_val', '').strip()
+        if user_msg:
             gemini_key = st.session_state.get("GEMINI_KEY", "")
-            if gemini_key:
+            if not gemini_key:
+                st.session_state.float_chat_history.append(
+                    {'role': 'ai', 'content': '⚠️ 請先在側邊欄設定 Gemini API Key'}
+                )
+            else:
                 import google.generativeai as genai
                 genai.configure(api_key=gemini_key)
                 model = genai.GenerativeModel("gemini-2.5-flash")
-                
-                # 組合歷史對話
+
                 history_text = "\n".join([
-                    f"{'使用者' if m['role']=='user' else 'AI'}：{m['content']}"
-                    for m in st.session_state.float_chat_history[-6:]  # 只取最近6則
+                    f"{'使用者' if m['role'] == 'user' else 'AI'}：{m['content']}"
+                    for m in st.session_state.float_chat_history[-6:]
                 ])
-                
+
                 prompt = f"""
                 {context}
-                
+
                 【對話紀錄】
                 {history_text}
-                
+
                 【使用者問題】
                 {user_msg}
-                
+
                 請用繁體中文回答，簡潔清楚，不超過 200 字。
                 """
-                
+
+                st.session_state.float_chat_history.append(
+                    {'role': 'user', 'content': user_msg}
+                )
+
                 try:
                     response = model.generate_content(prompt)
                     ai_reply = response.text.strip()
                 except Exception:
                     ai_reply = "抱歉，目前無法取得回應，請稍後再試。"
-                
-                st.session_state.float_chat_history.append(
-                    {'role': 'user', 'content': user_msg}
-                )
+
                 st.session_state.float_chat_history.append(
                     {'role': 'ai', 'content': ai_reply}
                 )
-        
+
         st.session_state.float_chat_submit = False
-        st.session_state.float_chat_input = ""
+        st.session_state.float_chat_input_val = ''
+        st.rerun()
 
-    # 組合對話紀錄 HTML
-    chat_history_html = ""
-    for msg in st.session_state.float_chat_history:
-        if msg['role'] == 'user':
-            chat_history_html += f"""
-            <div class="msg-row user-row">
-                <div class="msg user-msg">{msg['content']}</div>
-            </div>"""
-        else:
-            chat_history_html += f"""
-            <div class="msg-row ai-row">
-                <div class="msg ai-msg">{msg['content']}</div>
-            </div>"""
-
-    # 浮動視窗 HTML + CSS
-    st.markdown(f"""
+    # ── 固定在右下角的 popover 按鈕 ──
+    st.markdown("""
     <style>
-    #float-chat-btn {{
+    /* 把 popover 觸發按鈕固定在右下角 */
+    div[data-testid="stPopover"] {
         position: fixed;
         bottom: 32px;
         right: 32px;
+        z-index: 9999;
+    }
+    div[data-testid="stPopover"] button {
         width: 56px;
         height: 56px;
-        border-radius: 50%;
-        background: #4CAF50;
-        color: white;
-        font-size: 26px;
-        border: none;
-        cursor: pointer;
+        border-radius: 50% !important;
+        font-size: 24px;
+        background-color: #4CAF50 !important;
+        color: white !important;
+        border: none !important;
         box-shadow: 0 4px 16px rgba(0,0,0,0.3);
-        z-index: 9999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.2s;
-    }}
-    #float-chat-btn:hover {{ background: #388E3C; }}
-
-    #float-chat-window {{
-        position: fixed;
-        bottom: 100px;
-        right: 32px;
-        width: 360px;
-        max-height: 560px;
-        background: #1e1e1e;
-        border: 1px solid #4CAF50;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.4);
-        z-index: 9998;
-        display: none;
-        flex-direction: column;
-        overflow: hidden;
-    }}
-    #float-chat-window.open {{ display: flex; }}
-
-    .chat-header {{
-        background: #4CAF50;
-        color: white;
-        padding: 12px 16px;
-        font-weight: bold;
-        font-size: 15px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }}
-    .chat-header span {{ font-size: 12px; opacity: 0.85; }}
-    .close-btn {{
-        background: none;
-        border: none;
-        color: white;
-        font-size: 20px;
-        cursor: pointer;
-        line-height: 1;
-    }}
-
-    .chat-body {{
-        flex: 1;
-        overflow-y: auto;
-        padding: 12px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        min-height: 200px;
-        max-height: 300px;
-    }}
-
-    .preset-area {{
-        padding: 8px 12px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 6px;
-        border-top: 1px solid #333;
-    }}
-    .preset-btn {{
-        background: #2a2a2a;
-        color: #aaa;
-        border: 1px solid #444;
-        border-radius: 12px;
-        padding: 4px 10px;
-        font-size: 11px;
-        cursor: pointer;
-        transition: all 0.15s;
-    }}
-    .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
-
-    .msg-row {{ display: flex; }}
-    .user-row {{ justify-content: flex-end; }}
-    .ai-row {{ justify-content: flex-start; }}
-    .msg {{
-        max-width: 80%;
-        padding: 8px 12px;
-        border-radius: 12px;
-        font-size: 13px;
-        line-height: 1.5;
-        white-space: pre-wrap;
-    }}
-    .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 4px; }}
-    .ai-msg {{ background: #2a2a2a; color: #ddd; border-bottom-left-radius: 4px; }}
-
-    .empty-hint {{
-        color: #666;
-        font-size: 12px;
-        text-align: center;
-        margin: auto;
-    }}
-    </style>
-
-    <!-- 浮動按鈕 -->
-    <button id="float-chat-btn" onclick="toggleChat()" title="AI 諮詢">💬</button>
-
-    <!-- 聊天視窗 -->
-    <div id="float-chat-window">
-        <div class="chat-header">
-            🤖 AI 房產顧問
-            <span>{'已載入分析資料' if context else '尚無分析資料'}</span>
-            <button class="close-btn" onclick="toggleChat()">✕</button>
-        </div>
-        <div class="chat-body" id="chat-body">
-            {'<div class="empty-hint">請輸入問題，或點選下方快速提問</div>' if not chat_history_html else chat_history_html}
-        </div>
-        <div class="preset-area">
-            {preset_btns_html}
-        </div>
-    </div>
-
-    <script>
-    function toggleChat() {{
-        const win = document.getElementById('float-chat-window');
-        win.classList.toggle('open');
-        if (win.classList.contains('open')) {{
-            const body = document.getElementById('chat-body');
-            body.scrollTop = body.scrollHeight;
-        }}
-    }}
-    function fillInput(btn) {{
-        // 將預設問題填入 Streamlit 的 text_input
-        const inputs = window.parent.document.querySelectorAll('input[type="text"]');
-        // 找到 float_chat_input 的輸入框
-        for (let inp of inputs) {{
-            if (inp.closest('[data-testid="stTextInput"]')) {{
-                const nativeInput = inp;
-                const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                    window.parent.HTMLInputElement.prototype, 'value').set;
-                nativeInputValueSetter.call(nativeInput, btn.textContent);
-                nativeInput.dispatchEvent(new Event('input', {{ bubbles: true }}));
-                break;
-            }}
-        }}
-    }}
-    // 自動捲到最底部
-    const chatBody = document.getElementById('chat-body');
-    if (chatBody) chatBody.scrollTop = chatBody.scrollHeight;
-    </script>
-    """, unsafe_allow_html=True)
-
-    # Streamlit 輸入區（隱藏在頁面最底部）
-    st.markdown("""
-    <style>
-    /* 把輸入區縮到最小，視覺上不干擾 */
-    div[data-testid="stTextInput"] > div > div > input {
-        font-size: 13px;
+        padding: 0 !important;
+    }
+    div[data-testid="stPopover"] button:hover {
+        background-color: #388E3C !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-    col1, col2 = st.columns([5, 1])
-    with col1:
-        st.text_input(
-            "💬",
+    with st.popover("💬", use_container_width=False):
+        # 標題列
+        has_context = bool(context)
+        st.markdown(
+            f"### 🤖 AI 房產顧問\n"
+            f"{'✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料，請先執行分析'}"
+        )
+        st.divider()
+
+        # 對話紀錄顯示
+        if not st.session_state.float_chat_history:
+            st.caption("尚無對話紀錄，請輸入問題或點選快速提問")
+        else:
+            for msg in st.session_state.float_chat_history:
+                if msg['role'] == 'user':
+                    with st.chat_message("user"):
+                        st.write(msg['content'])
+                else:
+                    with st.chat_message("assistant"):
+                        st.write(msg['content'])
+
+        st.divider()
+
+        # 快速提問按鈕
+        st.caption("💡 快速提問")
+        preset_questions = [
+            "這間房子適合首購族嗎？",
+            "跟同區相比有什麼潛在風險？",
+            "這個價格合理嗎？",
+            "未來轉售容易嗎？",
+            "有什麼需要特別注意的地方？",
+        ]
+
+        # 每列兩個
+        for i in range(0, len(preset_questions), 2):
+            cols = st.columns(2)
+            for j, col in enumerate(cols):
+                if i + j < len(preset_questions):
+                    q = preset_questions[i + j]
+                    with col:
+                        if st.button(q, key=f"preset_q_{i+j}", use_container_width=True):
+                            st.session_state.float_chat_input_val = q
+                            st.session_state.float_chat_submit = True
+                            st.rerun()
+
+        st.divider()
+
+        # 輸入框
+        user_input = st.text_input(
+            "輸入問題",
             key="float_chat_input",
-            placeholder="輸入問題或點選上方快速提問...",
+            placeholder="請輸入你的問題...",
             label_visibility="collapsed",
         )
-    with col2:
-        if st.button("送出", key="float_chat_send", use_container_width=True):
-            st.session_state.float_chat_submit = True
-            st.rerun()
-    
-    # 清除對話按鈕
-    if st.session_state.float_chat_history:
-        if st.button("🗑️ 清除對話紀錄", key="clear_float_chat"):
-            st.session_state.float_chat_history = []
-            st.rerun()                
+
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            if st.session_state.float_chat_history:
+                if st.button("🗑️ 清除紀錄", use_container_width=True, key="clear_chat"):
+                    st.session_state.float_chat_history = []
+                    st.rerun()
+        with col2:
+            if st.button("送出 ➤", use_container_width=True, key="chat_send", type="primary"):
+                st.session_state.float_chat_input_val = user_input
+                st.session_state.float_chat_submit = True
+                st.rerun()   
 
