@@ -38,7 +38,183 @@ name_map = {
 # 建立反向對照表: 中文 -> 英文檔名
 reverse_name_map = {v: k for k, v in name_map.items()}
 
-import plotly.graph_objects as go
+# ── 排名工具函式（在 tab1_module 外部定義，或貼在 tab1_module 最前面）────────
+ 
+def _parse_age_rank(x):
+    """屋齡字串轉數字"""
+    if pd.isna(x):
+        return np.nan
+    match = re.search(r'(\d+\.?\d*)', str(x))
+    return float(match.group(1)) if match else np.nan
+ 
+def _parse_floor_rank(x):
+    """樓層字串轉數字"""
+    if pd.isna(x):
+        return np.nan
+    try:
+        match = re.search(r'\d+', str(x))
+        return int(match.group()) if match else np.nan
+    except Exception:
+        return np.nan
+ 
+def _get_type_main(t):
+    """處理混合類型，取第一個主要類型"""
+    t = str(t).strip()
+    return t.split('/')[0].strip() if '/' in t else t
+ 
+def _get_compare_df(df_all, district, type_main):
+    """同區同類型比較母體（模糊比對，與 Streamlit 篩選邏輯一致）"""
+    return df_all[
+        (df_all['行政區'] == district) &
+        (df_all['類型'].astype(str).str.contains(type_main, case=False, na=False))
+    ].copy()
+ 
+def _score_one(row, df_all, weights):
+    """
+    計算單筆房屋的五大面向分數與加權總分。
+    與 Notebook score_one() 邏輯完全一致。
+ 
+    Parameters
+    ----------
+    row      : dict-like（pd.Series 或 dict）
+    df_all   : 比較母體 DataFrame（已包含同區同類型資料）
+    weights  : dict，五大面向權重，合計應為 100
+ 
+    Returns
+    -------
+    dict，包含各面向分數與總分
+    """
+    result = {
+        '標題':       row.get('標題', ''),
+        '地址':       row.get('地址', ''),
+        '行政區':     row.get('行政區', ''),
+        '類型':       row.get('類型', ''),
+        '總價(萬)':   row.get('總價(萬)', np.nan),
+        '建坪':       row.get('建坪', np.nan),
+        '格局':       row.get('格局', ''),
+        '樓層':       row.get('樓層', ''),
+        '屋齡':       row.get('屋齡', ''),
+        '價格競爭力': np.nan,
+        '空間效率':   np.nan,
+        '屋齡優勢':   np.nan,
+        '樓層定位':   np.nan,
+        '格局流動性': np.nan,
+        '總分':       np.nan,
+        '比較母體數': 0,
+    }
+ 
+    district    = row.get('行政區', '')
+    target_type = str(row.get('類型', '')).strip()
+    type_main   = _get_type_main(target_type)
+    target_price = pd.to_numeric(row.get('總價(萬)', np.nan), errors='coerce')
+    target_area  = pd.to_numeric(row.get('建坪', np.nan), errors='coerce')
+ 
+    if pd.isna(target_price) or pd.isna(target_area) or target_area == 0:
+        return result
+ 
+    compare_df = _get_compare_df(df_all, district, type_main)
+    compare_df = compare_df.copy()
+    compare_df['_總價']   = pd.to_numeric(compare_df['總價(萬)'], errors='coerce')
+    compare_df['_建坪']   = pd.to_numeric(compare_df['建坪'],     errors='coerce')
+    compare_df = compare_df.dropna(subset=['_總價', '_建坪'])
+ 
+    n = len(compare_df)
+    if n == 0:
+        return result
+    result['比較母體數'] = n
+ 
+    # 1. 價格競爭力
+    price_percentile = (compare_df['_總價'] < target_price).sum() / n * 100
+    score_price = max(0.0, min(10.0, 10 - price_percentile / 10))
+ 
+    # 2. 空間效率
+    score_space = 5.0
+    actual = pd.to_numeric(row.get('主+陽', np.nan), errors='coerce')
+    if not pd.isna(actual) and float(actual) > 0:
+        target_usage_rate = float(actual) / float(target_area)
+        compare_df['_實際'] = pd.to_numeric(compare_df.get('主+陽', np.nan), errors='coerce')
+        compare_df['_使用率'] = compare_df['_實際'] / compare_df['_建坪']
+        median_usage = compare_df['_使用率'].median()
+        if not pd.isna(median_usage) and median_usage > 0:
+            score_space = max(0.0, min(10.0, (target_usage_rate / median_usage) * 5))
+ 
+    # 3. 屋齡優勢
+    score_age = 5.0
+    compare_df['_屋齡'] = compare_df['屋齡'].apply(_parse_age_rank)
+    target_age = _parse_age_rank(row.get('屋齡', np.nan))
+    df_age = compare_df.dropna(subset=['_屋齡'])
+    if len(df_age) > 0 and not pd.isna(target_age):
+        age_percentile = (df_age['_屋齡'] < target_age).sum() / len(df_age) * 100
+        score_age = max(0.0, min(10.0, 10 - age_percentile / 10))
+ 
+    # 4. 樓層定位
+    score_floor = 5.0
+    compare_df['_樓層'] = compare_df['樓層'].apply(_parse_floor_rank)
+    target_floor = _parse_floor_rank(row.get('樓層', np.nan))
+    df_floor = compare_df.dropna(subset=['_樓層'])
+    if len(df_floor) > 0 and not pd.isna(target_floor):
+        floor_percentile = (df_floor['_樓層'] < target_floor).sum() / len(df_floor) * 100
+        score_floor = max(0.0, min(10.0, 10 - abs(floor_percentile - 50) / 5))
+ 
+    # 5. 格局流動性
+    score_layout = 0.0
+    target_layout = str(row.get('格局', '')).strip()
+    if target_layout and '格局' in compare_df.columns:
+        same_cnt = (compare_df['格局'].astype(str).str.strip() == target_layout).sum()
+        same_pct = same_cnt / n * 100
+        score_layout = max(0.0, min(10.0, same_pct / 3))
+ 
+    scores = {
+        '價格競爭力': score_price,
+        '空間效率':   score_space,
+        '屋齡優勢':   score_age,
+        '樓層定位':   score_floor,
+        '格局流動性': score_layout,
+    }
+    weighted_total = sum(scores[k] * (weights[k] / 100) for k in scores)
+    total_score = round(weighted_total * 10, 1)
+ 
+    result.update({k: round(v, 2) for k, v in scores.items()})
+    result['總分'] = total_score
+    return result
+ 
+ 
+def run_ranking(selected_row, all_df, weights):
+    """
+    對同區同類型所有房屋進行評分排名。
+ 
+    Returns
+    -------
+    df_result : DataFrame（已排序），含排名、各面向分數、總分
+    target_rank : int，目標房屋排名
+    target_score : float，目標房屋總分
+    """
+    target_district = selected_row.get('行政區', '')
+    target_type     = _get_type_main(str(selected_row.get('類型', '')).strip())
+ 
+    df_pool = all_df[
+        (all_df['行政區'] == target_district) &
+        (all_df['類型'].astype(str).str.contains(target_type, case=False, na=False))
+    ].copy()
+ 
+    if df_pool.empty:
+        return pd.DataFrame(), None, None
+ 
+    records = [_score_one(row, df_pool, weights) for _, row in df_pool.iterrows()]
+    df_result = pd.DataFrame(records)
+    df_result = df_result.sort_values('總分', ascending=False).reset_index(drop=True)
+    df_result.insert(0, '排名', df_result.index + 1)
+ 
+    target_title = selected_row.get('標題', '')
+    target_rows  = df_result[df_result['標題'] == target_title]
+ 
+    if target_rows.empty:
+        return df_result, None, None
+ 
+    target_rank  = int(target_rows['排名'].iloc[0])
+    target_score = float(target_rows['總分'].iloc[0])
+    return df_result, target_rank, target_score
+ 
 
 def create_radar_chart(scores_dict, title="房屋綜合評分雷達圖"):
     """
@@ -2266,6 +2442,98 @@ def tab1_module():
             
                 st.success(f"✅ 已儲存！目前共有 {len(st.session_state.ai_results)} 筆分析記錄")
                 st.info("💡 前往「分析記錄」頁面查看所有儲存的分析結果")
-                st.write(st.session_state.ai_results_summary)
+# ════════════════════════════════════════════════════════════════
+#  ↓ 以下為貼入 save_button 區塊「st.write(st.session_state.ai_results_summary)」
+#    最後一行之後的新增內容
+# ════════════════════════════════════════════════════════════════
+ 
+# ── 此段貼在 `if save_button:` 區塊最末尾（st.write(...) 之後） ───────────────
+ 
+            # 將排名結果也存入 session_state 供後續顯示
+            st.session_state['ranking_result'] = {
+                'property_title': selected_row.get('標題', ''),
+                'computed': False,  # 標記為尚未計算（節省儲存時的時間）
+            }
+ 
+# ── 以下為獨立渲染區塊，放在 `if save_button:` 區塊「外面」、但在 tab1_module 內 ──
+# （與 `if 'solo_analysis_result' in st.session_state:` 同層級，緊接其後）
+ 
+        # ── 排名分析區塊 ──────────────────────────────────────────────────────
+        if 'solo_analysis_result' in st.session_state:
+            r = st.session_state['solo_analysis_result']
+            _selected_row_for_rank = pd.Series(r['selected_row'])
+            _all_df_for_rank = pd.DataFrame(r['compare_base_df'])
+            _weights_for_rank = r.get('weights_used', {
+                '價格競爭力': 30, '空間效率': 25,
+                '屋齡優勢': 20,  '樓層定位': 15, '格局流動性': 10,
+            })
+ 
+            st.markdown("---")
+            st.subheader("🏆 同區同類型排名分析")
+ 
+            rank_btn = st.button(
+                "📊 計算此區域排名",
+                key="rank_btn",
+                use_container_width=True,
+            )
+ 
+            if rank_btn:
+                with st.spinner("⏳ 計算中，請稍候..."):
+                    df_rank, t_rank, t_score = run_ranking(
+                        _selected_row_for_rank,
+                        _all_df_for_rank,
+                        _weights_for_rank,
+                    )
+                st.session_state['df_rank']  = df_rank.to_dict('records') if not df_rank.empty else []
+                st.session_state['t_rank']   = t_rank
+                st.session_state['t_score']  = t_score
+ 
+            # ── 顯示排名結果 ──────────────────────────────────────────────
+            if 'df_rank' in st.session_state and st.session_state['df_rank']:
+                df_rank   = pd.DataFrame(st.session_state['df_rank'])
+                t_rank    = st.session_state.get('t_rank')
+                t_score   = st.session_state.get('t_score')
+                total_cnt = len(df_rank)
+                target_title = _selected_row_for_rank.get('標題', '')
+ 
+                # ── 目標房屋排名卡片 ───────────────────────────────────────
+                if t_rank is not None:
+                    percentile = round((1 - t_rank / total_cnt) * 100, 1)
+ 
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        st.metric("🎯 目標房屋排名", f"第 {t_rank} 名", f"共 {total_cnt} 筆")
+                    with col_b:
+                        st.metric("⭐ 綜合總分", f"{t_score:.1f} 分", "滿分 100")
+                    with col_c:
+                        st.metric("📈 超越比例", f"{percentile}%", "同區同類型")
+ 
+                # ── 前十名推薦房型 ─────────────────────────────────────────
+                st.markdown("#### 🥇 前 10 名推薦房型")
+ 
+                show_cols = ['排名', '標題', '行政區', '總價(萬)', '建坪',
+                             '格局', '樓層', '屋齡',
+                             '價格競爭力', '空間效率', '屋齡優勢', '樓層定位', '格局流動性', '總分']
+                # 只保留存在的欄位
+                show_cols = [c for c in show_cols if c in df_rank.columns]
+ 
+                top10 = df_rank.head(10)[show_cols].copy()
+ 
+                # 高亮目標房屋
+                def highlight_target(row):
+                    if row.get('標題', '') == target_title:
+                        return ['background-color: rgba(76,175,80,0.2)'] * len(row)
+                    return [''] * len(row)
+ 
+                styled = top10.style.apply(highlight_target, axis=1)
+                st.dataframe(styled, use_container_width=True, hide_index=True)
+ 
+                # 如果目標房屋不在前十，額外顯示其排名列
+                if t_rank is not None and t_rank > 10:
+                    st.info(f"💡 目標房屋「{target_title}」排名第 {t_rank} 名，不在前 10 名內")
+                    target_row_df = df_rank[df_rank['標題'] == target_title][show_cols]
+                    if not target_row_df.empty:
+                        st.markdown("**目標房屋詳細分數：**")
+                        st.dataframe(target_row_df, use_container_width=True, hide_index=True)
                 
 
