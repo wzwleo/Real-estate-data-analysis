@@ -22,61 +22,75 @@ def filter_properties(df, filters):
         # 行政區
         if filters.get('district') and filters['district'] != "不限":
             if '行政區' in filtered_df.columns:
-                # 精確比對行政區名稱
                 filtered_df = filtered_df[filtered_df['行政區'] == filters['district']]
-                
+
         # 類型
         if filters.get('housetype') and filters['housetype'] != "不限":
             if '類型' in filtered_df.columns:
                 filtered_df = filtered_df[
                     filtered_df['類型'].astype(str).str.contains(filters['housetype'], case=False, na=False)
                 ]
+
         # 預算
         if filters.get('budget_min', 0) > 0 and '總價(萬)' in filtered_df.columns:
             filtered_df = filtered_df[filtered_df['總價(萬)'] >= filters['budget_min']]
         if filters.get('budget_max', 1000000) < 1000000 and '總價(萬)' in filtered_df.columns:
             filtered_df = filtered_df[filtered_df['總價(萬)'] <= filters['budget_max']]
-        # 屋齡
-        if filters.get('age_max', 100) < 100 and '屋齡' in filtered_df.columns:
-            filtered_df = filtered_df[filtered_df['屋齡'] <= filters['age_max']]
+
+        # 屋齡（改為區間篩選，支援 age_min + age_max）
+        if '屋齡' in filtered_df.columns:
+            age_min = filters.get('age_min', 0)
+            age_max = filters.get('age_max', 100)
+            # 非「不限」(0~100 全範圍) 才套用篩選
+            if not (age_min == 0 and age_max == 100):
+                filtered_df = filtered_df[
+                    (filtered_df['屋齡'] >= age_min) & (filtered_df['屋齡'] <= age_max)
+                ]
+
         # 建坪
         if filters.get('area_min', 0) > 0 and '建坪' in filtered_df.columns:
             filtered_df = filtered_df[filtered_df['建坪'] >= filters['area_min']]
+
         # 車位
         if 'car_grip' in filters and '車位' in filtered_df.columns:
             if filters['car_grip'] == "需要":
                 filtered_df = filtered_df[
-                    (filtered_df['車位'].notna()) & 
-                    (filtered_df['車位'] != "無車位") & 
+                    (filtered_df['車位'].notna()) &
+                    (filtered_df['車位'] != "無車位") &
                     (filtered_df['車位'] != 0)
                 ]
             elif filters['car_grip'] == "不要":
                 filtered_df = filtered_df[
-                    (filtered_df['車位'].isna()) | 
-                    (filtered_df['車位'] == "無車位") | 
+                    (filtered_df['車位'].isna()) |
+                    (filtered_df['車位'] == "無車位") |
                     (filtered_df['車位'] == 0)
                 ]
-        # 房間數／廳數／衛數
+
+        # 房間數
         if filters.get('num_rooms') and filters['num_rooms'] != "不限":
             filtered_df = filtered_df[
                 pd.to_numeric(filtered_df['房間數'], errors='coerce') == filters['num_rooms']
             ]
-        
+
+        # 廳數
         if filters.get('num_living') and filters['num_living'] != "不限":
             filtered_df = filtered_df[
                 pd.to_numeric(filtered_df['廳數'], errors='coerce') == filters['num_living']
             ]
-        
+
+        # 衛數
         if filters.get('num_baths') and filters['num_baths'] != "不限":
             filtered_df = filtered_df[
                 pd.to_numeric(filtered_df['衛數'], errors='coerce') == filters['num_baths']
             ]
-            
+
     except Exception as e:
         st.error(f"篩選過程中發生錯誤: {e}")
         return df
+
     return filtered_df
-    
+
+
 def display_pagination(df, items_per_page=10):
     """ 處理分頁邏輯 """
     if 'current_search_page' not in st.session_state:
