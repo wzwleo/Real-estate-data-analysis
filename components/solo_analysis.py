@@ -2678,7 +2678,7 @@ def render_float_chat():
 <meta charset="utf-8">
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{ background: transparent; font-family: sans-serif; }}
+  body {{ background: transparent; font-family: sans-serif; height: 1px; overflow: hidden; }}
 
   #fab {{
     position: fixed;
@@ -2944,5 +2944,5 @@ async function sendMsg() {{
 """
 
     import streamlit.components.v1 as components
-    components.html(html_code, height=1, scrolling=False)
+    components.html(html_code, height=60, scrolling=False)
 
