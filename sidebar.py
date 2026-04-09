@@ -79,7 +79,7 @@ def render_sidebar():
                 current_preset = st.session_state.temp_preset_key
                 
                 # 取得該模板對應的分數
-                target_vals = templates.get(current_preset, templates["自訂"])
+                target_vals = templates.get(current_preset, templates["預設"])
                 
                 # 更新 Slider 數值
                 st.session_state.w_price = target_vals[0]
