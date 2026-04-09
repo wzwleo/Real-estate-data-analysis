@@ -2136,35 +2136,43 @@ def tab1_module():
                 if 'same_layout_pct' not in dir():
                     same_layout_pct = 0.0
                 
-                score_price = max(0, min(10, 10 - price_percentile / 10))
-                score_space = max(0, min(10, (target_usage_rate / median_usage) * 5))
-                score_age   = max(0, min(10, 10 - age_percentile / 10))
-                score_floor = max(0, min(10, 10 - abs(floor_percentile - 50) / 5))
+                # ★ 用未 round 的原始值計算
+                score_price  = max(0, min(10, 10 - price_percentile / 10))
+                score_space  = max(0, min(10, (target_usage_rate / median_usage) * 5))
+                score_age    = max(0, min(10, 10 - age_percentile / 10))
+                score_floor  = max(0, min(10, 10 - abs(floor_percentile - 50) / 5))
                 score_layout = max(0, min(10, same_layout_pct / 3))
                 
-                scores = {
-                    "價格競爭力": round(score_price, 1),
-                    "空間效率":   round(score_space, 1),
-                    "屋齡優勢":   round(score_age, 1),
-                    "樓層定位":   round(score_floor, 1),
-                    "格局流動性": round(score_layout, 1)
-                }
-
                 # ✅ 使用側邊欄設定的權重
                 weights = st.session_state.get('score_weights', {
                     "價格競爭力": 30,
-                    "空間效率": 25,
-                    "屋齡優勢": 20,
-                    "樓層定位": 15,
+                    "空間效率":   25,
+                    "屋齡優勢":   20,
+                    "樓層定位":   15,
                     "格局流動性": 10
                 })
-
-                # 加權計算（原始分數 * 權重百分比）
-                weighted_total = sum(scores[k] * (weights[k] / 100) for k in scores)
-                total_score = weighted_total * 10  # 轉換成 100 分制
-
+                
+                # ★ 用原始分數（未 round）計算加權總分，最後只 round 一次
+                weighted_total = (
+                    score_price  * (weights["價格競爭力"] / 100) +
+                    score_space  * (weights["空間效率"]   / 100) +
+                    score_age    * (weights["屋齡優勢"]   / 100) +
+                    score_floor  * (weights["樓層定位"]   / 100) +
+                    score_layout * (weights["格局流動性"] / 100)
+                )
+                total_score = round(weighted_total * 10, 1)  # ★ 只在這裡 round 一次
+                
+                # scores 僅供雷達圖和表格「顯示」用，round(1) 不影響 total_score
+                scores = {
+                    "價格競爭力": round(score_price,  1),
+                    "空間效率":   round(score_space,  1),
+                    "屋齡優勢":   round(score_age,    1),
+                    "樓層定位":   round(score_floor,  1),
+                    "格局流動性": round(score_layout, 1),
+                }
+                
                 # 儲存使用的權重（供後續顯示）
-                weights_used = weights.copy() 
+                weights_used = weights.copy()
                 
                 # ✅ 分析完成後，存進 session_state
                 property_id = normalize_property_id(selected_row.get('編號', ''))
@@ -2334,11 +2342,11 @@ def tab1_module():
 
                 # 2. 加上總計列
                 total_row = pd.DataFrame({
-                    '評分項目': ['總計'],
+                    '評分項目':       ['總計'],
                     '原始分數 (0-10)': ['—'],
-                    '權重 (%)': [sum(weights_used.values())],
-                    # 總計直接加總上面的欄位即可
-                    '加權分數': [round(sum(weights_detail_df['加權分數']), 1)]
+                    '權重 (%)':       [sum(weights_used.values())],
+                    # ★ 改成直接用 r['total_score']，不要再把 round 後的欄位加總
+                    '加權分數':       [r['total_score']]
                 })
 
                 weights_detail_df = pd.concat([weights_detail_df, total_row], ignore_index=True)
@@ -2506,7 +2514,7 @@ def tab1_module():
                     with col_a:
                         st.metric("🎯 目標房屋排名", f"第 {t_rank} 名", f"共 {total_cnt} 筆")
                     with col_b:
-                        st.metric("⭐ 綜合總分", f"{t_score:.1f} 分", "滿分 100")
+                        st.metric("⭐ 綜合總分", f"{r['total_score']:.1f} 分", "滿分 100")
                     with col_c:
                         st.metric("📈 超越比例", f"{percentile}%", "同區同類型")
  
