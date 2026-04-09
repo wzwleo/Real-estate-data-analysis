@@ -166,17 +166,24 @@ def _score_one(row, df_all, weights):
         same_pct = same_cnt / n * 100
         score_layout = max(0.0, min(10.0, same_pct / 3))
  
-    scores = {
-        '價格競爭力': score_price,
-        '空間效率':   score_space,
-        '屋齡優勢':   score_age,
-        '樓層定位':   score_floor,
-        '格局流動性': score_layout,
-    }
-    weighted_total = sum(scores[k] * (weights[k] / 100) for k in scores)
-    total_score = round(weighted_total * 10, 1)
- 
-    result.update({k: round(v, 2) for k, v in scores.items()})
+    # ★ 先用原始分數（未 round）計算總分，最後才 round 一次
+    weighted_total = (
+        score_price  * (weights['價格競爭力'] / 100) +
+        score_space  * (weights['空間效率']   / 100) +
+        score_age    * (weights['屋齡優勢']   / 100) +
+        score_floor  * (weights['樓層定位']   / 100) +
+        score_layout * (weights['格局流動性'] / 100)
+    )
+    total_score = round(weighted_total * 10, 1)  # ★ 只在這裡 round 一次
+    
+    # result 裡的各面向分數只是顯示用，round(1) 即可
+    result.update({
+        '價格競爭力': round(score_price,  1),
+        '空間效率':   round(score_space,  1),
+        '屋齡優勢':   round(score_age,    1),
+        '樓層定位':   round(score_floor,  1),
+        '格局流動性': round(score_layout, 1),
+    })
     result['總分'] = total_score
     return result
  
