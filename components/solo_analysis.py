@@ -2544,7 +2544,37 @@ def tab1_module():
  
                 styled = top10.style.apply(highlight_target, axis=1)
                 st.dataframe(styled, use_container_width=True, hide_index=True)
- 
+                
+                # ★ 新增：前十名快速加入收藏
+                st.markdown("#### ⭐ 快速加入收藏")
+                
+                # 每行放 2 個按鈕
+                btn_cols = st.columns(2)
+                for idx, (_, house_row) in enumerate(df_rank.head(10).iterrows()):
+                    house_title = house_row.get('標題', '')
+                    house_id    = normalize_property_id(
+                        df_rank[df_rank['標題'] == house_title]['編號'].iloc[0]
+                        if '編號' in df_rank.columns and not df_rank[df_rank['標題'] == house_title].empty
+                        else ''
+                    )
+                    
+                    # 判斷是否已收藏
+                    is_fav = house_id in st.session_state.get('favorites', set())
+                    btn_label = f"{'✅' if is_fav else '⭐'} #{house_row.get('排名', idx+1)} {house_title[:12]}..."
+                    
+                    with btn_cols[idx % 2]:
+                        if st.button(
+                            btn_label,
+                            key=f"rank_fav_{idx}_{house_id}",
+                            use_container_width=True,
+                            disabled=is_fav,  # 已收藏則變灰不可點
+                        ):
+                            if 'favorites' not in st.session_state:
+                                st.session_state.favorites = set()
+                            st.session_state.favorites.add(house_id)
+                            st.success(f"✅ 已加入收藏：{house_title}")
+                            st.rerun()
+                            
                 # 如果目標房屋不在前十，額外顯示其排名列
                 if t_rank is not None and t_rank > 10:
                     st.info(f"💡 目標房屋「{target_title}」排名第 {t_rank} 名，不在前 10 名內")
