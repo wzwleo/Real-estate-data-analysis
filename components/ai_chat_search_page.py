@@ -41,38 +41,38 @@ def render_ai_chat_search():
             st.success("✅ 已解析您的需求：")
             st.json(st.session_state.ai_latest_filters)
             
-            with st.expander("🔍 查看 AI 原始回應（除錯用）"):
-                st.code(st.session_state.ai_latest_reply, language="json")
+            #with st.expander("🔍 查看 AI 原始回應（除錯用）"):
+            #    st.code(st.session_state.ai_latest_reply, language="json")
             
             if 'ai_search_result_text' in st.session_state:
                 st.markdown(st.session_state.ai_search_result_text)
             
-            if 'ai_debug_info' in st.session_state:
-                debug_info = st.session_state.ai_debug_info
-                with st.expander("📊 除錯資訊 - 點擊查看詳細篩選過程"):
-                    st.write(f"**使用的 CSV 檔案：** `{debug_info['csv_file']}`")
-                    st.write(f"**原始資料筆數：** {debug_info['original_count']}")
-                    st.write(f"**篩選後筆數：** {debug_info['filtered_count']}")
-                    st.write("---")
-                    st.write("**篩選步驟（每一步的資料變化）：**")
-                    if debug_info['filter_steps']:
-                        for step in debug_info['filter_steps']:
-                            st.write(f"- {step}")
-                    else:
-                        st.write("未套用任何篩選條件")
-                    st.write("---")
-                    st.write("**解析出的篩選條件：**")
-                    st.json(debug_info['filters'])
-                    st.write("---")
-                    st.write("**資料欄位：**")
-                    st.code(", ".join(debug_info['columns']))
-                    st.write("---")
-                    st.write("**前 5 筆原始資料範例：**")
-                    st.dataframe(debug_info['sample_data'])
-                    if debug_info['filtered_count'] > 0 and 'filtered_sample' in debug_info:
-                        st.write("---")
-                        st.write("**前 5 筆篩選結果：**")
-                        st.dataframe(debug_info['filtered_sample'])
+            #if 'ai_debug_info' in st.session_state:
+            #    debug_info = st.session_state.ai_debug_info
+            #    with st.expander("📊 除錯資訊 - 點擊查看詳細篩選過程"):
+            #        st.write(f"**使用的 CSV 檔案：** `{debug_info['csv_file']}`")
+            #        st.write(f"**原始資料筆數：** {debug_info['original_count']}")
+            #        st.write(f"**篩選後筆數：** {debug_info['filtered_count']}")
+            #        st.write("---")
+            #        st.write("**篩選步驟（每一步的資料變化）：**")
+            #        if debug_info['filter_steps']:
+            #            for step in debug_info['filter_steps']:
+            #                st.write(f"- {step}")
+            #        else:
+            #            st.write("未套用任何篩選條件")
+            #        st.write("---")
+            #        st.write("**解析出的篩選條件：**")
+            #        st.json(debug_info['filters'])
+            #        st.write("---")
+            #        st.write("**資料欄位：**")
+            #        st.code(", ".join(debug_info['columns']))
+            #        st.write("---")
+            #        st.write("**前 5 筆原始資料範例：**")
+            #        st.dataframe(debug_info['sample_data'])
+            #        if debug_info['filtered_count'] > 0 and 'filtered_sample' in debug_info:
+            #            st.write("---")
+            #            st.write("**前 5 筆篩選結果：**")
+            #            st.dataframe(debug_info['filtered_sample'])
     
     # ====== 使用者輸入 ======
     if prompt := st.chat_input("請輸入查詢條件，例如：『台中市西屯區 2000 萬內 3房2廳2衛 5樓以上』"):
@@ -398,7 +398,7 @@ def render_ai_chat_search():
 
         # ====== 排序選單（標題旁）======
         sort_options = {
-            "(預設) 不排序":  None,
+            "(預設)":  None,
             "價錢由低到高":  ("總價(萬)", True),
             "價錢由高到低":  ("總價(萬)", False),
             "屋齡由低到高":  ("屋齡",    True),
