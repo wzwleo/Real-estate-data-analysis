@@ -8,6 +8,7 @@ import json
 import re
 import numpy as np
 from scipy import stats
+from components.favorites import FavoritesManager
 
 
 try:
@@ -1130,7 +1131,7 @@ def get_favorites_data():
     return fav_df
 
 def tab1_module():
-    fav_df = get_favorites_data()
+    fav_df = FavoritesManager.get_favorites_data()
     if fav_df.empty:
         st.header("個別分析")
         st.info("⭐ 尚未有收藏房產，無法比較")
