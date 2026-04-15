@@ -39,13 +39,13 @@ def render_ai_chat_search():
     if 'ai_latest_filters' in st.session_state and 'ai_latest_reply' in st.session_state:
         with st.chat_message("assistant"):
             st.success("✅ 已解析您的需求：")
-            st.json(st.session_state.ai_latest_filters)
+            #st.json(st.session_state.ai_latest_filters)
             
             #with st.expander("🔍 查看 AI 原始回應（除錯用）"):
             #    st.code(st.session_state.ai_latest_reply, language="json")
             
-            if 'ai_search_result_text' in st.session_state:
-                st.markdown(st.session_state.ai_search_result_text)
+            #if 'ai_search_result_text' in st.session_state:
+            #    st.markdown(st.session_state.ai_search_result_text)
             
             #if 'ai_debug_info' in st.session_state:
             #    debug_info = st.session_state.ai_debug_info
