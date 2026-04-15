@@ -218,7 +218,7 @@ def render_ai_chat_search():
                                 errors='coerce'
                             )
                     
-                    fill_dict = {k: 0 for k in num_cols.keys() if k not in ['實際樓層', '室數']}
+                    fill_dict = {k: 0 for k in num_cols.keys() if k not in ['實際樓層', '室數', '屋齡']}
                     filtered_df = filtered_df.fillna(fill_dict)
                     
                     filter_steps = []
