@@ -36,12 +36,13 @@ def render_property_list():
 
     # ── 標題列 + 排序選單 ──────────────────────────────
     sort_options = {
-        "(預設) 價錢由低到高":  ("總價(萬)", True),
-        "價錢由高到低":         ("總價(萬)", False),
-        "屋齡由低到高":         ("屋齡",    True),
-        "屋齡由高到低":         ("屋齡",    False),
-        "建坪由低到高":         ("建坪",    True),
-        "建坪由高到低":         ("建坪",    False),
+        "(預設) 不排序":  None,          # ← 改這裡
+        "價錢由低到高":  ("總價(萬)", True),
+        "價錢由高到低":  ("總價(萬)", False),
+        "屋齡由低到高":  ("屋齡",    True),
+        "屋齡由高到低":  ("屋齡",    False),
+        "建坪由低到高":  ("建坪",    True),
+        "建坪由高到低":  ("建坪",    False),
     }
 
     title_col, sort_col = st.columns([3, 2])
@@ -57,9 +58,11 @@ def render_property_list():
         )
 
     # 套用排序
-    sort_col_name, ascending = sort_options[selected_sort]
-    if sort_col_name in df.columns:
-        df = df.sort_values(by=sort_col_name, ascending=ascending, na_position='last')
+    sort_value = sort_options[selected_sort]
+    if sort_value is not None:                          # ← 改這裡
+        sort_col_name, ascending = sort_value
+        if sort_col_name in df.columns:
+            df = df.sort_values(by=sort_col_name, ascending=ascending, na_position='last')
     # ────────────────────────────────────────────────────
 
     current_page_data, current_page, total_pages, total_items = display_pagination(df, items_per_page=10)
