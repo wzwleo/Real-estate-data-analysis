@@ -29,7 +29,7 @@ def render_ai_chat_search():
     if "ai_search_count" not in st.session_state:
         st.session_state.ai_search_count = 0
     if 'favorites' not in st.session_state:
-        st.session_state.favorites = set()
+        st.session_state.favorites = []  # ← 統一用 list
     
     # ====== 顯示現有的聊天記錄 ======
     for chat in st.session_state.chat_history:
