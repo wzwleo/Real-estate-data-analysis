@@ -3,6 +3,7 @@ import google.generativeai as genai
 import json
 import pandas as pd
 import re
+from components.favorites import FavoritesManager, normalize_property_id
 
 def render_ai_chat_search():
     st.header("🤖 AI 房市顧問")
@@ -464,13 +465,14 @@ def render_ai_chat_search():
                 
                 col1, col2, col3, col4, col5, col6, col7 = st.columns([1, 1, 1, 1, 1, 1, 1])
                 with col1:
-                    property_id = row['編號']
-                    is_fav = property_id in st.session_state.favorites
+                    # 收藏按鈕
+                    property_id = normalize_property_id(row['編號'])
+                    is_fav = property_id in st.session_state.get('favorites', [])
                     if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"ai_fav_{property_id}"):
                         if is_fav:
-                            st.session_state.favorites.remove(property_id)
+                            FavoritesManager.remove_favorite(property_id)
                         else:
-                            st.session_state.favorites.add(property_id)
+                            FavoritesManager.add_favorite(row)  # ← 傳整列，連資料一起存
                         st.rerun()
                 with col7:
                     property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
