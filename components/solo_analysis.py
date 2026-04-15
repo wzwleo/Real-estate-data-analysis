@@ -1122,6 +1122,22 @@ def get_favorites_data():
         all_df = st.session_state.all_properties_df
     elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
         all_df = st.session_state.filtered_df
+    else:
+        # 從 CSV 直接載入，確保比較母體永遠存在
+        try:
+            all_df = pd.read_csv('./Data/Taichung-city_buy_properties.csv')
+            # 補上行政區欄位（與條件搜尋邏輯一致）
+            def _parse_district(addr):
+                if pd.isna(addr) or not isinstance(addr, str):
+                    return ""
+                import re
+                match = re.search(r'[市縣](.+?[區鄉鎮市])', addr)
+                return match.group(1) if match else ""
+            if '行政區' not in all_df.columns and '地址' in all_df.columns:
+                all_df['行政區'] = all_df['地址'].apply(_parse_district)
+            st.session_state.all_properties_df = all_df  # 快取起來
+        except Exception:
+            all_df = None
 
     if all_df is None or all_df.empty:
         return pd.DataFrame()
