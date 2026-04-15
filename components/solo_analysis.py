@@ -1295,6 +1295,11 @@ def tab1_module():
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
                 st.stop()
+            # ← 加這段
+            if df_filtered.empty:
+                st.error("❌ 找不到同區同類型的比較資料，無法進行分析。請先執行條件搜尋載入資料。")
+                st.stop()
+                
             try:
                 with st.spinner("📊 正在計算市場價格指標..."):
                     # ✅ 預設值，避免巢狀 if 未執行時 NameError
