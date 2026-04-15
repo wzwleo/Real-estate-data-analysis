@@ -25,10 +25,8 @@ def render_ai_chat_search():
     # ====== 初始化 session_state ======
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
-    
     if "ai_search_count" not in st.session_state:
         st.session_state.ai_search_count = 0
-    
     if 'favorites' not in st.session_state:
         st.session_state.favorites = set()
     
@@ -37,28 +35,24 @@ def render_ai_chat_search():
         with st.chat_message(chat["role"]):
             st.markdown(chat["content"])
     
-    # ====== 顯示最新的 AI 解析結果（如果有的話）======
+    # ====== 顯示最新的 AI 解析結果 ======
     if 'ai_latest_filters' in st.session_state and 'ai_latest_reply' in st.session_state:
         with st.chat_message("assistant"):
             st.success("✅ 已解析您的需求：")
             st.json(st.session_state.ai_latest_filters)
             
-            # 除錯：顯示原始 AI 回應
             with st.expander("🔍 查看 AI 原始回應（除錯用）"):
                 st.code(st.session_state.ai_latest_reply, language="json")
             
-            # 顯示結果統計
             if 'ai_search_result_text' in st.session_state:
                 st.markdown(st.session_state.ai_search_result_text)
             
-            # 除錯資訊
             if 'ai_debug_info' in st.session_state:
                 debug_info = st.session_state.ai_debug_info
                 with st.expander("📊 除錯資訊 - 點擊查看詳細篩選過程"):
                     st.write(f"**使用的 CSV 檔案：** `{debug_info['csv_file']}`")
                     st.write(f"**原始資料筆數：** {debug_info['original_count']}")
                     st.write(f"**篩選後筆數：** {debug_info['filtered_count']}")
-                    
                     st.write("---")
                     st.write("**篩選步驟（每一步的資料變化）：**")
                     if debug_info['filter_steps']:
@@ -66,19 +60,15 @@ def render_ai_chat_search():
                             st.write(f"- {step}")
                     else:
                         st.write("未套用任何篩選條件")
-                    
                     st.write("---")
                     st.write("**解析出的篩選條件：**")
                     st.json(debug_info['filters'])
-                    
                     st.write("---")
                     st.write("**資料欄位：**")
                     st.code(", ".join(debug_info['columns']))
-                    
                     st.write("---")
                     st.write("**前 5 筆原始資料範例：**")
                     st.dataframe(debug_info['sample_data'])
-                    
                     if debug_info['filtered_count'] > 0 and 'filtered_sample' in debug_info:
                         st.write("---")
                         st.write("**前 5 筆篩選結果：**")
@@ -86,23 +76,15 @@ def render_ai_chat_search():
     
     # ====== 使用者輸入 ======
     if prompt := st.chat_input("請輸入查詢條件，例如：『台中市西屯區 2000 萬內 3房2廳2衛 5樓以上』"):
-        # 清除之前的解析結果
-        if 'ai_latest_filters' in st.session_state:
-            del st.session_state.ai_latest_filters
-        if 'ai_latest_reply' in st.session_state:
-            del st.session_state.ai_latest_reply
-        if 'ai_debug_info' in st.session_state:
-            del st.session_state.ai_debug_info
-        if 'ai_search_result_text' in st.session_state:
-            del st.session_state.ai_search_result_text
+        for key in ['ai_latest_filters', 'ai_latest_reply', 'ai_debug_info', 'ai_search_result_text']:
+            if key in st.session_state:
+                del st.session_state[key]
         
-        # 立即顯示使用者訊息
         with st.chat_message("user"):
             st.markdown(prompt)
         st.session_state.chat_history.append({"role": "user", "content": prompt})
         
         with st.spinner("AI 正在分析您的查詢，並篩選資料中..."):
-            # 呼叫 AI 解析查詢
             result_text = ""
             try:
                 system_prompt = """
@@ -154,302 +136,240 @@ def render_ai_chat_search():
   - 高樓層通常指5樓以上，低樓層通常指3樓以下
 - 城市只能是「台中市」
 """
-                
                 full_prompt = f"{system_prompt}\n\n使用者查詢：{prompt}"
                 response = model.generate_content(full_prompt)
                 ai_reply = response.text.strip()
                 
-                # 清理回應
                 if ai_reply.startswith("```json"):
                     ai_reply = ai_reply.replace("```json", "").replace("```", "").strip()
                 
-                # 解析 JSON
                 filters = json.loads(ai_reply)
-                
-                # 儲存 AI 回應到 session_state
                 st.session_state.ai_latest_filters = filters
                 st.session_state.ai_latest_reply = ai_reply
                 
-                # 執行搜尋
-                city = filters.get("city", "台中市")
-                city_file_map = {
-                    "台中市": "Taichung-city_buy_properties.csv"
+                # ====== 儲存本次格局目標，供排序使用 ======
+                st.session_state.ai_layout_target = {
+                    'rooms':        filters.get('rooms', 0),
+                    'living_rooms': filters.get('living_rooms', 0),
+                    'bathrooms':    filters.get('bathrooms', 0),
+                    'study_rooms':  filters.get('study_rooms', 0),
                 }
+                # ==========================================
+
+                city = filters.get("city", "台中市")
+                city_file_map = {"台中市": "Taichung-city_buy_properties.csv"}
                 
                 csv_file = city_file_map.get(city)
                 if not csv_file:
                     result_text = "❌ 不支援的城市"
                 else:
-                    # 載入資料
                     df = pd.read_csv(f"./Data/{csv_file}")
                     
-                    # ====== 新增：格局欄位解析 ======
                     def parse_layout(layout_str):
-                        """
-                        解析格局字串，例如：
-                        - '3房2廳2衛' -> (3, 2, 2, 0)
-                        - '3房2廳2衛1室' -> (3, 2, 2, 1)
-                        - '2房2廳1衛' -> (2, 2, 1, 0)
-                        """
                         if pd.isna(layout_str) or not isinstance(layout_str, str):
                             return None, None, None, None
-                        
-                        rooms = re.search(r'(\d+)房', layout_str)
-                        living = re.search(r'(\d+)廳', layout_str)
-                        bath = re.search(r'(\d+)衛', layout_str)
-                        study = re.search(r'(\d+)室', layout_str)
-                        
+                        rooms   = re.search(r'(\d+)房', layout_str)
+                        living  = re.search(r'(\d+)廳', layout_str)
+                        bath    = re.search(r'(\d+)衛', layout_str)
+                        study   = re.search(r'(\d+)室', layout_str)
                         return (
-                            int(rooms.group(1)) if rooms else None,
+                            int(rooms.group(1))  if rooms  else None,
                             int(living.group(1)) if living else None,
-                            int(bath.group(1)) if bath else None,
-                            int(study.group(1)) if study else None
+                            int(bath.group(1))   if bath   else None,
+                            int(study.group(1))  if study  else None
                         )
                     
                     if '格局' in df.columns:
                         df[['房間數', '廳數', '衛數', '室數']] = df['格局'].apply(
                             lambda x: pd.Series(parse_layout(x))
                         )
-                    # ================================
                     
-                    # 行政區預處理
                     def quick_parse_district(addr):
-                        if pd.isna(addr) or not isinstance(addr, str): return ""
-                        # 簡單邏輯：找「市」或「縣」之後的三個字（例如：台中市西屯區 -> 西屯區）
-                        import re
+                        if pd.isna(addr) or not isinstance(addr, str):
+                            return ""
                         match = re.search(r'[市縣](.+?[區鄉鎮市])', addr)
                         return match.group(1) if match else ""
-                        
+                    
                     if '地址' in df.columns:
                         df['行政區'] = df['地址'].apply(quick_parse_district)
                     
-                    # ====== 樓層預處理 ======
                     def parse_floor(floor_str):
-                        """
-                        從樓層字串中提取實際樓層數字
-                        例如：'2樓/12樓' -> 2, '10樓/20樓' -> 10
-                        """
                         if pd.isna(floor_str) or not isinstance(floor_str, str):
                             return None
-                        
-                        # 使用正規表達式提取第一個數字（所在樓層）
                         match = re.search(r'^(\d+)樓', floor_str)
-                        if match:
-                            return int(match.group(1))
-                        return None
+                        return int(match.group(1)) if match else None
                     
                     if '樓層' in df.columns:
                         df['實際樓層'] = df['樓層'].apply(parse_floor)
-                    # ================================
                     
                     original_count = len(df)
-                    
-                    # 過濾資料（內嵌函式）
                     filtered_df = df.copy()
                     
-                    # ====== 強制轉型：確保數字欄位真的是數字 ======
                     num_cols = {
-                        '總價(萬)': 'budget',
-                        '屋齡': 'age',
-                        '建坪': 'area',
-                        '房間數': 'rooms',
-                        '廳數': 'living_rooms',
-                        '衛數': 'bathrooms',
-                        '室數': 'study_rooms',
-                        '實際樓層': 'floor'
+                        '總價(萬)': 'budget', '屋齡': 'age', '建坪': 'area',
+                        '房間數': 'rooms', '廳數': 'living_rooms',
+                        '衛數': 'bathrooms', '室數': 'study_rooms', '實際樓層': 'floor'
                     }
-                    
                     for col in num_cols.keys():
                         if col in filtered_df.columns:
-                            # 1. 轉成字串 2. 移除逗號 3. 轉成數字 (無法轉換的會變成 NaN)
                             filtered_df[col] = pd.to_numeric(
-                                filtered_df[col].astype(str).str.replace(',', ''), 
+                                filtered_df[col].astype(str).str.replace(',', ''),
                                 errors='coerce'
                             )
                     
-                    # 順手補一個：把 NaN 的地方填入 0，避免比大小時又噴錯（樓層和室數除外）
                     fill_dict = {k: 0 for k in num_cols.keys() if k not in ['實際樓層', '室數']}
                     filtered_df = filtered_df.fillna(fill_dict)
-                    # ============================================
                     
-                    filter_steps = []  # 記錄每個篩選步驟
+                    filter_steps = []
                     
                     try:
-                        # 行政區篩選邏輯 (修正版：支援複選)
                         if filters.get('district') and filters['district'] != "不限":
                             if '行政區' in filtered_df.columns:
                                 before_count = len(filtered_df)
-                                
-                                # 1. 統一分隔符號，把 頓號、全型逗號 都換成 半型逗號
                                 raw_districts = filters['district'].replace('、', ',').replace('，', ',')
-                                
-                                # 2. 拆分成清單，例如 ["西屯區", "北屯區"]
                                 dist_list = [d.strip() for d in raw_districts.split(',') if d.strip()]
-                                
-                                # 3. 建立正規表達式的「或」型式，例如 "西屯區|北屯區"
                                 search_pattern = '|'.join(dist_list)
-                                
-                                # 4. 執行篩選
                                 filtered_df = filtered_df[
                                     filtered_df['行政區'].astype(str).str.contains(search_pattern, na=False)
                                 ]
-                                
-                                after_count = len(filtered_df)
-                                filter_steps.append(f"行政區({raw_districts}): {before_count} → {after_count}")
+                                filter_steps.append(f"行政區({raw_districts}): {before_count} → {len(filtered_df)}")
                         
-                        # 房屋類型篩選
                         if filters.get('housetype') and filters['housetype'] != "不限":
                             if '類型' in filtered_df.columns:
                                 before_count = len(filtered_df)
                                 filtered_df = filtered_df[
                                     filtered_df['類型'].astype(str).str.contains(filters['housetype'], case=False, na=False)
                                 ]
-                                after_count = len(filtered_df)
-                                filter_steps.append(f"類型={filters['housetype']}: {before_count} → {after_count}")
+                                filter_steps.append(f"類型={filters['housetype']}: {before_count} → {len(filtered_df)}")
                         
-                        # 預算下限
                         if filters.get('budget_min', 0) > 0 and '總價(萬)' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[filtered_df['總價(萬)'] >= filters['budget_min']]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"預算>={filters['budget_min']}萬: {before_count} → {after_count}")
+                            filter_steps.append(f"預算>={filters['budget_min']}萬: {before_count} → {len(filtered_df)}")
                         
-                        # 預算上限
                         if filters.get('budget_max', 1000000) < 1000000 and '總價(萬)' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[filtered_df['總價(萬)'] <= filters['budget_max']]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"預算<={filters['budget_max']}萬: {before_count} → {after_count}")
+                            filter_steps.append(f"預算<={filters['budget_max']}萬: {before_count} → {len(filtered_df)}")
                         
-                        # 屋齡下限
                         if filters.get('age_min', 0) > 0 and '屋齡' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[filtered_df['屋齡'] >= filters['age_min']]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"屋齡>={filters['age_min']}年: {before_count} → {after_count}")
+                            filter_steps.append(f"屋齡>={filters['age_min']}年: {before_count} → {len(filtered_df)}")
                         
-                        # 屋齡上限
                         if filters.get('age_max', 100) < 100 and '屋齡' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[filtered_df['屋齡'] <= filters['age_max']]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"屋齡<={filters['age_max']}年: {before_count} → {after_count}")
+                            filter_steps.append(f"屋齡<={filters['age_max']}年: {before_count} → {len(filtered_df)}")
                         
-                        # 建坪下限
                         if filters.get('area_min', 0) > 0 and '建坪' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[filtered_df['建坪'] >= filters['area_min']]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"建坪>={filters['area_min']}: {before_count} → {after_count}")
+                            filter_steps.append(f"建坪>={filters['area_min']}: {before_count} → {len(filtered_df)}")
                         
-                        # 建坪上限
                         if filters.get('area_max', 1000) < 1000 and '建坪' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[filtered_df['建坪'] <= filters['area_max']]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"建坪<={filters['area_max']}: {before_count} → {after_count}")
+                            filter_steps.append(f"建坪<={filters['area_max']}: {before_count} → {len(filtered_df)}")
                         
-                        # ====== 樓層篩選 ======
-                        # 樓層下限
                         if filters.get('floor_min', 0) > 0 and '實際樓層' in filtered_df.columns:
                             before_count = len(filtered_df)
-                            # 只篩選有效樓層資料
                             filtered_df = filtered_df[
-                                (filtered_df['實際樓層'].notna()) & 
+                                (filtered_df['實際樓層'].notna()) &
                                 (filtered_df['實際樓層'] >= filters['floor_min'])
                             ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"樓層>={filters['floor_min']}樓: {before_count} → {after_count}")
+                            filter_steps.append(f"樓層>={filters['floor_min']}樓: {before_count} → {len(filtered_df)}")
                         
-                        # 樓層上限
                         if filters.get('floor_max', 0) > 0 and '實際樓層' in filtered_df.columns:
                             before_count = len(filtered_df)
-                            # 只篩選有效樓層資料
                             filtered_df = filtered_df[
-                                (filtered_df['實際樓層'].notna()) & 
+                                (filtered_df['實際樓層'].notna()) &
                                 (filtered_df['實際樓層'] <= filters['floor_max'])
                             ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"樓層<={filters['floor_max']}樓: {before_count} → {after_count}")
-                        # ============================
+                            filter_steps.append(f"樓層<={filters['floor_max']}樓: {before_count} → {len(filtered_df)}")
                         
-                        # ====== 格局篩選（使用解析後的欄位）======
-                        # 房間數篩選（精確比對）
                         if filters.get('rooms', 0) > 0 and '房間數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
-                                (filtered_df['房間數'].notna()) & 
+                                (filtered_df['房間數'].notna()) &
                                 (filtered_df['房間數'] >= filters['rooms'])
                             ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"房間數={filters['rooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"房間數>={filters['rooms']}: {before_count} → {len(filtered_df)}")
                         
-                        # 廳數篩選（精確比對）
                         if filters.get('living_rooms', 0) > 0 and '廳數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
-                                (filtered_df['廳數'].notna()) & 
+                                (filtered_df['廳數'].notna()) &
                                 (filtered_df['廳數'] >= filters['living_rooms'])
                             ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"廳數={filters['living_rooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"廳數>={filters['living_rooms']}: {before_count} → {len(filtered_df)}")
                         
-                        # 衛數篩選（精確比對）
                         if filters.get('bathrooms', 0) > 0 and '衛數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
-                                (filtered_df['衛數'].notna()) & 
+                                (filtered_df['衛數'].notna()) &
                                 (filtered_df['衛數'] >= filters['bathrooms'])
                             ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"衛數={filters['bathrooms']}: {before_count} → {after_count}")
+                            filter_steps.append(f"衛數>={filters['bathrooms']}: {before_count} → {len(filtered_df)}")
                         
-                        # 室數篩選（精確比對）
                         if filters.get('study_rooms', 0) > 0 and '室數' in filtered_df.columns:
                             before_count = len(filtered_df)
                             filtered_df = filtered_df[
-                                (filtered_df['室數'].notna()) & 
+                                (filtered_df['室數'].notna()) &
                                 (filtered_df['室數'] >= filters['study_rooms'])
                             ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"室數={filters['study_rooms']}: {before_count} → {after_count}")
-                        # =========================================
+                            filter_steps.append(f"室數>={filters['study_rooms']}: {before_count} → {len(filtered_df)}")
                         
-                        # 車位篩選
                         if 'car_grip' in filters and '車位' in filtered_df.columns:
                             before_count = len(filtered_df)
                             if filters['car_grip'] == "需要":
                                 filtered_df = filtered_df[
-                                    (filtered_df['車位'].notna()) & 
-                                    (filtered_df['車位'] != "無車位") & 
+                                    (filtered_df['車位'].notna()) &
+                                    (filtered_df['車位'] != "無車位") &
                                     (filtered_df['車位'] != 0)
                                 ]
                             elif filters['car_grip'] == "不要":
                                 filtered_df = filtered_df[
-                                    (filtered_df['車位'].isna()) | 
-                                    (filtered_df['車位'] == "無車位") | 
+                                    (filtered_df['車位'].isna()) |
+                                    (filtered_df['車位'] == "無車位") |
                                     (filtered_df['車位'] == 0)
                                 ]
-                            after_count = len(filtered_df)
-                            filter_steps.append(f"車位={filters['car_grip']}: {before_count} → {after_count}")
-                            
+                            filter_steps.append(f"車位={filters['car_grip']}: {before_count} → {len(filtered_df)}")
+
+                        # ====== 計算格局差距分數（完全符合排最前）======
+                        # 分數 = 各欄位「實際值 - 目標值」的總和，0 = 完全符合，越大越超出
+                        layout_target = st.session_state.ai_layout_target
+                        def calc_layout_score(row):
+                            score = 0
+                            mapping = [
+                                ('房間數',  'rooms'),
+                                ('廳數',    'living_rooms'),
+                                ('衛數',    'bathrooms'),
+                                ('室數',    'study_rooms'),
+                            ]
+                            for col, key in mapping:
+                                target = layout_target.get(key, 0)
+                                if target > 0 and col in row.index:
+                                    actual = row[col] if pd.notna(row[col]) else target
+                                    score += max(0, actual - target)
+                            return score
+
+                        filtered_df['_layout_score'] = filtered_df.apply(calc_layout_score, axis=1)
+                        # 先按格局分數升序排列（完全符合在前）
+                        filtered_df = filtered_df.sort_values('_layout_score', ascending=True, kind='stable')
+                        # =====================================================
+
                     except Exception as e:
                         result_text = f"❌ 篩選過程中發生錯誤: {e}"
                     
                     if not result_text.startswith("❌"):
-                        # 每次新搜尋時更新計數器
                         st.session_state.ai_search_count += 1
-                        
-                        # 儲存到 session_state
                         st.session_state.ai_filtered_df = filtered_df
                         st.session_state.ai_search_city = city
                         st.session_state.ai_current_page = 1
                         
-                        # 顯示結果數量
                         result_text = f"🔍 找到 **{len(filtered_df)}** 筆符合條件的物件"
                         st.session_state.ai_search_result_text = result_text
-                        
-                        # 儲存除錯資訊到 session_state
                         st.session_state.ai_debug_info = {
                             'csv_file': csv_file,
                             'original_count': original_count,
@@ -460,7 +380,7 @@ def render_ai_chat_search():
                             'sample_data': df.head(5),
                             'filtered_sample': filtered_df.head(5) if len(filtered_df) > 0 else None
                         }
-                
+            
             except json.JSONDecodeError:
                 result_text = "❌ AI 回應格式錯誤，請重新嘗試\n\n原始回應：\n" + ai_reply
             except Exception as e:
@@ -468,14 +388,50 @@ def render_ai_chat_search():
                 import traceback
                 result_text += f"\n\n詳細錯誤：\n{traceback.format_exc()}"
             
-            # 儲存 assistant 回應到聊天記錄
             st.session_state.chat_history.append({"role": "assistant", "content": result_text})
             st.rerun()
     
     # ====== 顯示搜尋結果 ======
     if 'ai_filtered_df' in st.session_state and not st.session_state.ai_filtered_df.empty:
         st.markdown("---")
-        df = st.session_state.ai_filtered_df
+        df = st.session_state.ai_filtered_df.copy()
+
+        # ====== 排序選單（標題旁）======
+        sort_options = {
+            "(預設) 不排序":  None,
+            "價錢由低到高":  ("總價(萬)", True),
+            "價錢由高到低":  ("總價(萬)", False),
+            "屋齡由低到高":  ("屋齡",    True),
+            "屋齡由高到低":  ("屋齡",    False),
+            "建坪由低到高":  ("建坪",    True),
+            "建坪由高到低":  ("建坪",    False),
+        }
+
+        title_col, sort_col = st.columns([3, 2])
+        with title_col:
+            st.subheader(f"🏠 {st.session_state.ai_search_city}房產列表")
+        with sort_col:
+            selected_sort = st.selectbox(
+                "排序方式",
+                options=list(sort_options.keys()),
+                index=0,
+                key="ai_sort_selector",
+                label_visibility="collapsed"
+            )
+
+        # 套用排序：若有選排序，在格局分數內二次排序；若無則維持格局分數順序
+        sort_value = sort_options[selected_sort]
+        if sort_value is not None:
+            sort_col_name, ascending = sort_value
+            if sort_col_name in df.columns:
+                # 以格局分數為第一鍵、使用者選的欄位為第二鍵
+                df = df.sort_values(
+                    by=['_layout_score', sort_col_name],
+                    ascending=[True, ascending],
+                    na_position='last',
+                    kind='stable'
+                )
+        # =====================================
         
         # 分頁處理
         items_per_page = 10
@@ -488,10 +444,6 @@ def render_ai_chat_search():
         end_idx = min(start_idx + items_per_page, total_items)
         current_page_data = df.iloc[start_idx:end_idx]
         
-        st.subheader(f"🏠 {st.session_state.ai_search_city}房產列表")
-        
-        # 顯示物件卡片
-        search_count = st.session_state.ai_search_count
         for idx, (index, row) in enumerate(current_page_data.iterrows()):
             with st.container():
                 global_idx = (current_page - 1) * 10 + idx + 1
@@ -514,14 +466,12 @@ def render_ai_chat_search():
                 with col1:
                     property_id = row['編號']
                     is_fav = property_id in st.session_state.favorites
-                    unique_key = f"ai_fav_{property_id}"
-                    if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=unique_key):
+                    if st.button("✅ 已收藏" if is_fav else "⭐ 收藏", key=f"ai_fav_{property_id}"):
                         if is_fav:
                             st.session_state.favorites.remove(property_id)
                         else:
                             st.session_state.favorites.add(property_id)
                         st.rerun()
-                
                 with col7:
                     property_url = f"https://www.sinyi.com.tw/buy/house/{row['編號']}?breadcrumb=list"
                     st.markdown(
@@ -529,23 +479,19 @@ def render_ai_chat_search():
                         f'<button style="padding:5px 10px;">Property Link</button></a>',
                         unsafe_allow_html=True
                     )
-                
                 st.markdown("---")
         
         # 分頁控制
         if total_pages > 1:
             col1, col2, col3, col4, col5 = st.columns([1, 1, 2, 1, 1])
-            
             with col1:
                 if st.button("⏮️ 第一頁", disabled=(current_page == 1), key="ai_first"):
                     st.session_state.ai_current_page = 1
                     st.rerun()
-            
             with col2:
                 if st.button("⏪ 上一頁", disabled=(current_page == 1), key="ai_prev"):
                     st.session_state.ai_current_page = max(1, current_page - 1)
                     st.rerun()
-            
             with col3:
                 new_page = st.selectbox(
                     "選擇頁面",
@@ -556,12 +502,10 @@ def render_ai_chat_search():
                 if new_page != current_page:
                     st.session_state.ai_current_page = new_page
                     st.rerun()
-            
             with col4:
                 if st.button("下一頁 ⏩", disabled=(current_page == total_pages), key="ai_next"):
                     st.session_state.ai_current_page = current_page + 1
                     st.rerun()
-            
             with col5:
                 if st.button("最後一頁 ⏭️", disabled=(current_page == total_pages), key="ai_last"):
                     st.session_state.ai_current_page = total_pages
