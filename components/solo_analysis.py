@@ -1303,14 +1303,7 @@ def tab1_module():
                     compare_df['建坪數'] = pd.to_numeric(compare_df['建坪'], errors='coerce')  # ✅ 改用建坪
                     compare_df = compare_df.dropna(subset=['總價', '建坪數'])  # ✅ 改用建坪數
                     
-                    # 相容 '總價(萬)' 或 '總價' 兩種欄位名
-                    if '總價(萬)' in selected_row.index:
-                        target_price = float(selected_row['總價(萬)'])
-                    elif '總價' in selected_row.index:
-                        target_price = float(selected_row['總價'])
-                    else:
-                        st.error("❌ 找不到總價欄位")
-                        st.stop()
+                    target_price = float(selected_row['總價(萬)'])
                     target_area = float(selected_row['建坪'])  # ✅ 改用建坪
                     price_per_ping = round(target_price / target_area, 2)  # ✅ 建坪單價
                     
