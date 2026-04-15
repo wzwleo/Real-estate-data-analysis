@@ -213,10 +213,11 @@ def render_ai_chat_search():
                     }
                     for col in num_cols.keys():
                         if col in filtered_df.columns:
-                            filtered_df[col] = pd.to_numeric(
-                                filtered_df[col].astype(str).str.replace(',', ''),
-                                errors='coerce'
-                            )
+                            cleaned = filtered_df[col].astype(str).str.replace(',', '')
+                            # 屋齡欄位可能含有「年」字，需要額外清除
+                            if col == '屋齡':
+                                cleaned = cleaned.str.replace('年', '').str.strip()
+                            filtered_df[col] = pd.to_numeric(cleaned, errors='coerce')
                     
                     fill_dict = {k: 0 for k in num_cols.keys() if k not in ['實際樓層', '室數', '屋齡']}
                     filtered_df = filtered_df.fillna(fill_dict)
@@ -451,7 +452,7 @@ def render_ai_chat_search():
                 
                 col1, col2, col3, col4 = st.columns([7, 1, 1, 2])
                 with col1:
-                    display_age = "預售" if row['屋齡'] == 0 else f"{row['屋齡']}年"
+                    display_age = "預售" if pd.isna(row['屋齡']) or row['屋齡'] == 0 else f"{row['屋齡']}年"
                     st.subheader(f"#{global_idx} 🏠 {row['標題']}")
                     st.write(f"**地址：** {row['地址']} | **屋齡：** {display_age} | **類型：** {row['類型']}")
                     st.write(f"**建坪：** {row['建坪']} | **主+陽：** {row['主+陽']} | **格局：** {row['格局']} | **樓層：** {row['樓層']}")
