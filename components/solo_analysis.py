@@ -2702,7 +2702,7 @@ def render_float_chat():
         "有什麼需要特別注意的地方？",
     ]
     preset_btns_html = "".join([
-        f'<button class="preset-btn" onclick="fillInput(`{q}`)">{q}</button>'
+        f'<button class="preset-btn" data-q="{q}" onclick="fillInput(this.dataset.q)">{q}</button>'
         for q in preset_questions
     ])
 
