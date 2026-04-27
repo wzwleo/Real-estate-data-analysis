@@ -2702,7 +2702,7 @@ def render_float_chat():
         "有什麼需要特別注意的地方？",
     ]
     preset_btns_html = "".join([
-        f'<button class="preset-btn" data-q="{q}" onclick="fillInput(this.dataset.q)">{q}</button>'
+        f'<button class="preset-btn" data-q="{q}" onclick="fillInput(this)">{q}</button>'
         for q in preset_questions
     ])
 
@@ -2895,8 +2895,6 @@ def render_float_chat():
 const GEMINI_KEY = {gemini_key_js};
 const CONTEXT    = {context_js};
 
-let isRequesting = false;
-
 function toggleChat() {{
   const win = document.getElementById('chat-window');
   win.classList.toggle('open');
@@ -2906,11 +2904,8 @@ function toggleChat() {{
   }}
 }}
 
-function fillInput(text) {{
-  if (isRequesting) {{
-    appendMsg('ai', '⏳ 請等待上一個問題回答完畢');
-    return;
-  }}
+function fillInput(btn) {{
+  const text = btn.dataset.q;
   document.getElementById('msg-input').value = text;
   sendMsg();
 }}
@@ -2942,20 +2937,28 @@ function appendMsg(role, text) {{
   return bubble;
 }}
 
+function lockBtns() {{
+  document.getElementById('send-btn').disabled = true;
+  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = true);
+}}
+
+function unlockBtns() {{
+  document.getElementById('send-btn').disabled = false;
+  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = false);
+}}
+
 async function sendMsg() {{
   const input = document.getElementById('msg-input');
-  const btn   = document.getElementById('send-btn');
   const text  = input.value.trim();
-  if (!text || isRequesting) return;
+  if (!text) return;
   if (!GEMINI_KEY) {{
     appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
     return;
   }}
 
-  isRequesting = true;
+  lockBtns();
   appendMsg('user', text);
   input.value = '';
-  btn.disabled = true;
 
   const body = document.getElementById('chat-body');
   const typing = document.createElement('div');
@@ -2982,20 +2985,17 @@ async function sendMsg() {{
     if (data.error) {{
       document.getElementById('typing')?.remove();
       appendMsg('ai', '❌ API 錯誤：' + data.error.message);
-      btn.disabled = false;
-      isRequesting = false;
-      return;
+    }} else {{
+      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
+      document.getElementById('typing')?.remove();
+      appendMsg('ai', reply);
     }}
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
-    document.getElementById('typing')?.remove();
-    appendMsg('ai', reply);
   }} catch(e) {{
     document.getElementById('typing')?.remove();
     appendMsg('ai', '抱歉，發生錯誤：' + e.message);
   }}
 
-  btn.disabled = false;
-  isRequesting = false;
+  unlockBtns();
   scrollBottom();
 }}
 </script>
