@@ -2663,12 +2663,12 @@ def render_float_chat():
     if 'solo_analysis_result' in st.session_state:
         r = st.session_state['solo_analysis_result']
         selected = r.get('selected_row', {})
-        context = f"""你是一位台灣房市分析顧問，以下是使用者目前正在分析的房屋資料，請根據這些資料回答問題。
+        context = f"""你是一位台灣房市分析顧問，請根據以下房屋資料與市場數據回答問題，用繁體中文回答，簡潔清楚，不超過 200 字。
+
 【房屋基本資訊】
 標題：{selected.get('標題', '未提供')}
-地址：{selected.get('地址', '未提供')}
-類型：{selected.get('類型', '未提供')}
 行政區：{selected.get('行政區', '未提供')}
+類型：{selected.get('類型', '未提供')}
 總價：{selected.get('總價(萬)', '未提供')} 萬
 建坪：{selected.get('建坪', '未提供')} 坪
 實際坪數：{selected.get('主+陽', '未提供')} 坪
@@ -2676,13 +2676,20 @@ def render_float_chat():
 樓層：{selected.get('樓層', '未提供')}
 屋齡：{selected.get('屋齡', '未提供')}
 綜合評分：{r.get('total_score', '未提供')} 分
-【AI 分析結論】
-價格分析：{r.get('price_text', '')}
-坪數分析：{r.get('space_text', '')}
-屋齡分析：{r.get('age_text', '')}
-樓層分析：{r.get('floor_text', '')}
-格局分析：{r.get('layout_text', '')}
-綜合總結：{r.get('summary_text', '')}"""
+
+【各面向原始分數（0-10分）】
+價格競爭力：{r.get('scores', {}).get('價格競爭力', '未提供')}
+空間效率：{r.get('scores', {}).get('空間效率', '未提供')}
+屋齡優勢：{r.get('scores', {}).get('屋齡優勢', '未提供')}
+樓層定位：{r.get('scores', {}).get('樓層定位', '未提供')}
+格局流動性：{r.get('scores', {}).get('格局流動性', '未提供')}
+
+【市場比較數據】
+價格百分位：{r.get('analysis_payload', {}).get('價格分布', {}).get('價格百分位', '未提供')}%（越低越便宜）
+市場中位數：{r.get('analysis_payload', {}).get('價格分布', {}).get('市場中位數(萬)', '未提供')} 萬
+空間使用率百分位：{r.get('floor_area_payload', {}).get('坪數分布', {}).get('使用率百分位', '未提供')}%
+屋齡百分位：{r.get('age_analysis_payload', {}).get('屋齡分布', {}).get('屋齡百分位', '未提供') if r.get('age_analysis_payload') else '未提供'}%（越低越新）
+樓層百分位：{r.get('floor_analysis_payload', {}).get('樓層分布', {}).get('樓層百分位', '未提供') if r.get('floor_analysis_payload') else '未提供'}%"""
 
     gemini_key = st.session_state.get("GEMINI_KEY", "")
     has_context = bool(context)
