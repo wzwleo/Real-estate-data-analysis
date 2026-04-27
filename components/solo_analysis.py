@@ -2900,6 +2900,7 @@ function toggleChat() {{
 function fillInput(text) {{
   document.getElementById('msg-input').value = text;
   document.getElementById('msg-input').focus();
+  sendMsg();  // ★ 加這行，點預設問題直接送出
 }}
 
 function handleKey(e) {{
@@ -2966,7 +2967,20 @@ async function sendMsg() {{
       }}
     );
     const data = await res.json();
+    
+    // ★ 先印出完整回應，方便除錯
+    console.log('Gemini response:', JSON.stringify(data));
+    
+    // 檢查是否有錯誤訊息
+    if (data.error) {{
+      document.getElementById('typing')?.remove();
+      appendMsg('ai', '❌ API 錯誤：' + data.error.message);
+      btn.disabled = false;
+      return;
+    }}
+    
     const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
+    
     document.getElementById('typing')?.remove();
     appendMsg('ai', reply);
   }} catch(e) {{
