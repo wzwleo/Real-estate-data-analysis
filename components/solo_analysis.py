@@ -2895,6 +2895,8 @@ def render_float_chat():
 const GEMINI_KEY = {gemini_key_js};
 const CONTEXT    = {context_js};
 
+let isRequesting = false;
+
 function toggleChat() {{
   const win = document.getElementById('chat-window');
   win.classList.toggle('open');
@@ -2905,9 +2907,12 @@ function toggleChat() {{
 }}
 
 function fillInput(text) {{
+  if (isRequesting) {{
+    appendMsg('ai', '⏳ 請等待上一個問題回答完畢');
+    return;
+  }}
   document.getElementById('msg-input').value = text;
-  document.getElementById('msg-input').focus();
-  sendMsg();  // ★ 加這行，點預設問題直接送出
+  sendMsg();
 }}
 
 function handleKey(e) {{
@@ -2925,7 +2930,6 @@ function scrollBottom() {{
 function appendMsg(role, text) {{
   const hint = document.getElementById('empty-hint');
   if (hint) hint.remove();
-
   const body = document.getElementById('chat-body');
   const row  = document.createElement('div');
   row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
@@ -2942,12 +2946,13 @@ async function sendMsg() {{
   const input = document.getElementById('msg-input');
   const btn   = document.getElementById('send-btn');
   const text  = input.value.trim();
-  if (!text) return;
+  if (!text || isRequesting) return;
   if (!GEMINI_KEY) {{
     appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
     return;
   }}
 
+  isRequesting = true;
   appendMsg('user', text);
   input.value = '';
   btn.disabled = true;
@@ -2962,7 +2967,7 @@ async function sendMsg() {{
 
   try {{
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${{GEMINI_KEY}}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{GEMINI_KEY}}`,
       {{
         method: 'POST',
         headers: {{ 'Content-Type': 'application/json' }},
@@ -2974,20 +2979,14 @@ async function sendMsg() {{
       }}
     );
     const data = await res.json();
-    
-    // ★ 先印出完整回應，方便除錯
-    console.log('Gemini response:', JSON.stringify(data));
-    
-    // 檢查是否有錯誤訊息
     if (data.error) {{
       document.getElementById('typing')?.remove();
       appendMsg('ai', '❌ API 錯誤：' + data.error.message);
       btn.disabled = false;
+      isRequesting = false;
       return;
     }}
-    
     const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
-    
     document.getElementById('typing')?.remove();
     appendMsg('ai', reply);
   }} catch(e) {{
@@ -2996,6 +2995,7 @@ async function sendMsg() {{
   }}
 
   btn.disabled = false;
+  isRequesting = false;
   scrollBottom();
 }}
 </script>
