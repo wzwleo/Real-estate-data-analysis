@@ -2656,43 +2656,84 @@ def tab1_module():
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
-    """真正的浮動聊天視窗，用 HTML + JS 直接呼叫 Gemini API"""
-    
-    # 取得背景資料
+    """浮動聊天視窗 - 前端顯示，後端 Python 呼叫 Gemini"""
+
+    # ── 取得背景資料 ──
     context = ""
     if 'solo_analysis_result' in st.session_state:
         r = st.session_state['solo_analysis_result']
         selected = r.get('selected_row', {})
         context = f"""你是一位台灣房市分析顧問，請根據以下房屋資料與市場數據回答問題，用繁體中文回答，簡潔清楚，不超過 200 字。
-
 【房屋基本資訊】
 標題：{selected.get('標題', '未提供')}
 行政區：{selected.get('行政區', '未提供')}
 類型：{selected.get('類型', '未提供')}
 總價：{selected.get('總價(萬)', '未提供')} 萬
 建坪：{selected.get('建坪', '未提供')} 坪
-實際坪數：{selected.get('主+陽', '未提供')} 坪
 格局：{selected.get('格局', '未提供')}
 樓層：{selected.get('樓層', '未提供')}
 屋齡：{selected.get('屋齡', '未提供')}
 綜合評分：{r.get('total_score', '未提供')} 分
-
-【各面向原始分數（0-10分）】
+【各面向分數】
 價格競爭力：{r.get('scores', {}).get('價格競爭力', '未提供')}
 空間效率：{r.get('scores', {}).get('空間效率', '未提供')}
 屋齡優勢：{r.get('scores', {}).get('屋齡優勢', '未提供')}
 樓層定位：{r.get('scores', {}).get('樓層定位', '未提供')}
 格局流動性：{r.get('scores', {}).get('格局流動性', '未提供')}
-
-【市場比較數據】
-價格百分位：{r.get('analysis_payload', {}).get('價格分布', {}).get('價格百分位', '未提供')}%（越低越便宜）
+【市場數據】
+價格百分位：{r.get('analysis_payload', {}).get('價格分布', {}).get('價格百分位', '未提供')}%
 市場中位數：{r.get('analysis_payload', {}).get('價格分布', {}).get('市場中位數(萬)', '未提供')} 萬
-空間使用率百分位：{r.get('floor_area_payload', {}).get('坪數分布', {}).get('使用率百分位', '未提供')}%
-屋齡百分位：{r.get('age_analysis_payload', {}).get('屋齡分布', {}).get('屋齡百分位', '未提供') if r.get('age_analysis_payload') else '未提供'}%（越低越新）
-樓層百分位：{r.get('floor_analysis_payload', {}).get('樓層分布', {}).get('樓層百分位', '未提供') if r.get('floor_analysis_payload') else '未提供'}%"""
+屋齡百分位：{r.get('age_analysis_payload', {}).get('屋齡分布', {}).get('屋齡百分位', '未提供') if r.get('age_analysis_payload') else '未提供'}%"""
 
-    gemini_key = st.session_state.get("GEMINI_KEY", "")
+    # ── 對話紀錄初始化 ──
+    if 'float_chat_history' not in st.session_state:
+        st.session_state.float_chat_history = []
+
+    # ── 處理送出（Python 後端呼叫 Gemini）──
+    if st.session_state.get('_chat_submit'):
+        user_msg = st.session_state.get('_chat_pending_msg', '').strip()
+        if user_msg and context:
+            gemini_key = st.session_state.get("GEMINI_KEY", "")
+            if gemini_key:
+                try:
+                    import google.generativeai as genai
+                    genai.configure(api_key=gemini_key)
+                    model = genai.GenerativeModel("gemini-2.5-flash")
+                    history_text = "\n".join([
+                        f"{'使用者' if m['role'] == 'user' else 'AI'}：{m['content']}"
+                        for m in st.session_state.float_chat_history[-6:]
+                    ])
+                    prompt = f"{context}\n\n【對話紀錄】\n{history_text}\n\n【使用者問題】\n{user_msg}\n\n請用繁體中文回答，簡潔清楚，不超過 200 字。"
+                    response = model.generate_content(prompt)
+                    ai_reply = response.text.strip()
+                except Exception as e:
+                    ai_reply = f"抱歉，發生錯誤：{str(e)}"
+
+                st.session_state.float_chat_history.append(
+                    {'role': 'user', 'content': user_msg}
+                )
+                st.session_state.float_chat_history.append(
+                    {'role': 'ai', 'content': ai_reply}
+                )
+            else:
+                st.session_state.float_chat_history.append(
+                    {'role': 'ai', 'content': '⚠️ 請先在側邊欄設定 Gemini API Key'}
+                )
+
+        st.session_state._chat_submit = False
+        st.session_state._chat_pending_msg = ''
+
+    # ── 組合對話紀錄 HTML ──
+    chat_msgs_html = ""
+    for msg in st.session_state.float_chat_history:
+        if msg['role'] == 'user':
+            chat_msgs_html += f'<div class="msg-row user-row"><div class="msg user-msg">{msg["content"]}</div></div>'
+        else:
+            chat_msgs_html += f'<div class="msg-row ai-row"><div class="msg ai-msg">{msg["content"]}</div></div>'
+
     has_context = bool(context)
+    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
+    empty_hint = '' if chat_msgs_html else '<div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>'
 
     preset_questions = [
         "這間房子適合首購族嗎？",
@@ -2702,14 +2743,12 @@ def render_float_chat():
         "有什麼需要特別注意的地方？",
     ]
     preset_btns_html = "".join([
-        f'<button class="preset-btn" data-q="{q}" onclick="fillInput(this)">{q}</button>'
+        f'<button class="preset-btn" data-q="{q}" onclick="fillPreset(this)">{q}</button>'
         for q in preset_questions
     ])
 
     import json
-    context_js = json.dumps(context)
-    gemini_key_js = json.dumps(gemini_key)
-    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
+    chat_history_js = json.dumps(st.session_state.float_chat_history)
 
     html_code = f"""<!DOCTYPE html>
 <html>
@@ -2717,197 +2756,119 @@ def render_float_chat():
 <meta charset="utf-8">
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    background: transparent;
-    font-family: sans-serif;
-    overflow: hidden;
-  }}
+  body {{ background: transparent; font-family: sans-serif; overflow: hidden; }}
 
   #chat-container {{
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
-    padding: 16px;
-    pointer-events: none;
+    position: fixed; bottom: 0; right: 0;
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 8px; padding: 16px; pointer-events: none;
   }}
-
   #fab {{
-    pointer-events: all;
-    width: 54px;
-    height: 54px;
-    border-radius: 50%;
-    background: #4CAF50;
-    color: white;
-    font-size: 24px;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s, transform 0.15s;
-    flex-shrink: 0;
+    pointer-events: all; width: 54px; height: 54px; border-radius: 50%;
+    background: #4CAF50; color: white; font-size: 24px; border: none;
+    cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s, transform 0.15s; flex-shrink: 0;
   }}
   #fab:hover {{ background: #388E3C; transform: scale(1.08); }}
-
   #chat-window {{
-    pointer-events: all;
-    width: 340px;
-    height: 500px;
-    background: #1a1a1a;
-    border: 1.5px solid #4CAF50;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
+    pointer-events: all; width: 340px; height: 500px;
+    background: #1a1a1a; border: 1.5px solid #4CAF50;
+    border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    display: none; flex-direction: column; overflow: hidden;
   }}
   #chat-window.open {{ display: flex; }}
-
   .chat-header {{
-    background: #4CAF50;
-    color: white;
-    padding: 11px 14px;
-    font-weight: bold;
-    font-size: 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
+    background: #4CAF50; color: white; padding: 11px 14px;
+    font-weight: bold; font-size: 14px; display: flex;
+    justify-content: space-between; align-items: center; flex-shrink: 0;
   }}
   .chat-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
   .close-btn {{
     background: none; border: none; color: white;
     font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
   }}
-
   .chat-body {{
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex: 1; overflow-y: auto; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px;
   }}
   .chat-body::-webkit-scrollbar {{ width: 4px; }}
   .chat-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
-
   .msg-row {{ display: flex; }}
   .user-row {{ justify-content: flex-end; }}
   .ai-row   {{ justify-content: flex-start; }}
   .msg {{
-    max-width: 82%;
-    padding: 7px 11px;
-    border-radius: 12px;
-    font-size: 12.5px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-word;
+    max-width: 82%; padding: 7px 11px; border-radius: 12px;
+    font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
   }}
   .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
   .ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
-  .typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
   .empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
-
+  .processing {{ color: #4CAF50; font-size: 12px; font-style: italic; padding: 4px 8px; text-align: center; }}
   .preset-area {{
-    padding: 6px 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
+    padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 5px;
+    border-top: 1px solid #2a2a2a; flex-shrink: 0;
   }}
   .preset-btn {{
-    background: #222; color: #999;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    padding: 3px 9px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.15s;
+    background: #222; color: #999; border: 1px solid #3a3a3a;
+    border-radius: 10px; padding: 3px 9px; font-size: 11px;
+    cursor: pointer; transition: all 0.15s;
   }}
   .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
-
+  .preset-btn:disabled {{ background: #1a1a1a; color: #444; border-color: #2a2a2a; cursor: not-allowed; }}
   .input-area {{
-    display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
-    align-items: center;
+    display: flex; gap: 6px; padding: 8px 10px;
+    border-top: 1px solid #2a2a2a; flex-shrink: 0; align-items: center;
   }}
   #msg-input {{
-    flex: 1;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    color: #e0e0e0;
-    font-size: 12.5px;
-    padding: 6px 10px;
-    outline: none;
-    resize: none;
-    height: 34px;
-    line-height: 1.4;
+    flex: 1; background: #2a2a2a; border: 1px solid #3a3a3a;
+    border-radius: 8px; color: #e0e0e0; font-size: 12.5px;
+    padding: 6px 10px; outline: none; resize: none; height: 34px; line-height: 1.4;
   }}
   #msg-input:focus {{ border-color: #4CAF50; }}
   #send-btn {{
-    background: #4CAF50; color: white;
-    border: none; border-radius: 8px;
-    padding: 6px 12px; font-size: 13px;
-    cursor: pointer; flex-shrink: 0;
-    transition: background 0.15s;
+    background: #4CAF50; color: white; border: none; border-radius: 8px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer; flex-shrink: 0;
   }}
   #send-btn:hover {{ background: #388E3C; }}
   #send-btn:disabled {{ background: #444; cursor: not-allowed; }}
 </style>
 </head>
 <body>
-
 <div id="chat-container">
   <div id="chat-window">
     <div class="chat-header">
-      <div>
-        🤖 AI 房產顧問
-        <div class="chat-header-sub">{has_context_str}</div>
-      </div>
+      <div>🤖 AI 房產顧問<div class="chat-header-sub">{has_context_str}</div></div>
       <button class="close-btn" onclick="toggleChat()">✕</button>
     </div>
     <div class="chat-body" id="chat-body">
-      <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
+      {empty_hint}
+      {chat_msgs_html}
     </div>
-    <div class="preset-area">
-      {preset_btns_html}
-    </div>
+    <div class="preset-area">{preset_btns_html}</div>
     <div class="input-area">
       <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
       <button id="send-btn" onclick="sendMsg()">送出</button>
     </div>
   </div>
-
   <button id="fab" onclick="toggleChat()">💬</button>
 </div>
 
 <script>
-const GEMINI_KEY = {gemini_key_js};
-const CONTEXT    = {context_js};
+// 頁面載入後自動捲到最底
+window.addEventListener('load', function() {{
+  const body = document.getElementById('chat-body');
+  body.scrollTop = body.scrollHeight;
+}});
 
 function toggleChat() {{
   const win = document.getElementById('chat-window');
   win.classList.toggle('open');
   if (win.classList.contains('open')) {{
-    scrollBottom();
+    const body = document.getElementById('chat-body');
+    body.scrollTop = body.scrollHeight;
     document.getElementById('msg-input').focus();
   }}
-}}
-
-function fillInput(btn) {{
-  const text = btn.dataset.q;
-  document.getElementById('msg-input').value = text;
-  sendMsg();
 }}
 
 function handleKey(e) {{
@@ -2917,86 +2878,62 @@ function handleKey(e) {{
   }}
 }}
 
-function scrollBottom() {{
-  const body = document.getElementById('chat-body');
-  body.scrollTop = body.scrollHeight;
+function fillPreset(btn) {{
+  document.getElementById('msg-input').value = btn.dataset.q;
+  sendMsg();
 }}
 
-function appendMsg(role, text) {{
-  const hint = document.getElementById('empty-hint');
-  if (hint) hint.remove();
-  const body = document.getElementById('chat-body');
-  const row  = document.createElement('div');
-  row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
-  const bubble = document.createElement('div');
-  bubble.className = 'msg ' + (role === 'user' ? 'user-msg' : 'ai-msg');
-  bubble.textContent = text;
-  row.appendChild(bubble);
-  body.appendChild(row);
-  scrollBottom();
-  return bubble;
-}}
-
-function lockBtns() {{
-  document.getElementById('send-btn').disabled = true;
-  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = true);
-}}
-
-function unlockBtns() {{
-  document.getElementById('send-btn').disabled = false;
-  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = false);
-}}
-
-async function sendMsg() {{
+function sendMsg() {{
   const input = document.getElementById('msg-input');
   const text  = input.value.trim();
   if (!text) return;
-  if (!GEMINI_KEY) {{
-    appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
-    return;
-  }}
 
-  lockBtns();
-  appendMsg('user', text);
+  // 顯示使用者訊息
+  const body = document.getElementById('chat-body');
+  const hint = document.getElementById('empty-hint');
+  if (hint) hint.remove();
+
+  const userRow = document.createElement('div');
+  userRow.className = 'msg-row user-row';
+  userRow.innerHTML = '<div class="msg user-msg">' + text + '</div>';
+  body.appendChild(userRow);
+
+  // 顯示處理中提示
+  const proc = document.createElement('div');
+  proc.className = 'processing';
+  proc.id = 'processing-hint';
+  proc.textContent = '⏳ AI 處理中，請稍候再點開視窗查看回答...';
+  body.appendChild(proc);
+  body.scrollTop = body.scrollHeight;
+
+  // 禁用所有按鈕
+  document.getElementById('send-btn').disabled = true;
+  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = true);
   input.value = '';
 
-  const body = document.getElementById('chat-body');
-  const typing = document.createElement('div');
-  typing.className = 'typing';
-  typing.id = 'typing';
-  typing.textContent = 'AI 思考中...';
-  body.appendChild(typing);
-  scrollBottom();
-
+  // 把問題寫入 parent window 的 Streamlit input
   try {{
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{GEMINI_KEY}}`,
-      {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          contents: [{{
-            parts: [{{ text: CONTEXT + '\\n\\n【使用者問題】\\n' + text + '\\n\\n請用繁體中文回答，簡潔清楚，不超過 200 字。' }}]
-          }}]
-        }})
-      }}
-    );
-    const data = await res.json();
-    if (data.error) {{
-      document.getElementById('typing')?.remove();
-      appendMsg('ai', '❌ API 錯誤：' + data.error.message);
-    }} else {{
-      const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
-      document.getElementById('typing')?.remove();
-      appendMsg('ai', reply);
+    const inputs = window.parent.document.querySelectorAll('input[data-testid="stTextInput"]');
+    if (inputs.length > 0) {{
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        window.parent.HTMLInputElement.prototype, 'value').set;
+      nativeInputValueSetter.call(inputs[inputs.length - 1], text);
+      inputs[inputs.length - 1].dispatchEvent(new Event('input', {{ bubbles: true }}));
     }}
-  }} catch(e) {{
-    document.getElementById('typing')?.remove();
-    appendMsg('ai', '抱歉，發生錯誤：' + e.message);
-  }}
+  }} catch(e) {{}}
 
-  unlockBtns();
-  scrollBottom();
+  // 觸發隱藏的送出按鈕
+  setTimeout(function() {{
+    try {{
+      const btns = window.parent.document.querySelectorAll('button[kind="secondary"]');
+      for (let b of btns) {{
+        if (b.innerText.includes('_chat_trigger')) {{
+          b.click();
+          break;
+        }}
+      }}
+    }} catch(e) {{}}
+  }}, 100);
 }}
 </script>
 </body>
@@ -3004,4 +2941,36 @@ async function sendMsg() {{
 
     import streamlit.components.v1 as components
     components.html(html_code, height=620, scrolling=False)
+
+    # ── 隱藏的 Streamlit 輸入區，接收來自浮動視窗的問題 ──
+    st.markdown("""
+    <style>
+    div[data-testid="stTextInput"].chat-hidden,
+    div[data-testid="stTextInput"].chat-hidden * {
+        position: absolute !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+        height: 1px !important;
+        overflow: hidden !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    with st.container():
+        pending = st.text_input(
+            "chat_hidden",
+            key="_chat_input_box",
+            label_visibility="collapsed",
+        )
+        if st.button("_chat_trigger", key="_chat_trigger_btn", type="secondary"):
+            if pending and pending.strip():
+                st.session_state._chat_pending_msg = pending
+                st.session_state._chat_submit = True
+                st.rerun()
+
+    # 清除按鈕
+    if st.session_state.get('float_chat_history'):
+        if st.button("🗑️ 清除對話紀錄", key="clear_float_chat_btn"):
+            st.session_state.float_chat_history = []
+            st.rerun()
 
