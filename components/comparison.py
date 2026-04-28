@@ -2143,7 +2143,7 @@ class ComparisonAnalyzer:
 """
     
     def _call_gemini(self, prompt):
-        """呼叫 Gemini API"""
+        """呼叫 Gemini API：使用輕量模型優先、429 自動重試與 fallback"""
         now = time.time()
         if now - st.session_state.get("last_gemini_call", 0) < 30:
             st.warning("⏳ AI 分析請等待30秒後再試")
@@ -2160,21 +2160,68 @@ class ComparisonAnalyzer:
                     return
                 
                 genai.configure(api_key=key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
 
                 # 避免比較模式或多房屋資料造成 prompt 過長，引發 Gemini 429 / Resource exhausted
                 if len(prompt) > 15000:
                     st.warning("⚠️ 提示詞過長，已自動截斷以避免 Gemini 429。")
                     prompt = prompt[:15000]
 
-                resp = model.generate_content(prompt)
-                
-                st.session_state.gemini_result = resp.text
+                model_candidates = [
+                    "gemini-2.5-flash-lite",
+                    "gemini-2.5-flash",
+                    "gemini-1.5-flash",
+                ]
+
+                last_error = None
+                resp = None
+                used_model = None
+
+                for model_name in model_candidates:
+                    model = genai.GenerativeModel(model_name)
+
+                    for attempt in range(3):
+                        try:
+                            resp = model.generate_content(prompt)
+                            used_model = model_name
+                            break
+                        except Exception as e:
+                            last_error = e
+                            err_text = str(e)
+
+                            # 429 / resource exhausted：等待後重試，再不行換下一個模型
+                            if "429" in err_text or "Resource exhausted" in err_text or "quota" in err_text.lower():
+                                wait_seconds = 5 * (attempt + 1)
+                                st.warning(
+                                    f"⚠️ {model_name} 暫時忙碌或額度受限，"
+                                    f"第 {attempt + 1}/3 次重試，等待 {wait_seconds} 秒..."
+                                )
+                                time.sleep(wait_seconds)
+                                continue
+
+                            # 非 429 類錯誤，直接換下一個模型
+                            break
+
+                    if resp is not None:
+                        break
+
+                if resp is None:
+                    st.error(f"❌ Gemini API 錯誤：所有模型皆失敗。最後錯誤：{last_error}")
+                    return
+
+                text = getattr(resp, "text", "") or ""
+                if not text.strip():
+                    st.error("❌ Gemini 回傳內容為空，請稍後再試。")
+                    return
+
+                st.session_state.gemini_result = text
                 st.session_state.used_prompt = prompt
+                st.session_state.used_gemini_model = used_model
+                st.success(f"✅ AI 分析完成，使用模型：{used_model}")
                 st.rerun()
+
             except Exception as e:
                 st.error(f"❌ Gemini API 錯誤：{e}")
-    
+
     def _get_favorites_data(self):
         """取得收藏"""
         if FavoritesManager is not None:
