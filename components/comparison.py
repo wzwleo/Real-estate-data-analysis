@@ -1873,40 +1873,100 @@ class ComparisonAnalyzer:
                 st.download_button(label="📥 下載分析報告", data=report, file_name=f"{report_title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", mime="text/plain", use_container_width=True, key="download_report")
     
     def _format_facilities_for_prompt(self, res, include_nuisance=False):
-        """格式化設施資料供提示詞使用"""
+        """格式化設施資料供提示詞使用：精簡摘要版，避免 Gemini 429。"""
         df = res.get("facilities_table", pd.DataFrame())
         if df.empty:
             return "無周邊設施資料", ""
-        
+
         if include_nuisance and '主要類別' in df.columns:
-            normal_df = df[df['主要類別'] != "嫌惡設施"]
-            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+            normal_df = df[df['主要類別'] != "嫌惡設施"].copy()
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"].copy()
         else:
-            normal_df = df
+            normal_df = df.copy()
             nuisance_df = pd.DataFrame()
-        
-        normal_text = "\n【一般設施清單】\n" + "=" * 60 + "\n"
-        for house_name in normal_df['房屋'].unique():
-            house_df = normal_df[normal_df['房屋'] == house_name]
-            normal_text += f"\n🏠 {house_name} 周邊一般設施（共 {len(house_df)} 個）：\n" + "-" * 50 + "\n"
-            house_df_sorted = house_df.sort_values('距離(公尺)')
-            for i, row in house_df_sorted.iterrows():
-                normal_text += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
-        
+
+        normal_text = "\n【一般設施統計摘要】\n" + "=" * 40 + "\n"
+
+        if not normal_df.empty:
+            for house_name in normal_df['房屋'].unique():
+                house_df = normal_df[normal_df['房屋'] == house_name].copy()
+                house_df = house_df.sort_values('距離(公尺)')
+
+                total_count = len(house_df)
+                nearest = house_df.head(5)
+
+                category_counts = (
+                    house_df['設施子類別']
+                    .value_counts()
+                    .head(8)
+                    .to_dict()
+                )
+
+                avg_distance = house_df['距離(公尺)'].mean()
+                min_distance = house_df['距離(公尺)'].min()
+
+                normal_text += f"\n🏠 {house_name}\n"
+                normal_text += f"- 一般設施總數：{total_count} 個\n"
+                normal_text += f"- 最近設施距離：{int(min_distance)} 公尺\n"
+                normal_text += f"- 平均設施距離：約 {int(avg_distance)} 公尺\n"
+                normal_text += "- 主要設施類型：\n"
+
+                for subtype, count in category_counts.items():
+                    normal_text += f"  - {subtype}：{count} 個\n"
+
+                normal_text += "- 最近 5 個設施：\n"
+                for _, row in nearest.iterrows():
+                    normal_text += (
+                        f"  - {row['設施名稱']}（{row['設施子類別']}，"
+                        f"{int(row['距離(公尺)'])} 公尺）\n"
+                    )
+        else:
+            normal_text += "無一般設施資料\n"
+
         nuisance_text = ""
+
         if not nuisance_df.empty:
-            nuisance_text = "\n【⚠️ 嫌惡設施清單】\n" + "=" * 60 + "\n"
+            nuisance_text = "\n【嫌惡設施統計摘要】\n" + "=" * 40 + "\n"
+
             for house_name in nuisance_df['房屋'].unique():
-                house_df = nuisance_df[nuisance_df['房屋'] == house_name]
-                nuisance_text += f"\n🏠 {house_name} 周邊嫌惡設施（共 {len(house_df)} 處）：\n" + "-" * 50 + "\n"
-                house_df_sorted = house_df.sort_values('距離(公尺)')
-                for i, row in house_df_sorted.iterrows():
-                    score = row.get('風險分數', '')
-                    score_text = f" [風險:{score}分]" if score else ""
-                    nuisance_text += f"  {i+1}. ⚠️ {row['設施名稱']} ({row['設施子類別']}){score_text} - {row['距離(公尺)']}公尺\n"
-        
+                house_df = nuisance_df[nuisance_df['房屋'] == house_name].copy()
+                house_df = house_df.sort_values('距離(公尺)')
+
+                total_count = len(house_df)
+                nearest = house_df.head(5)
+
+                nuisance_counts = (
+                    house_df['設施子類別']
+                    .value_counts()
+                    .head(8)
+                    .to_dict()
+                )
+
+                min_distance = house_df['距離(公尺)'].min()
+                total_risk = house_df['風險分數'].sum() if '風險分數' in house_df.columns else 0
+
+                nuisance_text += f"\n🏠 {house_name}\n"
+                nuisance_text += f"- 嫌惡設施總數：{total_count} 處\n"
+                nuisance_text += f"- 最近嫌惡設施距離：{int(min_distance)} 公尺\n"
+                nuisance_text += f"- 嫌惡設施風險總分：約 {round(total_risk, 1)} 分\n"
+                nuisance_text += "- 主要嫌惡設施類型：\n"
+
+                for subtype, count in nuisance_counts.items():
+                    nuisance_text += f"  - {subtype}：{count} 處\n"
+
+                nuisance_text += "- 最近 5 個嫌惡設施：\n"
+                for _, row in nearest.iterrows():
+                    score_text = ""
+                    if '風險分數' in row:
+                        score_text = f"，風險 {round(row['風險分數'], 1)} 分"
+
+                    nuisance_text += (
+                        f"  - {row['設施名稱']}（{row['設施子類別']}，"
+                        f"{int(row['距離(公尺)'])} 公尺{score_text}）\n"
+                    )
+
         return normal_text, nuisance_text
-    
+
     def _build_single_without_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
         """單一房屋無嫌惡設施的提示詞"""
         name = list(res["houses_data"].keys())[0]
@@ -2101,6 +2161,12 @@ class ComparisonAnalyzer:
                 
                 genai.configure(api_key=key)
                 model = genai.GenerativeModel("gemini-2.0-flash")
+
+                # 避免比較模式或多房屋資料造成 prompt 過長，引發 Gemini 429 / Resource exhausted
+                if len(prompt) > 15000:
+                    st.warning("⚠️ 提示詞過長，已自動截斷以避免 Gemini 429。")
+                    prompt = prompt[:15000]
+
                 resp = model.generate_content(prompt)
                 
                 st.session_state.gemini_result = resp.text
