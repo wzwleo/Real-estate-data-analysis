@@ -1,4 +1,5 @@
 # components/comparison.py
+# VERSION: FINAL_IMPACT_FILTER_NO_SCORE_EXACT_TABLE_20260512
 import streamlit as st
 import pandas as pd 
 import time
@@ -16,6 +17,7 @@ import io
 import re
 import zipfile
 import pytz
+
 
 # 修正匯入路徑
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -273,93 +275,9 @@ class ComparisonAnalyzer:
     # ==================== 嫌惡設施權重設定 ====================
     
     def _render_impact_weight_settings(self):
-        """渲染影響類型權重設定介面"""
-        st.markdown("#### ⚙️ 嫌惡設施影響權重設定")
-        st.markdown("請選擇您最在意的影響類型，並設定權重（1-10分）")
-        
-        current_weights = st.session_state.get('custom_impact_weights', {})
-        
-        st.markdown("---")
-        st.info("💡 **說明**：勾選您重視的影響類型，並設定權重（1-10分）。\n\n權重越高，相關嫌惡設施的風險分數越高。")
-        
-        st.markdown("#### 📋 選擇您重視的影響類型並設定權重")
-        
-        cols = st.columns(3)
-        impact_list = list(IMPACT_TYPES.items())
-        per_col = len(impact_list) // 3 + (1 if len(impact_list) % 3 > 0 else 0)
-        
-        new_weights = {}
-        
-        for col_idx in range(3):
-            with cols[col_idx]:
-                start_idx = col_idx * per_col
-                end_idx = min((col_idx + 1) * per_col, len(impact_list))
-                
-                for i in range(start_idx, end_idx):
-                    impact_name, impact_info = impact_list[i]
-                    description = impact_info["description"]
-                    color = impact_info["color"]
-                    
-                    is_selected = impact_name in current_weights
-                    default_weight = current_weights.get(impact_name, 5)
-                    
-                    with st.container():
-                        st.markdown(f"""
-                        <div style="border-left:4px solid {color}; padding-left:12px; margin-bottom:8px;">
-                            <span style="font-weight:bold; font-size:14px;">{impact_name}</span>
-                            <span style="font-size:10px; color:#888;">{description[:30]}...</span>
-                        </div>
-                        """, unsafe_allow_html=True)
-                        
-                        col_select, col_weight = st.columns([1, 2])
-                        with col_select:
-                            selected = st.checkbox("重視", key=f"select_{impact_name}", value=is_selected)
-                        with col_weight:
-                            if selected:
-                                weight = st.slider(
-                                    "權重",
-                                    min_value=1,
-                                    max_value=10,
-                                    value=int(default_weight),
-                                    step=1,
-                                    key=f"weight_{impact_name}",
-                                    label_visibility="collapsed"
-                                )
-                                new_weights[impact_name] = weight
-                            else:
-                                st.write("─")
-                        
-                        st.markdown("---")
-        
-        if new_weights:
-            st.markdown("#### 📊 您設定的權重")
-            sorted_weights = sorted(new_weights.items(), key=lambda x: x[1], reverse=True)
-            weight_cols = st.columns(3)
-            for idx, (impact, weight) in enumerate(sorted_weights):
-                with weight_cols[idx % 3]:
-                    st.markdown(f"**{impact}**：{weight} 分")
-            
-            with st.expander("🔍 查看受影響的嫌惡設施", expanded=False):
-                for impact, weight in sorted_weights:
-                    if impact in self._impact_to_nuisances:
-                        nuisances = self._impact_to_nuisances[impact]
-                        st.markdown(f"**{impact} (權重 {weight})** 影響以下設施：")
-                        for n in nuisances:
-                            st.markdown(f"  - {n}")
-                        st.markdown("---")
-        
-        if st.button("✅ 套用權重設定", use_container_width=True, key="apply_weights"):
-            st.session_state.custom_impact_weights = new_weights
-            st.success(f"✅ 已儲存 {len(new_weights)} 項權重設定！")
-            st.rerun()
-        
-        if st.button("🔄 重置所有權重", use_container_width=True, key="reset_weights"):
-            st.session_state.custom_impact_weights = {}
-            st.success("✅ 已重置所有權重")
-            st.rerun()
-        
-        st.markdown("---")
-    
+        """舊版權重設定已停用。嫌惡設施目前不使用分數、不使用權重。"""
+        st.info("目前嫌惡設施採資訊揭露制：只顯示影響分類、最近距離與周圍數量，不計算分數或權重。")
+
     def _get_nuisance_notice(self, nuisance_type, distance, count):
         """依距離與數量產生嫌惡設施提醒文字，不使用風險分數"""
         try:
@@ -391,46 +309,86 @@ class ComparisonAnalyzer:
         return f"{level_text}，可能影響：{impact_text}。{count_text}{advice}"
 
     def _render_nuisance_selection_with_weights(self):
-        """渲染嫌惡設施選擇：不使用權重與分數，單純選擇要查詢的設施"""
+        """先用影響類型篩選，再選擇受影響的嫌惡設施；不使用權重與分數"""
         selected = []
 
-        st.markdown("#### 選擇要分析的嫌惡設施類型（可複選）")
-        st.info("此版本不再計算風險分數，會改用「最近設施、最近距離、周圍數量、提醒文字」呈現。")
+        st.markdown("#### ① 選擇您在意的影響類型")
+        st.info("系統會依照影響類型篩出相關嫌惡設施；此版本只揭露影響分類、最近距離與周圍數量，不計算分數。")
 
         if not NUISANCE_TYPES:
             st.warning("⚠️ 尚未載入嫌惡設施類型資料")
             return selected
 
-        items = list(NUISANCE_TYPES.items())
+        if not IMPACT_TYPES:
+            st.warning("⚠️ 尚未載入影響類型資料")
+            return selected
+
+        selected_impacts = []
+        impact_items = list(IMPACT_TYPES.items())
+        impact_cols = st.columns(3)
+
+        for i, (impact_name, impact_info) in enumerate(impact_items):
+            with impact_cols[i % 3]:
+                checked = st.checkbox(
+                    impact_name,
+                    key=f"nuisance_impact_filter_{impact_name}",
+                    help=impact_info.get("description", "")
+                )
+                if checked:
+                    selected_impacts.append(impact_name)
+
+        if not selected_impacts:
+            st.warning("請先選擇至少一個影響類型。")
+            return selected
+
+        st.markdown("---")
+        st.markdown("#### ② 選擇要查詢的嫌惡設施")
+
+        matched = {}
+        for nuisance_name, nuisance_info in NUISANCE_TYPES.items():
+            impacts = nuisance_info.get("impacts", [])
+            if any(impact in impacts for impact in selected_impacts):
+                matched[nuisance_name] = nuisance_info
+
+        if not matched:
+            st.info("目前沒有符合所選影響類型的嫌惡設施。")
+            return selected
+
+        st.caption(
+            f"已依照「{'、'.join(selected_impacts)}」篩出 {len(matched)} 類嫌惡設施，"
+            "預設全選；您可以取消不想查詢的項目。"
+        )
+
+        items = list(matched.items())
         cols = st.columns(3)
-        per_col = len(items) // 3 + (1 if len(items) % 3 > 0 else 0)
 
-        for col_idx in range(3):
-            with cols[col_idx]:
-                start_idx = col_idx * per_col
-                end_idx = min((col_idx + 1) * per_col, len(items))
+        for i, (nuisance_name, nuisance_info) in enumerate(items):
+            impacts = nuisance_info.get("impacts", [])
+            keywords = nuisance_info.get("keywords", [])
+            impact_text = "、".join(impacts) if impacts else "未分類"
+            help_text = (
+                f"影響分類：{impact_text}\n"
+                f"搜尋關鍵字：{'、'.join(keywords)}"
+            )
 
-                for i in range(start_idx, end_idx):
-                    nuisance_name, nuisance_info = items[i]
-                    impacts = nuisance_info.get("impacts", [])
-                    suggested_distance = nuisance_info.get("suggested_distance", "")
-                    level = nuisance_info.get("level", "")
-
-                    label = f"{nuisance_name}"
-                    help_text = f"等級：{level}｜建議觀察距離：{suggested_distance} 公尺｜可能影響：{'、'.join(impacts)}"
-
-                    if st.checkbox(label, key=f"nuisance_select_{i}", help=help_text):
-                        selected.append(nuisance_name)
+            with cols[i % 3]:
+                checked = st.checkbox(
+                    nuisance_name,
+                    key=f"nuisance_by_impact_{nuisance_name}",
+                    value=True,
+                    help=help_text
+                )
+                st.caption(f"分類：{impact_text}")
+                if checked:
+                    selected.append(nuisance_name)
 
         if selected:
-            st.success(f"✅ 已選擇 {len(selected)} 類嫌惡設施")
+            st.success(f"✅ 目前選擇 {len(selected)} 類嫌惡設施")
         else:
-            st.info("👆 請選擇要分析的嫌惡設施類型")
+            st.warning("⚠️ 您已取消所有嫌惡設施，將不會查詢嫌惡設施。")
 
         return selected
 
-    # ==================== 下載功能 ====================
-    
     def _generate_single_analysis_zip(self, name, analysis):
         """生成單一分析的 Excel 和 TXT 壓縮檔"""
         zip_buffer = io.BytesIO()
@@ -712,7 +670,7 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
         st.subheader("⚠️ 嫌惡設施分析（選填）")
-        st.markdown("勾選後可自由選擇要分析的嫌惡設施類型，系統會顯示最近設施、距離與周圍數量")
+        st.markdown("勾選後先選擇在意的影響類型，再篩出相關嫌惡設施；系統會顯示分類、最近設施、距離與周圍數量")
         
         include_nuisance = st.checkbox("加入嫌惡設施分析", value=False)
         
@@ -899,7 +857,7 @@ class ComparisonAnalyzer:
         """執行分析核心"""
         try:
             s = st.session_state.analysis_settings
-            fav_df = pd.read_json(s["fav"], orient='split')
+            fav_df = pd.read_json(io.StringIO(s["fav"]), orient='split')
             
             with st.status("🔍 分析進行中...", expanded=True) as status:
                 # 步驟1：解析地址
@@ -1138,7 +1096,7 @@ class ComparisonAnalyzer:
         return pd.DataFrame(rows)
     
     def _summarize_nuisance_by_type(self, df):
-        """依房屋與嫌惡設施類型彙整：最近設施、最近距離、周圍數量、提醒"""
+        """依房屋與嫌惡設施類型彙整：影響分類、最近設施、最近距離、周圍數量、提醒"""
         if df is None or df.empty or "主要類別" not in df.columns:
             return pd.DataFrame()
 
@@ -1156,9 +1114,13 @@ class ComparisonAnalyzer:
             distance = float(nearest["距離(公尺)"])
             count = int(len(group))
 
+            info = NUISANCE_TYPES.get(subtype, {})
+            impacts = info.get("impacts", [])
+
             rows.append({
                 "房屋": house,
                 "嫌惡設施類型": subtype,
+                "影響分類": "、".join(impacts) if impacts else "未分類",
                 "最近設施名稱": nearest.get("設施名稱", ""),
                 "最近距離(公尺)": int(round(distance)),
                 "周圍數量": count,
@@ -1166,8 +1128,11 @@ class ComparisonAnalyzer:
                 "place_id": nearest.get("place_id", "")
             })
 
-        return pd.DataFrame(rows).sort_values(["房屋", "最近距離(公尺)"]).reset_index(drop=True)
-    
+        out = pd.DataFrame(rows)
+        if out.empty:
+            return out
+        return out.sort_values(["房屋", "最近距離(公尺)"]).reset_index(drop=True)
+
     def _display_analysis_results(self, res):
         """顯示分析結果"""
         if not res:
@@ -1238,6 +1203,7 @@ class ComparisonAnalyzer:
                         column_config={
                             "房屋": st.column_config.TextColumn(width="small"),
                             "嫌惡設施類型": st.column_config.TextColumn(width="small"),
+                            "影響分類": st.column_config.TextColumn(width="medium"),
                             "最近設施名稱": st.column_config.TextColumn(width="large"),
                             "最近距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
                             "周圍數量": st.column_config.NumberColumn(format="%d 處"),
@@ -1250,6 +1216,7 @@ class ComparisonAnalyzer:
                     for _, row in nuisance_summary_df.iterrows():
                         st.markdown(
                             f"**{row['房屋']}｜{row['嫌惡設施類型']}**  \n"
+                            f"影響分類：{row.get('影響分類', '未分類')}  \n"
                             f"最近設施：{row['最近設施名稱']}｜"
                             f"最近距離：{row['最近距離(公尺)']} 公尺｜"
                             f"周圍數量：{row['周圍數量']} 處  \n"
@@ -1676,6 +1643,7 @@ class ComparisonAnalyzer:
         profile = res.get("buyer_profile", "未指定")
         mode = res["analysis_mode"]
         include_nuisance = res.get("include_nuisance", False)
+        nuisance_summary = res.get("nuisance_summary", {}) or {}
         profiles = self._get_buyer_profiles()
         pinfo = profiles.get(profile, {})
         icon = pinfo.get("icon", "👤")
@@ -1761,38 +1729,47 @@ class ComparisonAnalyzer:
                 st.download_button(label="📥 下載分析報告", data=report, file_name=f"{report_title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", mime="text/plain", use_container_width=True, key="download_report")
     
     def _format_facilities_for_prompt(self, res, include_nuisance=False):
-        """格式化設施資料供提示詞使用"""
+        """格式化設施資料供提示詞使用；嫌惡設施提供分類摘要，不提供分數"""
         df = res.get("facilities_table", pd.DataFrame())
         if df.empty:
             return "無周邊設施資料", ""
-        
+
         if include_nuisance and '主要類別' in df.columns:
-            normal_df = df[df['主要類別'] != "嫌惡設施"]
-            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+            normal_df = df[df['主要類別'] != "嫌惡設施"].copy()
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"].copy()
         else:
-            normal_df = df
+            normal_df = df.copy()
             nuisance_df = pd.DataFrame()
-        
+
         normal_text = "\n【一般設施清單】\n" + "=" * 60 + "\n"
-        for house_name in normal_df['房屋'].unique():
-            house_df = normal_df[normal_df['房屋'] == house_name]
-            normal_text += f"\n🏠 {house_name} 周邊一般設施（共 {len(house_df)} 個）：\n" + "-" * 50 + "\n"
-            house_df_sorted = house_df.sort_values('距離(公尺)')
-            for i, row in house_df_sorted.iterrows():
-                normal_text += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
-        
-        nuisance_text = ""
-        if not nuisance_df.empty:
-            nuisance_text = "\n【⚠️ 嫌惡設施清單】\n" + "=" * 60 + "\n"
-            for house_name in nuisance_df['房屋'].unique():
-                house_df = nuisance_df[nuisance_df['房屋'] == house_name]
-                nuisance_text += f"\n🏠 {house_name} 周邊嫌惡設施（共 {len(house_df)} 處）：\n" + "-" * 50 + "\n"
+        if normal_df.empty:
+            normal_text += "無一般設施資料\n"
+        else:
+            for house_name in normal_df['房屋'].unique():
+                house_df = normal_df[normal_df['房屋'] == house_name]
+                normal_text += f"\n🏠 {house_name} 周邊一般設施（共 {len(house_df)} 個）：\n" + "-" * 50 + "\n"
                 house_df_sorted = house_df.sort_values('距離(公尺)')
                 for i, row in house_df_sorted.iterrows():
-                    nuisance_text += f"  {i+1}. ⚠️ {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
-        
+                    normal_text += f"  {i+1}. {row['設施名稱']} ({row['設施子類別']}) - {row['距離(公尺)']}公尺\n"
+
+        nuisance_text = ""
+        if not nuisance_df.empty:
+            summary_df = self._summarize_nuisance_by_type(df)
+            nuisance_text = "\n【⚠️ 嫌惡設施摘要（不使用分數）】\n" + "=" * 60 + "\n"
+            for house_name in summary_df['房屋'].unique():
+                house_df = summary_df[summary_df['房屋'] == house_name]
+                nuisance_text += f"\n🏠 {house_name} 周邊嫌惡設施摘要（共 {len(house_df)} 類）：\n" + "-" * 50 + "\n"
+                for i, row in house_df.iterrows():
+                    nuisance_text += (
+                        f"  {i+1}. {row['嫌惡設施類型']}｜"
+                        f"影響分類：{row['影響分類']}｜"
+                        f"最近：{row['最近設施名稱']}｜"
+                        f"距離：{row['最近距離(公尺)']}公尺｜"
+                        f"周圍數量：{row['周圍數量']}處｜"
+                    )
+
         return normal_text, nuisance_text
-    
+
     def _build_single_without_nuisance_prompt(self, res, facilities_text, depth_texts, profile, icon, pinfo):
         """單一房屋無嫌惡設施的提示詞"""
         name = list(res["houses_data"].keys())[0]
@@ -1860,7 +1837,9 @@ class ComparisonAnalyzer:
 
 【嫌惡設施概況】
 - 周邊共找到 {nuisance_count} 處嫌惡設施
-- 請根據最近距離、同類數量、設施類型與買家接受度進行文字判斷，不要打分數。
+- 本系統不使用嫌惡設施分數，請勿自行產生任何嫌惡設施分數、百分比或等級分數。
+- 請只根據「嫌惡設施類型、影響分類、最近距離、周圍數量、買家類型接受度」做保守文字判斷。
+- 判斷用語請使用：「影響較低 / 需留意 / 建議現場確認 / 需謹慎評估」。
 
 {facilities_text}
 {nuisance_text}
@@ -1956,9 +1935,11 @@ class ComparisonAnalyzer:
 {facilities_text}
 {nuisance_text}
 
-請根據【各房屋深度分析】、【一般設施清單】和【嫌惡設施清單】綜合比較，提供以下分析：
+請根據【各房屋深度分析】、【一般設施清單】和【嫌惡設施摘要】綜合比較，提供以下分析：
 
-1. **綜合排名**：不用嫌惡設施分數，改用距離、數量、類型與買家需求判斷。
+重要規則：本系統不使用嫌惡設施分數，請勿自行產生任何嫌惡設施分數、百分比或等級分數。請只根據「嫌惡設施類型、影響分類、最近距離、周圍數量、買家類型接受度」做保守文字判斷。
+
+1. **綜合排名**：不用嫌惡設施分數，改用距離、數量、類型、影響分類與買家需求判斷。
 2. **各房屋優缺點比較表**
 3. **嫌惡設施比較**：列出每間房屋最近的嫌惡設施、距離與數量。
 4. **生活便利性比較**
