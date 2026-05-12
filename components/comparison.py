@@ -1,7 +1,7 @@
 # components/comparison.py
 import streamlit as st
 import pandas as pd 
-import tim
+import timee
 import json
 import sys
 import os
