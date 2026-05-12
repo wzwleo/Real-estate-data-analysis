@@ -280,34 +280,19 @@ class ComparisonAnalyzer:
         st.info("目前嫌惡設施採資訊揭露制：只顯示影響分類、最近距離與周圍數量，不計算分數或權重。")
 
     def _get_nuisance_notice(self, nuisance_type, distance, count):
-        """依距離與數量產生嫌惡設施提醒文字，不使用風險分數"""
-        try:
-            distance = float(distance)
-        except Exception:
-            distance = 999999
-
+        """依影響分類與數量產生嫌惡設施提醒文字，不使用風險分數、等級或建議距離。"""
         nuisance_info = NUISANCE_TYPES.get(nuisance_type, {})
         impacts = nuisance_info.get("impacts", [])
         impact_text = "、".join(impacts) if impacts else "周邊環境"
 
-        if distance <= 300:
-            level_text = "距離較近"
-            advice = "建議實地查看不同時段的噪音、交通、人潮、氣味或心理感受。"
-        elif distance <= 600:
-            level_text = "距離中等"
-            advice = "建議留意尖峰時段或特定活動時段是否造成影響。"
-        else:
-            level_text = "距離較遠"
-            advice = "通常影響較低，但仍可依個人接受度評估。"
-
         if count >= 3:
-            count_text = f"周邊同類設施共 {count} 處，數量偏多。"
+            count_text = f"周邊同類設施共 {count} 處。"
         elif count == 2:
-            count_text = "周邊同類設施有 2 處，可稍微留意。"
+            count_text = "周邊同類設施共 2 處。"
         else:
-            count_text = "周邊同類設施有 1 處。"
+            count_text = "周邊同類設施共 1 處。"
 
-        return f"{level_text}，可能影響：{impact_text}。{count_text}{advice}"
+        return f"可能影響：{impact_text}。{count_text}"
 
     def _render_nuisance_selection_with_weights(self):
         """先用影響類型篩選，再選擇受影響的嫌惡設施；不使用權重與分數"""
@@ -868,10 +853,28 @@ class ComparisonAnalyzer:
                         st.error(f"❌ {name} 地址解析失敗")
                         st.session_state.analysis_in_progress = False
                         return
+                    def _hget(*cols, default="無資料"):
+                        for col in cols:
+                            if col in h.index and pd.notna(h.get(col)):
+                                val = h.get(col)
+                                return val
+                        return default
+
                     houses_data[name] = {
-                        "name": name, "title": h['標題'], "address": h['地址'],
-                        "lat": lat, "lng": lng,
-                        "property_summary": self._extract_house_summary(h)
+                        "name": name,
+                        "title": _hget("標題"),
+                        "address": _hget("地址"),
+                        "age": _hget("屋齡", "屋齡(年)", "屋齡（年）"),
+                        "property_type": _hget("類型", "建物型態", "房屋類型"),
+                        "building_area": _hget("建坪", "建物坪數", "權狀坪數"),
+                        "main_balcony": _hget("主+陽", "主建物+陽台", "主建物坪數+陽台坪數"),
+                        "layout": _hget("格局"),
+                        "floor": _hget("樓層", "所在樓層"),
+                        "parking": _hget("車位"),
+                        "total_price": _hget("總價(萬)", "總價", "總價萬"),
+                        "district": _hget("行政區", "區域"),
+                        "lat": lat,
+                        "lng": lng
                     }
                 
                 # 步驟2：查詢生活機能設施
@@ -1131,37 +1134,34 @@ class ComparisonAnalyzer:
             return out
         return out.sort_values(["房屋", "最近距離(公尺)"]).reset_index(drop=True)
 
-    def _extract_house_summary(self, house_row):
-        """擷取分析當下選取的收藏房屋本體資料。"""
-        fields = ["標題", "地址", "屋齡", "類型", "建坪", "主+陽", "格局", "樓層", "車位", "總價(萬)", "行政區"]
-        summary = {}
-        for field in fields:
-            value = house_row.get(field, "")
-            if pd.isna(value):
-                value = ""
-            summary[field] = value
-        return summary
-    
     def _display_house_body_summary(self, res):
-        """在設施詳細資料前顯示房屋本體分析摘要。"""
-        fields = ["標題", "地址", "屋齡", "類型", "建坪", "主+陽", "格局", "樓層", "車位", "總價(萬)", "行政區"]
-        rows = []
-        for house_name, info in res.get("houses_data", {}).items():
-            summary = dict(info.get("property_summary") or {})
-            summary.setdefault("標題", info.get("title", ""))
-            summary.setdefault("地址", info.get("address", ""))
-            row = {"房屋": house_name}
-            for field in fields:
-                row[field] = summary.get(field, "")
-            rows.append(row)
-        
-        st.subheader("🏠 房屋本體分析摘要")
-        if not rows:
-            st.info("尚無房屋本體資料")
+        """在分析結果頁顯示分析時選取的收藏房屋本體資料。"""
+        houses_data = res.get("houses_data", {}) or {}
+        if not houses_data:
             return
-        
+
+        st.subheader("🏠 房屋本體分析摘要")
+
+        rows = []
+        for house_name, info in houses_data.items():
+            rows.append({
+                "房屋": house_name,
+                "標題": info.get("title", "無資料"),
+                "地址": info.get("address", "無資料"),
+                "屋齡": info.get("age", "無資料"),
+                "類型": info.get("property_type", "無資料"),
+                "建坪": info.get("building_area", "無資料"),
+                "主+陽": info.get("main_balcony", "無資料"),
+                "格局": info.get("layout", "無資料"),
+                "樓層": info.get("floor", "無資料"),
+                "車位": info.get("parking", "無資料"),
+                "總價(萬)": info.get("total_price", "無資料"),
+                "行政區": info.get("district", "無資料"),
+            })
+
+        summary_df = pd.DataFrame(rows)
         st.dataframe(
-            pd.DataFrame(rows),
+            summary_df,
             use_container_width=True,
             hide_index=True,
             column_config={
@@ -1177,9 +1177,10 @@ class ComparisonAnalyzer:
                 "車位": st.column_config.TextColumn(width="small"),
                 "總價(萬)": st.column_config.TextColumn(width="small"),
                 "行政區": st.column_config.TextColumn(width="small"),
-            },
+            }
         )
-    
+        st.markdown("---")
+
     def _display_analysis_results(self, res):
         """顯示分析結果"""
         if not res:
@@ -1210,12 +1211,11 @@ class ComparisonAnalyzer:
                     st.markdown(f"- {pt}")
         
         st.markdown("---")
-        
-        # 設施詳細資料表格
+
+        # 房屋本體分析摘要要顯示在設施詳細資料之前
         self._display_house_body_summary(res)
-        
-        st.markdown("---")
-        
+
+        # 設施詳細資料表格
         st.subheader("📋 設施詳細資料")
         
         df = res.get("facilities_table", pd.DataFrame())
@@ -1640,12 +1640,7 @@ class ComparisonAnalyzer:
                     for i, row in house_df.iterrows():
                         maps_url = f"https://www.google.com/maps/search/?api=1&query={row['緯度']},{row['經度']}&query_place_id={row['place_id']}"
                         dist = row['距離(公尺)']
-                        if dist <= 300:
-                            dist_color = "#28a745"; dist_badge = "很近"
-                        elif dist <= 600:
-                            dist_color = "#ffc107"; dist_badge = "中等"
-                        else:
-                            dist_color = "#dc3545"; dist_badge = "較遠"
+                        dist_color = CATEGORY_COLORS.get(row['主要類別'], "#666")
                         
                         col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
                         with col1:
@@ -1654,7 +1649,7 @@ class ComparisonAnalyzer:
                             color = CATEGORY_COLORS.get(row['主要類別'], "#666")
                             st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px;">{row["設施子類別"]}</span>', unsafe_allow_html=True)
                         with col3:
-                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px;">{dist}公尺 ({dist_badge})</span>', unsafe_allow_html=True)
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px;">{dist}公尺</span>', unsafe_allow_html=True)
                         with col4:
                             st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
                         st.divider()
@@ -1668,12 +1663,7 @@ class ComparisonAnalyzer:
                     for i, row in house_df.iterrows():
                         maps_url = f"https://www.google.com/maps/search/?api=1&query={row['緯度']},{row['經度']}&query_place_id={row['place_id']}"
                         dist = row['距離(公尺)']
-                        if dist <= 300:
-                            dist_color = "#dc3545"; dist_badge = "⚠️ 危險近"
-                        elif dist <= 600:
-                            dist_color = "#fd7e14"; dist_badge = "⚠️ 需注意"
-                        else:
-                            dist_color = "#ffc107"; dist_badge = "🟢 尚可"
+                        dist_color = "#dc3545"
                         
                         col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
                         with col1:
@@ -1681,7 +1671,7 @@ class ComparisonAnalyzer:
                         with col2:
                             st.markdown(f'<span style="background-color:#dc354520; color:#dc3545; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["設施子類別"]}</span>', unsafe_allow_html=True)
                         with col3:
-                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺 ({dist_badge})</span>', unsafe_allow_html=True)
+                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺</span>', unsafe_allow_html=True)
                         with col4:
                             st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
                         st.divider()
