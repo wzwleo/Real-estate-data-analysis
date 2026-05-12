@@ -1,5 +1,5 @@
 # components/comparison.py
-import streamlit as st
+import streamlit as t
 import pandas as pd 
 import time
 import json
