@@ -99,7 +99,49 @@ class ComparisonAnalyzer:
         return mapping
     
     # ==================== 深度分析輔助函式 ====================
-    
+       def _format_depth_summary(self, depth_item):
+        """把深度分析數據轉成簡潔文字"""
+        if not depth_item:
+            return ""
+        
+        try:
+            data = depth_item['analysis_data']
+            
+            price = data['price_data']['目標房屋']['總價(萬)']
+            price_pct = data['price_data']['價格分布']['價格百分位']
+            vs_median = data['price_data']['價格分布']['與中位數差距(萬)']
+            price_direction = "低" if vs_median < 0 else "高"
+            
+            usage = data['space_data']['目標房屋']['空間使用率']
+            usage_pct = data['space_data']['坪數分布']['使用率百分位']
+            
+            age_data = data.get('age_data') or {}
+            floor_data = data.get('floor_data') or {}
+            layout_data = data.get('layout_data') or {}
+
+            age = age_data.get('目標房屋', {}).get('屋齡(年)', '無資料')
+            age_cat = age_data.get('屋齡分布', {}).get('屋齡評估', '無資料')
+            age_pct = age_data.get('屋齡分布', {}).get('屋齡百分位', 50)
+            
+            floor = floor_data.get('目標房屋', {}).get('樓層', '無資料')
+            floor_cat = floor_data.get('樓層分布', {}).get('樓層評估', '無資料')
+            floor_pct = floor_data.get('樓層分布', {}).get('樓層百分位', 50)
+            
+            layout = layout_data.get('目標房屋', {}).get('格局', '無資料')
+            layout_rank = layout_data.get('格局排名', {}).get('格局資料量排名', '未知')
+            layout_pct = layout_data.get('格局排名', {}).get('相同格局占比(%)', 0)
+            
+            return f"""
+【🏠 房屋深度分析】
+💰 價格：{price}萬（低於{price_pct:.0f}%的房屋，比市場中位數{price_direction}{abs(vs_median)}萬）
+📐 空間：使用率{usage:.0%}（高於{usage_pct:.0f}%的房屋）
+🕰 屋齡：{age}年（{age_cat}，比{100-float(age_pct):.0f}%的房屋新）
+🏢 樓層：{floor}樓（{floor_cat}，比{float(floor_pct):.0f}%的房屋{"低" if float(floor_pct) < 50 else "高"}）
+🛋 格局：{layout}（市場排名第{layout_rank}，佔{layout_pct:.1f}%）
+"""
+        except Exception:
+            return ""
+
     def _get_depth_analysis_by_title(self, title):
         """根據房屋標題從 ai_results_summary 取得深度分析資料"""
         if 'ai_results_summary' not in st.session_state:
