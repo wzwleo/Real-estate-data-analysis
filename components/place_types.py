@@ -1,7 +1,7 @@
 # components/place_types.py
 
 # 生活機能類別
-PLACE_TYPES = 
+PLACE_TYPES = {
     "教育": [
         "圖書館", "圖書館",
         "幼兒園", "幼兒園",
