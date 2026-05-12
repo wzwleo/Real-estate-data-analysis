@@ -212,234 +212,92 @@ PLACE_TYPES = {
 }
 
 # 嫌惡設施類別
-# 重要：impacts 請依照使用者提供的表格，不自行增加或更改影響分類文字。
-# suggested_distance 與 level 先保留給系統內部資料，但前端不顯示。
+# VERSION: EXACT_USER_TABLE_NO_EXTRA_IMPACTS
+# 原則：設施名稱與影響類型依使用者提供表格，不自行拆分、不自行增加、不自行改字。
 NUISANCE_TYPES = {
-    "加油站": {
-        "level": "多",
+    "加油站、瓦斯行、瓦斯槽": {
         "impacts": ["空氣品質", "生命安全威脅"],
-        "suggested_distance": 600,
-        "keywords": ["加油站", "加氣站"]
+        "keywords": ["加油站", "加氣站", "瓦斯行", "瓦斯桶", "瓦斯槽", "瓦斯儲槽"]
     },
-    "瓦斯行": {
-        "level": "多",
-        "impacts": ["空氣品質", "生命安全威脅"],
-        "suggested_distance": 600,
-        "keywords": ["瓦斯行", "瓦斯桶", "瓦斯"]
-    },
-    "瓦斯槽": {
-        "level": "多",
-        "impacts": ["空氣品質", "生命安全威脅"],
-        "suggested_distance": 600,
-        "keywords": ["瓦斯槽", "瓦斯儲槽"]
-    },
-    "基地台": {
-        "level": "多",
+    "基地台、電塔、變電所": {
         "impacts": ["阻礙視野", "健康疑慮"],
-        "suggested_distance": 900,
-        "keywords": ["基地台", "行動基地台"]
+        "keywords": ["基地台", "行動基地台", "電塔", "高壓電塔", "高壓電", "變電所", "變電站"]
     },
-    "電塔": {
-        "level": "多",
-        "impacts": ["阻礙視野", "健康疑慮"],
-        "suggested_distance": 900,
-        "keywords": ["電塔", "高壓電塔", "高壓電"]
-    },
-    "變電所": {
-        "level": "多",
-        "impacts": ["阻礙視野", "健康疑慮"],
-        "suggested_distance": 900,
-        "keywords": ["變電所", "變電站"]
-    },
-    "警察局": {
-        "level": "多",
+    "警察局、消防局": {
         "impacts": ["噪音", "緊張壓迫感"],
-        "suggested_distance": 900,
-        "keywords": ["警察局", "派出所", "分局"]
+        "keywords": ["警察局", "派出所", "分局", "消防局", "消防隊", "消防分隊"]
     },
-    "消防局": {
-        "level": "多",
-        "impacts": ["噪音", "緊張壓迫感"],
-        "suggested_distance": 900,
-        "keywords": ["消防局", "消防隊", "消防分隊"]
-    },
-    "垃圾場": {
-        "level": "多",
+    "垃圾場、回收場": {
         "impacts": ["環境衛生"],
-        "suggested_distance": 300,
-        "keywords": ["垃圾場", "垃圾處理", "垃圾掩埋場"]
+        "keywords": ["垃圾場", "垃圾處理", "垃圾掩埋場", "回收場", "資源回收", "資源回收場"]
     },
-    "回收場": {
-        "level": "多",
-        "impacts": ["環境衛生"],
-        "suggested_distance": 300,
-        "keywords": ["回收場", "資源回收", "資源回收場"]
-    },
-    "傳統市場": {
-        "level": "多",
+    "市場(傳統市場、夜市)": {
         "impacts": ["環境衛生", "交通", "噪音"],
-        "suggested_distance": 300,
-        "keywords": ["傳統市場", "菜市場", "早市", "黃昏市場"]
+        "keywords": ["傳統市場", "菜市場", "早市", "黃昏市場", "夜市"]
     },
-    "夜市": {
-        "level": "多",
-        "impacts": ["環境衛生", "交通", "噪音"],
-        "suggested_distance": 300,
-        "keywords": ["夜市"]
-    },
-    "高架道路": {
-        "level": "多",
+    "高架道路、地下道、捷運": {
         "impacts": ["噪音"],
-        "suggested_distance": 300,
-        "keywords": ["高架道路", "快速道路"]
+        "keywords": ["高架道路", "快速道路", "地下道", "捷運", "捷運線", "捷運軌道"]
     },
-    "地下道": {
-        "level": "多",
-        "impacts": ["噪音"],
-        "suggested_distance": 300,
-        "keywords": ["地下道"]
-    },
-    "捷運": {
-        "level": "多",
-        "impacts": ["噪音"],
-        "suggested_distance": 300,
-        "keywords": ["捷運", "捷運線", "捷運軌道"]
-    },
-    "特種行業": {
-        "level": "多",
+    "特種行業、KTV、遊樂場": {
         "impacts": ["交通", "噪音", "安全"],
-        "suggested_distance": 600,
-        "keywords": ["特種行業", "酒店"]
-    },
-    "KTV": {
-        "level": "多",
-        "impacts": ["交通", "噪音", "安全"],
-        "suggested_distance": 600,
-        "keywords": ["KTV", "卡拉OK"]
-    },
-    "遊樂場": {
-        "level": "多",
-        "impacts": ["交通", "噪音", "安全"],
-        "suggested_distance": 600,
-        "keywords": ["遊樂場", "電子遊戲場"]
+        "keywords": ["特種行業", "酒店", "KTV", "卡拉OK", "遊樂場", "電子遊戲場"]
     },
     "醫院": {
-        "level": "中",
         "impacts": ["噪音", "緊張壓迫感"],
-        "suggested_distance": 900,
         "keywords": ["醫院", "醫療中心", "綜合醫院"]
     },
-    "大型賣場": {
-        "level": "中",
+    "大型賣場、停車場": {
         "impacts": ["交通"],
-        "suggested_distance": 900,
-        "keywords": ["大型賣場", "大賣場", "量販店", "購物中心"]
-    },
-    "停車場": {
-        "level": "中",
-        "impacts": ["交通"],
-        "suggested_distance": 900,
-        "keywords": ["停車場", "立體停車場"]
+        "keywords": ["大型賣場", "大賣場", "量販店", "購物中心", "停車場", "立體停車場"]
     },
     "交流道": {
-        "level": "中",
         "impacts": ["交通", "噪音"],
-        "suggested_distance": 900,
         "keywords": ["交流道", "高速公路交流道"]
     },
-    "工業區": {
-        "level": "中",
+    "工業區、工廠": {
         "impacts": ["噪音", "空汙", "汙水"],
-        "suggested_distance": 900,
-        "keywords": ["工業區", "工業園區", "加工區"]
+        "keywords": ["工業區", "工業園區", "加工區", "工廠", "廠房"]
     },
-    "工廠": {
-        "level": "中",
-        "impacts": ["噪音", "空汙", "汙水"],
-        "suggested_distance": 900,
-        "keywords": ["工廠", "廠房"]
-    },
-    "禮儀社": {
-        "level": "中",
+    "禮儀社、葬儀社": {
         "impacts": ["風水"],
-        "suggested_distance": 1200,
-        "keywords": ["禮儀社", "生命禮儀"]
+        "keywords": ["禮儀社", "生命禮儀", "葬儀社", "葬儀"]
     },
-    "葬儀社": {
-        "level": "中",
-        "impacts": ["風水"],
-        "suggested_distance": 1200,
-        "keywords": ["葬儀社", "葬儀"]
-    },
-    "宮廟": {
-        "level": "中",
+    "宮廟、神壇": {
         "impacts": ["交通", "噪音", "空汙"],
-        "suggested_distance": 1200,
-        "keywords": ["宮廟", "寺廟", "媽祖廟", "土地公廟", "廟宇"]
-    },
-    "神壇": {
-        "level": "中",
-        "impacts": ["交通", "噪音", "空汙"],
-        "suggested_distance": 1200,
-        "keywords": ["神壇"]
+        "keywords": ["宮廟", "神壇", "寺廟", "媽祖廟", "土地公廟", "廟宇"]
     },
     "焚化爐": {
-        "level": "中",
         "impacts": ["環境衛生", "空汙", "噪音"],
-        "suggested_distance": 900,
         "keywords": ["焚化爐", "垃圾焚化"]
     },
     "發電廠": {
-        "level": "中",
         "impacts": ["健康疑慮", "阻礙視野"],
-        "suggested_distance": 900,
         "keywords": ["發電廠", "火力發電", "核電廠"]
     },
     "監獄": {
-        "level": "中",
         "impacts": ["風水"],
-        "suggested_distance": 900,
         "keywords": ["監獄", "看守所", "矯正署"]
     },
     "汙水處理廠": {
-        "level": "少",
         "impacts": ["空氣品質", "水質"],
-        "suggested_distance": 1200,
         "keywords": ["汙水處理廠", "污水處理廠", "水資源中心"]
     },
     "飛機場": {
-        "level": "少",
         "impacts": ["噪音", "飛安"],
-        "suggested_distance": 1200,
         "keywords": ["機場", "航空站", "飛機場"]
     },
-    "公墓": {
-        "level": "少",
+    "公墓、靈骨塔、殯儀館": {
         "impacts": ["風水"],
-        "suggested_distance": 1200,
-        "keywords": ["公墓", "墓園"]
-    },
-    "靈骨塔": {
-        "level": "少",
-        "impacts": ["風水"],
-        "suggested_distance": 1200,
-        "keywords": ["靈骨塔", "納骨塔"]
-    },
-    "殯儀館": {
-        "level": "少",
-        "impacts": ["風水"],
-        "suggested_distance": 1200,
-        "keywords": ["殯儀館"]
+        "keywords": ["公墓", "墓園", "靈骨塔", "納骨塔", "殯儀館"]
     },
     "畜牧業": {
-        "level": "少",
         "impacts": ["環境衛生", "噪音"],
-        "suggested_distance": 1200,
         "keywords": ["畜牧場", "養豬場", "養雞場", "牧場"]
-    }
+    },
 }
 
-# 影響類型定義（依使用者提供表格）
+# 影響類型定義（只使用上方表格出現的文字）
 IMPACT_TYPES = {
     "空氣品質": {"description": "空氣品質", "color": "#f44336"},
     "生命安全威脅": {"description": "生命安全威脅", "color": "#d32f2f"},
@@ -459,9 +317,6 @@ IMPACT_TYPES = {
 
 # 建立反向映射
 CHINESE_TO_CATEGORY = {}
-
 for category, items in PLACE_TYPES.items():
-    for i in range(0, len(items), 2):
-        if i + 1 < len(items):
-            chinese_name = items[i]
-            CHINESE_TO_CATEGORY[chinese_name] = category
+    for item in items:
+        CHINESE_TO_CATEGORY[item] = category
