@@ -1170,19 +1170,19 @@ class ComparisonAnalyzer:
         return out.sort_values(["房屋", "最近距離(公尺)"]).reset_index(drop=True)
 
     def _render_depth_analysis_summary(self, res):
-        """? comparison ??????? solo_analysis ??????????"""
+        """Render solo_analysis depth summaries on the comparison result page."""
         self._ensure_analysis_store()
         if not res or 'houses_data' not in res:
             return
 
-        st.subheader("?? ??????????")
+        st.subheader("🏠 房屋本體深度分析摘要")
         shown = 0
         for house_name, info in res['houses_data'].items():
             property_id = normalize_property_id(info.get('property_id', ''))
             depth_item = self._get_depth_analysis_by_id(property_id) if property_id else self._get_depth_analysis_by_title(info.get('title', ''))
             if not depth_item:
-                with st.expander(f"{house_name}?{info.get('title', '???')}", expanded=False):
-                    st.info("???????????????? solo_analysis.py ????????????")
+                with st.expander(f"{house_name}｜{info.get('title', '未命名')}", expanded=False):
+                    st.info("尚未建立個別深度分析資料，請先在 solo_analysis.py 對此房屋完成分析並儲存。")
                 continue
 
             shown += 1
@@ -1192,13 +1192,13 @@ class ComparisonAnalyzer:
             analysis_text = depth_item.get('analysis_text', {}) or {}
             summary_text = analysis_text.get('summary', '') if isinstance(analysis_text, dict) else ''
 
-            title = basic_info.get('??') or info.get('title', '???')
-            with st.expander(f"{house_name}?{title}", expanded=(len(res['houses_data']) == 1)):
+            title = basic_info.get('標題') or info.get('title', '未命名')
+            with st.expander(f"{house_name}｜{title}", expanded=(len(res['houses_data']) == 1)):
                 if total_score is not None:
                     try:
-                        st.metric("????", f"{float(total_score):.1f} / 100")
+                        st.metric("本體總分", f"{float(total_score):.1f} / 100")
                     except Exception:
-                        st.metric("????", f"{total_score} / 100")
+                        st.metric("本體總分", f"{total_score} / 100")
 
                 if scores:
                     cols = st.columns(min(len(scores), 5))
@@ -1206,7 +1206,7 @@ class ComparisonAnalyzer:
                         with cols[idx % len(cols)]:
                             st.metric(label, value)
 
-                st.markdown("**????**")
+                st.markdown("**綜合摘要**")
                 if summary_text:
                     st.write(summary_text)
                 else:
@@ -1214,10 +1214,10 @@ class ComparisonAnalyzer:
                     if formatted:
                         st.markdown(formatted)
                     else:
-                        st.caption("????????")
+                        st.caption("尚未儲存綜合摘要")
 
         if shown == 0:
-            st.caption("?? comparison ?????? solo_analysis ???????")
+            st.caption("目前 comparison 尚未讀到任何 solo_analysis 個別分析結果。")
     
     def _extract_house_summary(self, house_row):
         """擷取分析當下選取的收藏房屋本體資料。"""
@@ -1304,7 +1304,7 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
         
-        # ????????
+        # House favorite data summary
         self._display_house_body_summary(res)
         
         st.markdown("---")
