@@ -1704,54 +1704,57 @@ class ComparisonAnalyzer:
             normal_df = df.copy()
             nuisance_df = pd.DataFrame()
         
-        st.subheader("\u2705 \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868")
-        if normal_df.empty:
-            st.info("\U0001f4ed \u7121\u4e00\u822c\u8a2d\u65bd\u8cc7\u6599")
-        else:
-            self._render_facility_cards(normal_df, nuisance=False)
+        with st.expander("\u2705 \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868", expanded=False):
+            if normal_df.empty:
+                st.info("\U0001f4ed \u7121\u4e00\u822c\u8a2d\u65bd\u8cc7\u6599")
+            else:
+                self._render_facility_cards(normal_df, nuisance=False)
         
         if include_nuisance:
             st.markdown("---")
-            st.subheader("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u6458\u8981")
-            if nuisance_df.empty:
-                st.info("\U0001f4ed \u7121\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599")
-            else:
-                nuisance_summary_df = self._summarize_nuisance_by_type(df)
-                if not nuisance_summary_df.empty:
-                    summary_df = nuisance_summary_df.rename(columns={
-                        "\u623f\u5c4b": "\u623f\u5c4b\u540d\u7a31",
-                        "place_id": "Google\u5730\u5716",
-                    }).copy()
-                    summary_df["Google\u5730\u5716"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
-                    st.dataframe(
-                        summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
-                        use_container_width=True,
-                        column_config={
-                            "\u623f\u5c4b\u540d\u7a31": st.column_config.TextColumn(width="medium"),
-                            "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b": st.column_config.TextColumn(width="small"),
-                            "\u5f71\u97ff\u5206\u985e": st.column_config.TextColumn(width="medium"),
-                            "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31": st.column_config.TextColumn(width="large"),
-                            "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)": st.column_config.NumberColumn(format="%d \u516c\u5c3a"),
-                            "\u5468\u570d\u6578\u91cf": st.column_config.NumberColumn(format="%d \u8655"),
-                            "\u63d0\u9192": st.column_config.TextColumn(width="large"),
-                            "Google\u5730\u5716": st.column_config.LinkColumn("Google\u5730\u5716", display_text="\u958b\u555f"),
-                        },
-                        hide_index=True,
-                    )
-                    
-                    for _, row in nuisance_summary_df.iterrows():
-                        st.markdown(
-                            f"**{row['\u623f\u5c4b']}\uff5c{row['\u5acc\u60e1\u8a2d\u65bd\u985e\u578b']}**  \\n"
-                            f"\u5f71\u97ff\u5206\u985e\uff1a{row.get('\u5f71\u97ff\u5206\u985e', '\u672a\u5206\u985e')}  \\n"
-                            f"\u6700\u8fd1\u8a2d\u65bd\uff1a{row['\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31']}\uff5c"
-                            f"\u6700\u8fd1\u8ddd\u96e2\uff1a{row['\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)']} \u516c\u5c3a\uff5c"
-                            f"\u5468\u570d\u6578\u91cf\uff1a{row['\u5468\u570d\u6578\u91cf']} \u8655  \\n"
-                            f"{row['\u63d0\u9192']}"
+            with st.expander("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u6458\u8981", expanded=True):
+                if nuisance_df.empty:
+                    st.info("\U0001f4ed \u7121\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599")
+                else:
+                    nuisance_summary_df = self._summarize_nuisance_by_type(df)
+                    if not nuisance_summary_df.empty:
+                        summary_df = nuisance_summary_df.rename(columns={
+                            "\u623f\u5c4b": "\u623f\u5c4b\u540d\u7a31",
+                            "place_id": "Google\u5730\u5716",
+                        }).copy()
+                        summary_df["Google\u5730\u5716"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
+                        st.dataframe(
+                            summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
+                            use_container_width=True,
+                            column_config={
+                                "\u623f\u5c4b\u540d\u7a31": st.column_config.TextColumn(width="medium"),
+                                "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b": st.column_config.TextColumn(width="small"),
+                                "\u5f71\u97ff\u5206\u985e": st.column_config.TextColumn(width="medium"),
+                                "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31": st.column_config.TextColumn(width="large"),
+                                "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)": st.column_config.NumberColumn(format="%d \u516c\u5c3a"),
+                                "\u5468\u570d\u6578\u91cf": st.column_config.NumberColumn(format="%d \u8655"),
+                                "\u63d0\u9192": st.column_config.TextColumn(width="large"),
+                                "Google\u5730\u5716": st.column_config.LinkColumn("Google\u5730\u5716", display_text="\u958b\u555f"),
+                            },
+                            hide_index=True,
                         )
-                
-                st.markdown("---")
-                st.subheader("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868")
-                self._render_facility_cards(nuisance_df, nuisance=True)
+                        
+                        for _, row in nuisance_summary_df.iterrows():
+                            st.markdown(
+                                f"**{row['\u623f\u5c4b']}\uff5c{row['\u5acc\u60e1\u8a2d\u65bd\u985e\u578b']}**  \\n"
+                                f"\u5f71\u97ff\u5206\u985e\uff1a{row.get('\u5f71\u97ff\u5206\u985e', '\u672a\u5206\u985e')}  \\n"
+                                f"\u6700\u8fd1\u8a2d\u65bd\uff1a{row['\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31']}\uff5c"
+                                f"\u6700\u8fd1\u8ddd\u96e2\uff1a{row['\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)']} \u516c\u5c3a\uff5c"
+                                f"\u5468\u570d\u6578\u91cf\uff1a{row['\u5468\u570d\u6578\u91cf']} \u8655  \\n"
+                                f"{row['\u63d0\u9192']}"
+                            )
+            
+            st.markdown("---")
+            with st.expander("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", expanded=False):
+                if nuisance_df.empty:
+                    st.info("\U0001f4ed \u7121\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599")
+                else:
+                    self._render_facility_cards(nuisance_df, nuisance=True)
     
     def _display_ai_analysis(self, res):
         """AI 分析"""
