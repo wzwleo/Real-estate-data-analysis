@@ -1164,6 +1164,8 @@ class ComparisonAnalyzer:
                 "最近距離(公尺)": int(round(distance)),
                 "周圍數量": count,
                 "提醒": self._get_nuisance_notice(subtype, distance, count),
+                "\u7def\u5ea6": nearest.get("\u7def\u5ea6", ""),
+                "\u7d93\u5ea6": nearest.get("\u7d93\u5ea6", ""),
                 "place_id": nearest.get("place_id", "")
             })
 
@@ -1310,83 +1312,6 @@ class ComparisonAnalyzer:
         # House favorite data summary
         self._display_house_body_summary(res)
         
-        st.markdown("---")
-        
-        st.subheader("📋 設施詳細資料")
-        
-        df = res.get("facilities_table", pd.DataFrame())
-        if not df.empty:
-            if include_nuisance and '主要類別' in df.columns:
-                normal_df = df[df['主要類別'] != "嫌惡設施"].copy()
-                nuisance_df = df[df['主要類別'] == "嫌惡設施"].copy()
-            else:
-                normal_df = df.copy()
-                nuisance_df = pd.DataFrame()
-            
-            if not normal_df.empty:
-                with st.expander("✅ 一般設施", expanded=True):
-                    st.dataframe(
-                        normal_df,
-                        use_container_width=True,
-                        column_config={
-                            "房屋": st.column_config.TextColumn(width="small"),
-                            "房屋標題": st.column_config.TextColumn(width="medium"),
-                            "房屋地址": st.column_config.TextColumn(width="medium"),
-                            "設施名稱": st.column_config.TextColumn(width="large"),
-                            "設施子類別": st.column_config.TextColumn(width="small"),
-                            "距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
-                            "place_id": st.column_config.TextColumn("Google地圖", width="small")
-                        },
-                        hide_index=True
-                    )
-            
-            if not nuisance_df.empty:
-                nuisance_summary_df = self._summarize_nuisance_by_type(df)
-
-                with st.expander("⚠️ 嫌惡設施摘要", expanded=True):
-                    st.dataframe(
-                        nuisance_summary_df,
-                        use_container_width=True,
-                        column_config={
-                            "房屋": st.column_config.TextColumn(width="small"),
-                            "嫌惡設施類型": st.column_config.TextColumn(width="small"),
-                            "影響分類": st.column_config.TextColumn(width="medium"),
-                            "最近設施名稱": st.column_config.TextColumn(width="large"),
-                            "最近距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
-                            "周圍數量": st.column_config.NumberColumn(format="%d 處"),
-                            "提醒": st.column_config.TextColumn(width="large"),
-                            "place_id": st.column_config.TextColumn("Google地圖", width="small")
-                        },
-                        hide_index=True
-                    )
-
-                    for _, row in nuisance_summary_df.iterrows():
-                        st.markdown(
-                            f"**{row['房屋']}｜{row['嫌惡設施類型']}**  \n"
-                            f"影響分類：{row.get('影響分類', '未分類')}  \n"
-                            f"最近設施：{row['最近設施名稱']}｜"
-                            f"最近距離：{row['最近距離(公尺)']} 公尺｜"
-                            f"周圍數量：{row['周圍數量']} 處  \n"
-                            f"{row['提醒']}"
-                        )
-
-                with st.expander("⚠️ 嫌惡設施明細", expanded=False):
-                    st.dataframe(
-                        nuisance_df,
-                        use_container_width=True,
-                        column_config={
-                            "房屋": st.column_config.TextColumn(width="small"),
-                            "房屋標題": st.column_config.TextColumn(width="medium"),
-                            "房屋地址": st.column_config.TextColumn(width="medium"),
-                            "設施名稱": st.column_config.TextColumn(width="large"),
-                            "設施子類別": st.column_config.TextColumn(width="small"),
-                            "距離(公尺)": st.column_config.NumberColumn(format="%d 公尺"),
-                            "place_id": st.column_config.TextColumn("Google地圖", width="small")
-                        },
-                        hide_index=True
-                    )
-        else:
-            st.info("📭 無設施資料")
         
         st.markdown("---")
         
@@ -1401,8 +1326,8 @@ class ComparisonAnalyzer:
         # 地圖檢視
         self._display_maps(res)
         
-        # 全部設施列表
-        self._display_facilities_list_with_links(res, include_nuisance)
+        # 設施總表
+        self._display_facility_summary_tables(res, include_nuisance)
         
         # AI 智能分析
         self._display_ai_analysis(res)
@@ -1710,47 +1635,123 @@ class ComparisonAnalyzer:
         
         html(html_content, height=550)
     
-    def _display_facilities_list_with_links(self, res, include_nuisance=False):
-        """顯示設施列表"""
+    def _build_maps_url(self, row):
+        """Build a Google Maps place URL for a facility row."""
+        return f"https://www.google.com/maps/search/?api=1&query={row['\u7def\u5ea6']},{row['\u7d93\u5ea6']}&query_place_id={row['place_id']}"
+    
+    def _distance_badge(self, distance, nuisance=False):
+        """Return badge color and text for a facility distance."""
+        try:
+            dist = float(distance)
+        except Exception:
+            dist = 0
+        if nuisance:
+            if dist <= 300:
+                return "#dc3545", "\u26a0\ufe0f \u5371\u96aa\u8fd1"
+            if dist <= 600:
+                return "#fd7e14", "\u26a0\ufe0f \u9700\u6ce8\u610f"
+            return "#ffc107", "\U0001f7e2 \u5c1a\u53ef"
+        if dist <= 300:
+            return "#28a745", "\u5f88\u8fd1"
+        if dist <= 600:
+            return "#ffc107", "\u4e2d\u7b49"
+        return "#dc3545", "\u8f03\u9060"
+    
+    def _render_facility_cards(self, df, nuisance=False):
+        """Render facility rows with distance badges and Google Maps links."""
+        for house_name in df['\u623f\u5c4b'].unique():
+            house_df = df[df['\u623f\u5c4b'] == house_name].sort_values('\u8ddd\u96e2(\u516c\u5c3a)')
+            label = "\u5acc\u60e1\u8a2d\u65bd" if nuisance else "\u4e00\u822c\u8a2d\u65bd"
+            st.markdown(f"**\U0001f3e0 {house_name}** - \u5171 {len(house_df)} \u500b{label}")
+            
+            for idx, (_, row) in enumerate(house_df.iterrows(), start=1):
+                maps_url = self._build_maps_url(row)
+                dist = row['\u8ddd\u96e2(\u516c\u5c3a)']
+                dist_color, dist_badge = self._distance_badge(dist, nuisance=nuisance)
+                type_color = "#dc3545" if nuisance else CATEGORY_COLORS.get(row.get('\u4e3b\u8981\u985e\u5225', ''), "#666")
+                
+                col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 1.5])
+                with col1:
+                    st.markdown(f"**{idx}. {row['\u8a2d\u65bd\u540d\u7a31']}**")
+                with col2:
+                    st.markdown(f"\u623f\u5c4b\u540d\u7a31\uff1a{house_name}")
+                with col3:
+                    st.markdown(
+                        f'<span style="background-color:{type_color}20; color:{type_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["\u8a2d\u65bd\u5b50\u985e\u5225"]}</span>',
+                        unsafe_allow_html=True,
+                    )
+                with col4:
+                    st.markdown(
+                        f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}\u516c\u5c3a ({dist_badge})</span>',
+                        unsafe_allow_html=True,
+                    )
+                with col5:
+                    st.link_button("Google\u5730\u5716", maps_url, use_container_width=True)
+                st.divider()
+    
+    def _display_facility_summary_tables(self, res, include_nuisance=False):
+        """Display unified facility sections below the map."""
         st.markdown("---")
-        st.subheader("📍 全部設施列表")
-        
         df = res.get("facilities_table", pd.DataFrame())
         if df.empty:
-            st.info("📭 無設施資料")
+            st.info("\U0001f4ed \u7121\u8a2d\u65bd\u8cc7\u6599")
             return
         
         if include_nuisance and '\u4e3b\u8981\u985e\u5225' in df.columns:
-            nuisance_df = df[df['\u4e3b\u8981\u985e\u5225'] == "\u5acc\u60e1\u8a2d\u65bd"]
+            normal_df = df[df['\u4e3b\u8981\u985e\u5225'] != "\u5acc\u60e1\u8a2d\u65bd"].copy()
+            nuisance_df = df[df['\u4e3b\u8981\u985e\u5225'] == "\u5acc\u60e1\u8a2d\u65bd"].copy()
         else:
+            normal_df = df.copy()
             nuisance_df = pd.DataFrame()
         
-        if not nuisance_df.empty:
-            with st.expander("⚠️ 嫌惡設施", expanded=True):
-                for house_name in nuisance_df['房屋'].unique():
-                    house_df = nuisance_df[nuisance_df['房屋'] == house_name]
-                    st.markdown(f"**🏠 {house_name}** - 共 {len(house_df)} 個嫌惡設施")
+        st.subheader("\u2705 \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868")
+        if normal_df.empty:
+            st.info("\U0001f4ed \u7121\u4e00\u822c\u8a2d\u65bd\u8cc7\u6599")
+        else:
+            self._render_facility_cards(normal_df, nuisance=False)
+        
+        if include_nuisance:
+            st.markdown("---")
+            st.subheader("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u6458\u8981")
+            if nuisance_df.empty:
+                st.info("\U0001f4ed \u7121\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599")
+            else:
+                nuisance_summary_df = self._summarize_nuisance_by_type(df)
+                if not nuisance_summary_df.empty:
+                    summary_df = nuisance_summary_df.rename(columns={
+                        "\u623f\u5c4b": "\u623f\u5c4b\u540d\u7a31",
+                        "place_id": "Google\u5730\u5716",
+                    }).copy()
+                    summary_df["Google\u5730\u5716"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
+                    st.dataframe(
+                        summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
+                        use_container_width=True,
+                        column_config={
+                            "\u623f\u5c4b\u540d\u7a31": st.column_config.TextColumn(width="medium"),
+                            "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b": st.column_config.TextColumn(width="small"),
+                            "\u5f71\u97ff\u5206\u985e": st.column_config.TextColumn(width="medium"),
+                            "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31": st.column_config.TextColumn(width="large"),
+                            "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)": st.column_config.NumberColumn(format="%d \u516c\u5c3a"),
+                            "\u5468\u570d\u6578\u91cf": st.column_config.NumberColumn(format="%d \u8655"),
+                            "\u63d0\u9192": st.column_config.TextColumn(width="large"),
+                            "Google\u5730\u5716": st.column_config.LinkColumn("Google\u5730\u5716", display_text="\u958b\u555f"),
+                        },
+                        hide_index=True,
+                    )
                     
-                    for i, row in house_df.iterrows():
-                        maps_url = f"https://www.google.com/maps/search/?api=1&query={row['緯度']},{row['經度']}&query_place_id={row['place_id']}"
-                        dist = row['距離(公尺)']
-                        if dist <= 300:
-                            dist_color = "#dc3545"; dist_badge = "⚠️ 危險近"
-                        elif dist <= 600:
-                            dist_color = "#fd7e14"; dist_badge = "⚠️ 需注意"
-                        else:
-                            dist_color = "#ffc107"; dist_badge = "🟢 尚可"
-                        
-                        col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
-                        with col1:
-                            st.markdown(f"**{i+1}.** {row['設施名稱']}")
-                        with col2:
-                            st.markdown(f'<span style="background-color:#dc354520; color:#dc3545; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["設施子類別"]}</span>', unsafe_allow_html=True)
-                        with col3:
-                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}公尺 ({dist_badge})</span>', unsafe_allow_html=True)
-                        with col4:
-                            st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
-                        st.divider()
+                    for _, row in nuisance_summary_df.iterrows():
+                        st.markdown(
+                            f"**{row['\u623f\u5c4b']}\uff5c{row['\u5acc\u60e1\u8a2d\u65bd\u985e\u578b']}**  \\n"
+                            f"\u5f71\u97ff\u5206\u985e\uff1a{row.get('\u5f71\u97ff\u5206\u985e', '\u672a\u5206\u985e')}  \\n"
+                            f"\u6700\u8fd1\u8a2d\u65bd\uff1a{row['\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31']}\uff5c"
+                            f"\u6700\u8fd1\u8ddd\u96e2\uff1a{row['\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)']} \u516c\u5c3a\uff5c"
+                            f"\u5468\u570d\u6578\u91cf\uff1a{row['\u5468\u570d\u6578\u91cf']} \u8655  \\n"
+                            f"{row['\u63d0\u9192']}"
+                        )
+                
+                st.markdown("---")
+                st.subheader("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868")
+                self._render_facility_cards(nuisance_df, nuisance=True)
     
     def _display_ai_analysis(self, res):
         """AI 分析"""
