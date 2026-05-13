@@ -5,7 +5,7 @@ import streamlit as st
 import pandas as pd 
 import time
 import json
-import sys
+import sy
 import os
 import requests
 import math
