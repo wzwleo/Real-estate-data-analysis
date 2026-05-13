@@ -899,7 +899,10 @@ class ComparisonAnalyzer:
                 houses_data = {}
                 for i, opt in enumerate(s["houses"]):
                     h = fav_df[(fav_df['標題'] + " | " + fav_df['地址']) == opt].iloc[0]
-                    name = f"房屋 {chr(65+i)}" if len(s["houses"]) > 1 else "分析房屋"
+                    raw_title = str(h.get('\u6a19\u984c', '')).strip()
+                    name = raw_title[:30] if raw_title else f'\u672a\u547d\u540d\u623f\u5c4b{i+1}'
+                    if name in houses_data:
+                        name = f'{name}-{i+1}'
                     lat, lng = geocode_address(h["地址"], s["server"])
                     if not lat or not lng:
                         st.error(f"❌ {name} 地址解析失敗")
@@ -1717,40 +1720,10 @@ class ComparisonAnalyzer:
             st.info("📭 無設施資料")
             return
         
-        if include_nuisance and '主要類別' in df.columns:
-            normal_df = df[df['主要類別'] != "嫌惡設施"]
-            nuisance_df = df[df['主要類別'] == "嫌惡設施"]
+        if include_nuisance and '\u4e3b\u8981\u985e\u5225' in df.columns:
+            nuisance_df = df[df['\u4e3b\u8981\u985e\u5225'] == "\u5acc\u60e1\u8a2d\u65bd"]
         else:
-            normal_df = df
             nuisance_df = pd.DataFrame()
-        
-        if not normal_df.empty:
-            with st.expander("✅ 一般設施", expanded=True):
-                for house_name in normal_df['房屋'].unique():
-                    house_df = normal_df[normal_df['房屋'] == house_name]
-                    st.markdown(f"**🏠 {house_name}** - 共 {len(house_df)} 個設施")
-                    
-                    for i, row in house_df.iterrows():
-                        maps_url = f"https://www.google.com/maps/search/?api=1&query={row['緯度']},{row['經度']}&query_place_id={row['place_id']}"
-                        dist = row['距離(公尺)']
-                        if dist <= 300:
-                            dist_color = "#28a745"; dist_badge = "很近"
-                        elif dist <= 600:
-                            dist_color = "#ffc107"; dist_badge = "中等"
-                        else:
-                            dist_color = "#dc3545"; dist_badge = "較遠"
-                        
-                        col1, col2, col3, col4 = st.columns([5, 2, 2, 2])
-                        with col1:
-                            st.markdown(f"**{i+1}.** {row['設施名稱']}")
-                        with col2:
-                            color = CATEGORY_COLORS.get(row['主要類別'], "#666")
-                            st.markdown(f'<span style="background-color:{color}20; color:{color}; padding:4px 8px; border-radius:8px; font-size:12px;">{row["設施子類別"]}</span>', unsafe_allow_html=True)
-                        with col3:
-                            st.markdown(f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px;">{dist}公尺 ({dist_badge})</span>', unsafe_allow_html=True)
-                        with col4:
-                            st.link_button("🗺️ 地圖", maps_url, use_container_width=True)
-                        st.divider()
         
         if not nuisance_df.empty:
             with st.expander("⚠️ 嫌惡設施", expanded=True):
