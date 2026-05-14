@@ -1897,6 +1897,111 @@ class ComparisonAnalyzer:
         buffer.seek(0)
         return buffer.getvalue()
     
+    def _html_escape(self, value):
+        """Escape text for HTML report output."""
+        if value is None:
+            return ""
+        return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    
+    def _html_table_from_df(self, df, columns, max_rows=80):
+        """Create an HTML table from selected DataFrame columns."""
+        if df is None or df.empty:
+            return '<p class="empty">\u7121\u8cc7\u6599</p>'
+        available = [c for c in columns if c in df.columns]
+        if not available:
+            return '<p class="empty">\u7121\u8cc7\u6599</p>'
+        table_df = df[available].head(max_rows).copy()
+        thead = "".join(f"<th>{self._html_escape(c)}</th>" for c in available)
+        rows = []
+        for _, row in table_df.iterrows():
+            cells = []
+            for col in available:
+                value = row.get(col, "")
+                if col == "\u0047\u006f\u006f\u0067\u006c\u0065\u5730\u5716" and value:
+                    cells.append(f'<td><a class="map-link" href="{self._html_escape(value)}" target="_blank">\u958b\u555f\u5730\u5716</a></td>')
+                elif col in ["\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e"] and value:
+                    cells.append(f'<td><span class="badge">{self._html_escape(value)}</span></td>')
+                else:
+                    cells.append(f"<td>{self._html_escape(value)}</td>")
+            rows.append("<tr>" + "".join(cells) + "</tr>")
+        note = ""
+        if len(df) > max_rows:
+            note = f'<p class="note">\u50c5\u5217\u51fa\u524d {max_rows} \u7b46\uff0c\u5171 {len(df)} \u7b46\u8cc7\u6599\u3002</p>'
+        return f'<div class="table-wrap"><table><thead><tr>{thead}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>{note}'
+    
+    def _generate_html_report(self, res, ai_text):
+        """Generate a standalone HTML report directly from analysis data."""
+        profile = res.get("buyer_profile", "\u672a\u6307\u5b9a")
+        generated_at = get_taiwan_time()
+        include_nuisance = res.get("include_nuisance", False)
+        df = res.get("facilities_table", pd.DataFrame())
+        house_rows = []
+        fields = ["\u6a19\u984c", "\u5730\u5740", "\u5c4b\u9f61", "\u985e\u578b", "\u5efa\u576a", "\u4e3b+\u967d", "\u683c\u5c40", "\u6a13\u5c64", "\u8eca\u4f4d", "\u7e3d\u50f9(\u842c)", "\u884c\u653f\u5340"]
+        for house_name, info in res.get("houses_data", {}).items():
+            summary = dict(info.get("property_summary") or {})
+            summary.setdefault("\u6a19\u984c", info.get("title", house_name))
+            summary.setdefault("\u5730\u5740", info.get("address", ""))
+            row = {"\u623f\u5c4b\u540d\u7a31": house_name}
+            for field in fields:
+                row[field] = summary.get(field, "")
+            house_rows.append(row)
+        house_df = pd.DataFrame(house_rows)
+        stat_rows = []
+        if not df.empty:
+            for house_name, group in df.groupby("\u623f\u5c4b"):
+                if "\u4e3b\u8981\u985e\u5225" in group.columns:
+                    normal_count = len(group[group["\u4e3b\u8981\u985e\u5225"] != "\u5acc\u60e1\u8a2d\u65bd"])
+                    nuisance_count = len(group[group["\u4e3b\u8981\u985e\u5225"] == "\u5acc\u60e1\u8a2d\u65bd"])
+                else:
+                    normal_count = len(group)
+                    nuisance_count = 0
+                stat_rows.append({"\u623f\u5c4b\u540d\u7a31": house_name, "\u4e00\u822c\u8a2d\u65bd\u6578": normal_count, "\u5acc\u60e1\u8a2d\u65bd\u6578": nuisance_count, "\u7e3d\u6578": len(group)})
+        stat_df = pd.DataFrame(stat_rows)
+        if not df.empty and include_nuisance and "\u4e3b\u8981\u985e\u5225" in df.columns:
+            normal_df = df[df["\u4e3b\u8981\u985e\u5225"] != "\u5acc\u60e1\u8a2d\u65bd"].copy()
+            nuisance_df = df[df["\u4e3b\u8981\u985e\u5225"] == "\u5acc\u60e1\u8a2d\u65bd"].copy()
+        else:
+            normal_df = df.copy()
+            nuisance_df = pd.DataFrame()
+        if not normal_df.empty:
+            normal_df = normal_df.rename(columns={"\u623f\u5c4b": "\u623f\u5c4b\u540d\u7a31"}).copy()
+            normal_df["Google\u5730\u5716"] = normal_df.apply(self._build_maps_url, axis=1)
+        if not nuisance_df.empty:
+            nuisance_detail_df = nuisance_df.rename(columns={"\u623f\u5c4b": "\u623f\u5c4b\u540d\u7a31"}).copy()
+            nuisance_detail_df["Google\u5730\u5716"] = nuisance_detail_df.apply(self._build_maps_url, axis=1)
+        else:
+            nuisance_detail_df = pd.DataFrame()
+        nuisance_summary_df = self._summarize_nuisance_by_type(df) if include_nuisance else pd.DataFrame()
+        if not nuisance_summary_df.empty:
+            nuisance_summary_df = nuisance_summary_df.rename(columns={"\u623f\u5c4b": "\u623f\u5c4b\u540d\u7a31"}).copy()
+            nuisance_summary_df["Google\u5730\u5716"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
+        sections = [
+            ("1. \u623f\u5c4b\u672c\u9ad4\u5206\u6790\u6458\u8981", self._html_table_from_df(house_df, ["\u623f\u5c4b\u540d\u7a31"] + fields, 30)),
+            ("2. \u8a2d\u65bd\u7d71\u8a08", self._html_table_from_df(stat_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e00\u822c\u8a2d\u65bd\u6578", "\u5acc\u60e1\u8a2d\u65bd\u6578", "\u7e3d\u6578"], 50)),
+            ("3. \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868", self._html_table_from_df(normal_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
+            ("4. \u5acc\u60e1\u8a2d\u65bd\u6458\u8981", self._html_table_from_df(nuisance_summary_df, ["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"], 80)),
+            ("5. \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", self._html_table_from_df(nuisance_detail_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
+            ("6. AI \u667a\u80fd\u5206\u6790", f'<div class="ai-text">{self._html_escape(ai_text).replace(chr(10), "<br>")}</div>'),
+        ]
+        section_html = "".join(f'<section class="card"><h2>{self._html_escape(title)}</h2>{body}</section>' for title, body in sections)
+        return f"""<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><title>\u623f\u5c4b\u5206\u6790\u5831\u544a</title>
+<style>
+body {{ margin: 0; background: #ffffff; color: #1f2937; font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", Arial, sans-serif; line-height: 1.6; }}
+.container {{ max-width: 1180px; margin: 0 auto; padding: 32px 24px; }}
+.cover {{ border-bottom: 3px solid #2563eb; margin-bottom: 24px; padding-bottom: 18px; }}
+h1 {{ margin: 0 0 12px; font-size: 32px; color: #111827; }} h2 {{ margin: 0 0 16px; font-size: 22px; color: #111827; }}
+.meta {{ color: #4b5563; margin: 4px 0; }}
+.card {{ background: #ffffff; border: 1px solid #e5e7eb; border-radius: 10px; box-shadow: 0 2px 10px rgba(15, 23, 42, 0.06); padding: 22px; margin: 20px 0; }}
+.table-wrap {{ overflow-x: auto; }} table {{ border-collapse: collapse; width: 100%; font-size: 14px; }}
+th, td {{ border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }} th {{ background: #f3f4f6; font-weight: 700; text-align: left; }}
+.badge {{ display: inline-block; border-radius: 999px; padding: 3px 9px; background: #e0f2fe; color: #075985; font-size: 12px; font-weight: 700; }}
+.map-link {{ color: #2563eb; font-weight: 700; text-decoration: none; }} .map-link:hover {{ text-decoration: underline; }}
+.note, .empty {{ color: #6b7280; font-size: 13px; }} .ai-text {{ white-space: normal; font-size: 15px; }}
+</style></head>
+<body><div class="container"><header class="cover"><h1>\u623f\u5c4b\u5206\u6790\u5831\u544a</h1><p class="meta">\u751f\u6210\u6642\u9593\uff1a{self._html_escape(generated_at)}</p><p class="meta">\u8cb7\u5bb6\u985e\u578b\uff1a{self._html_escape(profile)}</p></header>{section_html}</div></body></html>"""
+    
     def _display_ai_analysis(self, res):
         """AI 分析"""
         st.markdown("---")
@@ -1977,7 +2082,7 @@ class ComparisonAnalyzer:
             if st.session_state.current_analysis_name and st.session_state.current_analysis_name in st.session_state.saved_analyses:
                 st.session_state.saved_analyses[st.session_state.current_analysis_name]['gemini_result'] = st.session_state.gemini_result
             
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             with c1:
                 if st.button("🔄 重新分析", use_container_width=True, key="reanalyze"):
                     del st.session_state.gemini_result
@@ -2003,6 +2108,16 @@ class ComparisonAnalyzer:
                     )
                 else:
                     st.caption("PDF 匯出需要安裝 reportlab")
+            with c4:
+                html_report = self._generate_html_report(res, st.session_state.gemini_result)
+                st.download_button(
+                    label="🌐 下載 HTML 報告",
+                    data=html_report,
+                    file_name=f"房屋分析報告_{report_time}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="download_html_report",
+                )
     
     def _format_facilities_for_prompt(self, res, include_nuisance=False):
         """格式化設施資料供提示詞使用；嫌惡設施提供分類摘要，不提供分數"""
