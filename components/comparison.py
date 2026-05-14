@@ -1289,7 +1289,7 @@ class ComparisonAnalyzer:
         
         st.markdown(f"### 分析時間：{timestamp}")
         if include_nuisance:
-            st.info("⚠️ 此分析包含嫌惡設施資訊揭露：顯示最近設施、距離與周圍數量，不再使用風險分數。")
+            st.info("⚠️ 此分析包含嫌惡設施資訊揭露：顯示最近設施、距離與周圍數量。")
         st.markdown("---")
         
         if mode == "單一房屋分析":
