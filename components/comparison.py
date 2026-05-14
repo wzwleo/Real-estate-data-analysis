@@ -20,6 +20,19 @@ import zipfile
 import pytz
 
 try:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import cm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.cidfonts import UnicodeCIDFont
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    REPORTLAB_AVAILABLE = True
+except Exception:
+    REPORTLAB_AVAILABLE = False
+
+
+try:
     from components.favorites import normalize_property_id
 except Exception:
     try:
@@ -1289,7 +1302,7 @@ class ComparisonAnalyzer:
         
         st.markdown(f"### 分析時間：{timestamp}")
         if include_nuisance:
-            st.info("⚠️ 此分析包含嫌惡設施資訊揭露：顯示最近設施、距離與周圍數量。")
+            st.info("⚠️ 此分析包含嫌惡設施資訊揭露：顯示最近設施、距離與周圍數量，不再使用風險分數。")
         st.markdown("---")
         
         if mode == "單一房屋分析":
@@ -1756,6 +1769,134 @@ class ComparisonAnalyzer:
                 else:
                     self._render_facility_cards(nuisance_df, nuisance=True)
     
+    def _pdf_clean_text(self, value):
+        """Normalize text for reportlab paragraphs."""
+        if value is None:
+            return ""
+        text = str(value)
+        text = re.sub(r"<[^>]+>", "", text)
+        text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        return text.replace("\n", "<br/>")
+    
+    def _pdf_table_from_df(self, df, columns, styles, max_rows=40):
+        """Create a compact reportlab table from selected DataFrame columns."""
+        if df is None or df.empty:
+            return [Paragraph("無資料", styles["Body"])]
+        available = [c for c in columns if c in df.columns]
+        if not available:
+            return [Paragraph("無資料", styles["Body"])]
+        table_df = df[available].head(max_rows).copy()
+        data = [[Paragraph(self._pdf_clean_text(c), styles["TableHeader"]) for c in available]]
+        for _, row in table_df.iterrows():
+            data.append([Paragraph(self._pdf_clean_text(row.get(c, "")), styles["TableCell"]) for c in available])
+        table = Table(data, repeatRows=1)
+        table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "STSong-Light"),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#f0f2f6")),
+            ("GRID", (0, 0), (-1, -1), 0.25, colors.HexColor("#cccccc")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        items = [table]
+        if len(df) > max_rows:
+            items.extend([Spacer(1, 0.15 * cm), Paragraph(f"僅列出前 {max_rows} 筆，共 {len(df)} 筆資料。", styles["Small"])])
+        return items
+    
+    def _add_pdf_section(self, story, title, body, styles):
+        story.append(Paragraph(title, styles["Heading"]))
+        story.extend(body)
+        story.append(Spacer(1, 0.25 * cm))
+    
+    def _generate_pdf_report(self, res, ai_text):
+        """Generate a PDF report directly from analysis data."""
+        if not REPORTLAB_AVAILABLE:
+            return None
+        pdfmetrics.registerFont(UnicodeCIDFont("STSong-Light"))
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=A4,
+            rightMargin=1.2 * cm,
+            leftMargin=1.2 * cm,
+            topMargin=1.2 * cm,
+            bottomMargin=1.2 * cm,
+            title="房屋分析報告",
+        )
+        base_styles = getSampleStyleSheet()
+        styles = {
+            "Title": ParagraphStyle("Title", parent=base_styles["Title"], fontName="STSong-Light", fontSize=22, leading=28, alignment=1),
+            "Heading": ParagraphStyle("Heading", parent=base_styles["Heading2"], fontName="STSong-Light", fontSize=14, leading=18, spaceBefore=10, spaceAfter=8),
+            "Body": ParagraphStyle("Body", parent=base_styles["BodyText"], fontName="STSong-Light", fontSize=10, leading=14),
+            "Small": ParagraphStyle("Small", parent=base_styles["BodyText"], fontName="STSong-Light", fontSize=8, leading=11, textColor=colors.HexColor("#666666")),
+            "TableHeader": ParagraphStyle("TableHeader", parent=base_styles["BodyText"], fontName="STSong-Light", fontSize=8, leading=10),
+            "TableCell": ParagraphStyle("TableCell", parent=base_styles["BodyText"], fontName="STSong-Light", fontSize=7, leading=9),
+        }
+        story = []
+        profile = res.get("buyer_profile", "未指定")
+        generated_at = get_taiwan_time()
+        include_nuisance = res.get("include_nuisance", False)
+        df = res.get("facilities_table", pd.DataFrame())
+        story.append(Paragraph("房屋分析報告", styles["Title"]))
+        story.append(Spacer(1, 0.4 * cm))
+        story.append(Paragraph(f"生成時間：{self._pdf_clean_text(generated_at)}", styles["Body"]))
+        story.append(Paragraph(f"買家類型：{self._pdf_clean_text(profile)}", styles["Body"]))
+        story.append(Spacer(1, 0.5 * cm))
+        
+        house_rows = []
+        fields = ["標題", "地址", "屋齡", "類型", "建坪", "主+陽", "格局", "樓層", "車位", "總價(萬)", "行政區"]
+        for house_name, info in res.get("houses_data", {}).items():
+            summary = dict(info.get("property_summary") or {})
+            summary.setdefault("標題", info.get("title", house_name))
+            summary.setdefault("地址", info.get("address", ""))
+            row = {"房屋名稱": house_name}
+            for field in fields:
+                row[field] = summary.get(field, "")
+            house_rows.append(row)
+        self._add_pdf_section(story, "1. 房屋本體分析摘要", self._pdf_table_from_df(pd.DataFrame(house_rows), ["房屋名稱"] + fields, styles, 20), styles)
+        
+        stat_rows = []
+        if not df.empty:
+            for house_name, group in df.groupby("房屋"):
+                if "主要類別" in group.columns:
+                    normal_count = len(group[group["主要類別"] != "嫌惡設施"])
+                    nuisance_count = len(group[group["主要類別"] == "嫌惡設施"])
+                else:
+                    normal_count = len(group)
+                    nuisance_count = 0
+                stat_rows.append({"房屋名稱": house_name, "一般設施數": normal_count, "嫌惡設施數": nuisance_count, "總數": len(group)})
+        self._add_pdf_section(story, "2. 設施統計", self._pdf_table_from_df(pd.DataFrame(stat_rows), ["房屋名稱", "一般設施數", "嫌惡設施數", "總數"], styles, 30), styles)
+        
+        if not df.empty and include_nuisance and "主要類別" in df.columns:
+            normal_df = df[df["主要類別"] != "嫌惡設施"].copy()
+            nuisance_df = df[df["主要類別"] == "嫌惡設施"].copy()
+        else:
+            normal_df = df.copy()
+            nuisance_df = pd.DataFrame()
+        if not normal_df.empty:
+            normal_df = normal_df.rename(columns={"房屋": "房屋名稱"}).copy()
+            normal_df["Google地圖"] = normal_df.apply(self._build_maps_url, axis=1)
+        self._add_pdf_section(story, "3. 一般設施總表", self._pdf_table_from_df(normal_df, ["房屋名稱", "主要類別", "設施子類別", "設施名稱", "距離(公尺)", "Google地圖"], styles, 40), styles)
+        
+        nuisance_summary_df = self._summarize_nuisance_by_type(df) if include_nuisance else pd.DataFrame()
+        if not nuisance_summary_df.empty:
+            nuisance_summary_df = nuisance_summary_df.rename(columns={"房屋": "房屋名稱"}).copy()
+            nuisance_summary_df["Google地圖"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
+        self._add_pdf_section(story, "4. 嫌惡設施摘要", self._pdf_table_from_df(nuisance_summary_df, ["房屋名稱", "嫌惡設施類型", "影響分類", "最近設施名稱", "最近距離(公尺)", "周圍數量", "提醒", "Google地圖"], styles, 40), styles)
+        
+        if not nuisance_df.empty:
+            nuisance_df = nuisance_df.rename(columns={"房屋": "房屋名稱"}).copy()
+            nuisance_df["Google地圖"] = nuisance_df.apply(self._build_maps_url, axis=1)
+        self._add_pdf_section(story, "5. 嫌惡設施明細總表", self._pdf_table_from_df(nuisance_df, ["房屋名稱", "主要類別", "設施子類別", "設施名稱", "距離(公尺)", "Google地圖"], styles, 60), styles)
+        
+        story.append(Paragraph("6. AI 智能分析", styles["Heading"]))
+        story.append(Paragraph(self._pdf_clean_text(ai_text), styles["Body"]))
+        doc.build(story)
+        buffer.seek(0)
+        return buffer.getvalue()
+    
     def _display_ai_analysis(self, res):
         """AI 分析"""
         st.markdown("---")
@@ -1836,18 +1977,32 @@ class ComparisonAnalyzer:
             if st.session_state.current_analysis_name and st.session_state.current_analysis_name in st.session_state.saved_analyses:
                 st.session_state.saved_analyses[st.session_state.current_analysis_name]['gemini_result'] = st.session_state.gemini_result
             
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             with c1:
                 if st.button("🔄 重新分析", use_container_width=True, key="reanalyze"):
                     del st.session_state.gemini_result
                     del st.session_state.used_prompt
                     st.rerun()
+            report_title = f"{profile}視角-{'含嫌惡設施' if include_nuisance else '生活機能'}報告"
+            if mode != "單一房屋分析":
+                report_title = f"{profile}視角-{res['num_houses']}間房屋{'含嫌惡設施' if include_nuisance else '生活機能'}比較報告"
+            report_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+            report = f"{report_title}\n生成時間：{get_taiwan_time()}\n\nAI 分析結果：\n{st.session_state.gemini_result}"
             with c2:
-                report_title = f"{profile}視角-{'含嫌惡設施' if include_nuisance else '生活機能'}報告"
-                if mode != "單一房屋分析":
-                    report_title = f"{profile}視角-{res['num_houses']}間房屋{'含嫌惡設施' if include_nuisance else '生活機能'}比較報告"
-                report = f"{report_title}\n生成時間：{get_taiwan_time()}\n\nAI 分析結果：\n{st.session_state.gemini_result}"
-                st.download_button(label="📥 下載分析報告", data=report, file_name=f"{report_title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt", mime="text/plain", use_container_width=True, key="download_report")
+                st.download_button(label="📥 下載 TXT 報告", data=report, file_name=f"{report_title}_{report_time}.txt", mime="text/plain", use_container_width=True, key="download_report")
+            with c3:
+                pdf_bytes = self._generate_pdf_report(res, st.session_state.gemini_result)
+                if pdf_bytes:
+                    st.download_button(
+                        label="📄 下載 PDF 報告",
+                        data=pdf_bytes,
+                        file_name=f"房屋分析報告_{report_time}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True,
+                        key="download_pdf_report",
+                    )
+                else:
+                    st.caption("PDF 匯出需要安裝 reportlab")
     
     def _format_facilities_for_prompt(self, res, include_nuisance=False):
         """格式化設施資料供提示詞使用；嫌惡設施提供分類摘要，不提供分數"""
