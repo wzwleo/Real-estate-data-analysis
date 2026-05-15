@@ -2656,9 +2656,8 @@ def tab1_module():
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
-    """浮動 AI 聊天視窗 - 固定右下角 + 可互動版本"""
-    import json
-
+    """真正的浮動聊天視窗，用 HTML + JS 直接呼叫 Gemini API"""
+    
     # 取得背景資料
     context = ""
     if 'solo_analysis_result' in st.session_state:
@@ -2687,7 +2686,6 @@ def render_float_chat():
 
     gemini_key = st.session_state.get("GEMINI_KEY", "")
     has_context = bool(context)
-    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
 
     preset_questions = [
         "這間房子適合首購族嗎？",
@@ -2696,294 +2694,293 @@ def render_float_chat():
         "未來轉售容易嗎？",
         "有什麼需要特別注意的地方？",
     ]
-
-    context_js = json.dumps(context)
-    gemini_key_js = json.dumps(gemini_key)
-
-    # 預設按鈕 HTML（不用 onclick attribute，改用 data-q 屬性，再用 JS 綁定）
     preset_btns_html = "".join([
-        f'<button class="fc-preset-btn" data-q="{q}">{q}</button>'
+        f'<button class="preset-btn" onclick="fillInput(`{q}`)">{q}</button>'
         for q in preset_questions
     ])
 
-    st.markdown(f"""
-    <style>
-    #fc-fab {{
-        position: fixed;
-        bottom: 32px;
-        right: 32px;
-        width: 56px;
-        height: 56px;
-        border-radius: 50%;
-        background: #4CAF50;
-        color: white;
-        font-size: 26px;
-        border: none;
-        cursor: pointer;
-        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: background 0.2s, transform 0.15s;
-    }}
-    #fc-fab:hover {{ background: #388E3C; transform: scale(1.08); }}
-    #fc-window {{
-        position: fixed;
-        bottom: 100px;
-        right: 32px;
-        width: 340px;
-        height: 500px;
-        background: #1a1a1a;
-        border: 1.5px solid #4CAF50;
-        border-radius: 16px;
-        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-        z-index: 99998;
-        display: none;
-        flex-direction: column;
-        overflow: hidden;
-        font-family: sans-serif;
-    }}
-    #fc-window.fc-open {{ display: flex; }}
-    .fc-header {{
-        background: #4CAF50;
-        color: white;
-        padding: 11px 14px;
-        font-weight: bold;
-        font-size: 14px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-shrink: 0;
-    }}
-    .fc-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
-    .fc-close-btn {{
-        background: none; border: none; color: white;
-        font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
-    }}
-    .fc-body {{
-        flex: 1;
-        overflow-y: auto;
-        padding: 10px;
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-    }}
-    .fc-body::-webkit-scrollbar {{ width: 4px; }}
-    .fc-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
-    .fc-msg-row {{ display: flex; }}
-    .fc-user-row {{ justify-content: flex-end; }}
-    .fc-ai-row   {{ justify-content: flex-start; }}
-    .fc-msg {{
-        max-width: 82%;
-        padding: 7px 11px;
-        border-radius: 12px;
-        font-size: 12.5px;
-        line-height: 1.55;
-        white-space: pre-wrap;
-        word-break: break-word;
-    }}
-    .fc-user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
-    .fc-ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
-    .fc-typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
-    .fc-empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
-    .fc-preset-area {{
-        padding: 6px 10px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 5px;
-        border-top: 1px solid #2a2a2a;
-        flex-shrink: 0;
-    }}
-    .fc-preset-btn {{
-        background: #222; color: #999;
-        border: 1px solid #3a3a3a;
-        border-radius: 10px;
-        padding: 3px 9px;
-        font-size: 11px;
-        cursor: pointer;
-        transition: all 0.15s;
-    }}
-    .fc-preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
-    .fc-input-area {{
-        display: flex;
-        gap: 6px;
-        padding: 8px 10px;
-        border-top: 1px solid #2a2a2a;
-        flex-shrink: 0;
-        align-items: center;
-    }}
-    #fc-msg-input {{
-        flex: 1;
-        background: #2a2a2a;
-        border: 1px solid #3a3a3a;
-        border-radius: 8px;
-        color: #e0e0e0;
-        font-size: 12.5px;
-        padding: 6px 10px;
-        outline: none;
-        resize: none;
-        height: 34px;
-        line-height: 1.4;
-        font-family: sans-serif;
-    }}
-    #fc-msg-input:focus {{ border-color: #4CAF50; }}
-    #fc-send-btn {{
-        background: #4CAF50; color: white;
-        border: none; border-radius: 8px;
-        padding: 6px 12px; font-size: 13px;
-        cursor: pointer; flex-shrink: 0;
-        transition: background 0.15s;
-    }}
-    #fc-send-btn:hover {{ background: #388E3C; }}
-    #fc-send-btn:disabled {{ background: #444; cursor: not-allowed; }}
-    </style>
+    import json
+    context_js = json.dumps(context)
+    gemini_key_js = json.dumps(gemini_key)
+    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
 
-    <button id="fc-fab" title="AI 房產顧問">💬</button>
+    html_code = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{
+    background: transparent;
+    font-family: sans-serif;
+    overflow: hidden;
+  }}
 
-    <div id="fc-window">
-        <div class="fc-header">
-            <div>
-                🤖 AI 房產顧問
-                <div class="fc-header-sub">{has_context_str}</div>
-            </div>
-            <button class="fc-close-btn" id="fc-close-btn">✕</button>
-        </div>
-        <div class="fc-body" id="fc-body">
-            <div class="fc-empty-hint" id="fc-empty-hint">請輸入問題，或點選下方快速提問</div>
-        </div>
-        <div class="fc-preset-area" id="fc-preset-area">
-            {preset_btns_html}
-        </div>
-        <div class="fc-input-area">
-            <textarea id="fc-msg-input" placeholder="輸入問題..."></textarea>
-            <button id="fc-send-btn">送出</button>
-        </div>
+  #chat-container {{
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    padding: 16px;
+    pointer-events: none;
+  }}
+
+  #fab {{
+    pointer-events: all;
+    width: 54px;
+    height: 54px;
+    border-radius: 50%;
+    background: #4CAF50;
+    color: white;
+    font-size: 24px;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s, transform 0.15s;
+    flex-shrink: 0;
+  }}
+  #fab:hover {{ background: #388E3C; transform: scale(1.08); }}
+
+  #chat-window {{
+    pointer-events: all;
+    width: 340px;
+    height: 500px;
+    background: #1a1a1a;
+    border: 1.5px solid #4CAF50;
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }}
+  #chat-window.open {{ display: flex; }}
+
+  .chat-header {{
+    background: #4CAF50;
+    color: white;
+    padding: 11px 14px;
+    font-weight: bold;
+    font-size: 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }}
+  .chat-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
+  .close-btn {{
+    background: none; border: none; color: white;
+    font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
+  }}
+
+  .chat-body {{
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }}
+  .chat-body::-webkit-scrollbar {{ width: 4px; }}
+  .chat-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
+
+  .msg-row {{ display: flex; }}
+  .user-row {{ justify-content: flex-end; }}
+  .ai-row   {{ justify-content: flex-start; }}
+  .msg {{
+    max-width: 82%;
+    padding: 7px 11px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }}
+  .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
+  .ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
+  .typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
+  .empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
+
+  .preset-area {{
+    padding: 6px 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    border-top: 1px solid #2a2a2a;
+    flex-shrink: 0;
+  }}
+  .preset-btn {{
+    background: #222; color: #999;
+    border: 1px solid #3a3a3a;
+    border-radius: 10px;
+    padding: 3px 9px;
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }}
+  .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
+
+  .input-area {{
+    display: flex;
+    gap: 6px;
+    padding: 8px 10px;
+    border-top: 1px solid #2a2a2a;
+    flex-shrink: 0;
+    align-items: center;
+  }}
+  #msg-input {{
+    flex: 1;
+    background: #2a2a2a;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    color: #e0e0e0;
+    font-size: 12.5px;
+    padding: 6px 10px;
+    outline: none;
+    resize: none;
+    height: 34px;
+    line-height: 1.4;
+  }}
+  #msg-input:focus {{ border-color: #4CAF50; }}
+  #send-btn {{
+    background: #4CAF50; color: white;
+    border: none; border-radius: 8px;
+    padding: 6px 12px; font-size: 13px;
+    cursor: pointer; flex-shrink: 0;
+    transition: background 0.15s;
+  }}
+  #send-btn:hover {{ background: #388E3C; }}
+  #send-btn:disabled {{ background: #444; cursor: not-allowed; }}
+</style>
+</head>
+<body>
+
+<div id="chat-container">
+  <div id="chat-window">
+    <div class="chat-header">
+      <div>
+        🤖 AI 房產顧問
+        <div class="chat-header-sub">{has_context_str}</div>
+      </div>
+      <button class="close-btn" onclick="toggleChat()">✕</button>
     </div>
+    <div class="chat-body" id="chat-body">
+      <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
+    </div>
+    <div class="preset-area">
+      {preset_btns_html}
+    </div>
+    <div class="input-area">
+      <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
+      <button id="send-btn" onclick="sendMsg()">送出</button>
+    </div>
+  </div>
 
-    <script>
-    (function() {{
-        var GEMINI_KEY = {gemini_key_js};
-        var FC_CONTEXT = {context_js};
+  <button id="fab" onclick="toggleChat()">💬</button>
+</div>
 
-        function init() {{
-            var fab     = document.getElementById('fc-fab');
-            var win     = document.getElementById('fc-window');
-            var closeBtn = document.getElementById('fc-close-btn');
-            var sendBtn = document.getElementById('fc-send-btn');
-            var input   = document.getElementById('fc-msg-input');
-            var presetArea = document.getElementById('fc-preset-area');
+<script>
+const GEMINI_KEY = {gemini_key_js};
+const CONTEXT    = {context_js};
 
-            if (!fab || !win) return;  // 元素還沒渲染，稍後重試
+function toggleChat() {{
+  const win = document.getElementById('chat-window');
+  win.classList.toggle('open');
+  if (win.classList.contains('open')) {{
+    scrollBottom();
+    document.getElementById('msg-input').focus();
+  }}
+}}
 
-            fab.addEventListener('click', function() {{
-                win.classList.toggle('fc-open');
-                if (win.classList.contains('fc-open')) {{
-                    scrollBottom();
-                    input.focus();
-                }}
-            }});
+function fillInput(text) {{
+  document.getElementById('msg-input').value = text;
+  document.getElementById('msg-input').focus();
+}}
 
-            closeBtn.addEventListener('click', function() {{
-                win.classList.remove('fc-open');
-            }});
+function handleKey(e) {{
+  if (e.key === 'Enter' && !e.shiftKey) {{
+    e.preventDefault();
+    sendMsg();
+  }}
+}}
 
-            sendBtn.addEventListener('click', sendMsg);
+function scrollBottom() {{
+  const body = document.getElementById('chat-body');
+  body.scrollTop = body.scrollHeight;
+}}
 
-            input.addEventListener('keydown', function(e) {{
-                if (e.key === 'Enter' && !e.shiftKey) {{
-                    e.preventDefault();
-                    sendMsg();
-                }}
-            }});
+function appendMsg(role, text) {{
+  const hint = document.getElementById('empty-hint');
+  if (hint) hint.remove();
 
-            presetArea.addEventListener('click', function(e) {{
-                var btn = e.target.closest('.fc-preset-btn');
-                if (btn) {{
-                    input.value = btn.getAttribute('data-q');
-                    input.focus();
-                }}
-            }});
-        }}
+  const body = document.getElementById('chat-body');
+  const row  = document.createElement('div');
+  row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
+  const bubble = document.createElement('div');
+  bubble.className = 'msg ' + (role === 'user' ? 'user-msg' : 'ai-msg');
+  bubble.textContent = text;
+  row.appendChild(bubble);
+  body.appendChild(row);
+  scrollBottom();
+  return bubble;
+}}
 
-        function scrollBottom() {{
-            var body = document.getElementById('fc-body');
-            if (body) body.scrollTop = body.scrollHeight;
-        }}
+async function sendMsg() {{
+  const input = document.getElementById('msg-input');
+  const btn   = document.getElementById('send-btn');
+  const text  = input.value.trim();
+  if (!text) return;
+  if (!GEMINI_KEY) {{
+    appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
+    return;
+  }}
 
-        function appendMsg(role, text) {{
-            var hint = document.getElementById('fc-empty-hint');
-            if (hint) hint.remove();
-            var body   = document.getElementById('fc-body');
-            var row    = document.createElement('div');
-            row.className = 'fc-msg-row ' + (role === 'user' ? 'fc-user-row' : 'fc-ai-row');
-            var bubble = document.createElement('div');
-            bubble.className = 'fc-msg ' + (role === 'user' ? 'fc-user-msg' : 'fc-ai-msg');
-            bubble.textContent = text;
-            row.appendChild(bubble);
-            body.appendChild(row);
-            scrollBottom();
-        }}
+  appendMsg('user', text);
+  input.value = '';
+  btn.disabled = true;
 
-        async function sendMsg() {{
-            var input   = document.getElementById('fc-msg-input');
-            var sendBtn = document.getElementById('fc-send-btn');
-            var text    = input.value.trim();
-            if (!text) return;
-            if (!GEMINI_KEY) {{
-                appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
-                return;
-            }}
-            appendMsg('user', text);
-            input.value = '';
-            sendBtn.disabled = true;
+  const body = document.getElementById('chat-body');
+  const typing = document.createElement('div');
+  typing.className = 'typing';
+  typing.id = 'typing';
+  typing.textContent = 'AI 思考中...';
+  body.appendChild(typing);
+  scrollBottom();
 
-            var body   = document.getElementById('fc-body');
-            var typing = document.createElement('div');
-            typing.className = 'fc-typing';
-            typing.id = 'fc-typing';
-            typing.textContent = 'AI 思考中...';
-            body.appendChild(typing);
-            scrollBottom();
+  try {{
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{GEMINI_KEY}}`,
+      {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{
+          contents: [{{
+            parts: [{{ text: CONTEXT + '\\n\\n【使用者問題】\\n' + text + '\\n\\n請用繁體中文回答，簡潔清楚，不超過 200 字。' }}]
+          }}]
+        }})
+      }}
+    );
+    const data = await res.json();
+    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
+    document.getElementById('typing')?.remove();
+    appendMsg('ai', reply);
+  }} catch(e) {{
+    document.getElementById('typing')?.remove();
+    appendMsg('ai', '抱歉，發生錯誤：' + e.message);
+  }}
 
-            try {{
-                var res = await fetch(
-                    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + GEMINI_KEY,
-                    {{
-                        method: 'POST',
-                        headers: {{ 'Content-Type': 'application/json' }},
-                        body: JSON.stringify({{
-                            contents: [{{
-                                parts: [{{ text: FC_CONTEXT + '\\n\\n【使用者問題】\\n' + text + '\\n\\n請用繁體中文回答，簡潔清楚，不超過 200 字。' }}]
-                            }}]
-                        }})
-                    }}
-                );
-                var data  = await res.json();
-                var reply = (data && data.candidates && data.candidates[0] &&
-                             data.candidates[0].content && data.candidates[0].content.parts &&
-                             data.candidates[0].content.parts[0].text)
-                            ? data.candidates[0].content.parts[0].text
-                            : '抱歉，無法取得回應。';
-                var t = document.getElementById('fc-typing');
-                if (t) t.remove();
-                appendMsg('ai', reply);
-            }} catch(e) {{
-                var t = document.getElementById('fc-typing');
-                if (t) t.remove();
-                appendMsg('ai', '抱歉，發生錯誤：' + e.message);
-            }}
-            sendBtn.disabled = false;
-            scrollBottom();
-        }}
+  btn.disabled = false;
+  scrollBottom();
+}}
+</script>
+</body>
+</html>"""
 
-        // 確保 DOM 渲染完畢後再綁定
-        if (document.readyState === 'loading') {{
-            document.addEventListener('DOMContentLoaded', init);
-        }} else {{
-            init();
-        }}
-    }})();
-    </script>
-    """, unsafe_allow_html=True)
+    import streamlit.components.v1 as components
+    components.html(html_code, height=620, scrolling=False)
 
