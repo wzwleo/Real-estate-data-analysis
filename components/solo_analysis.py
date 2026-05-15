@@ -1157,10 +1157,12 @@ def tab1_module():
         with col1:
             st.header("個別分析")
         with col2:
-            choice = st.selectbox("選擇房屋", options, key="analysis_solo")
-        with col3:
+            st.write("")
             st.write("")
             batch_btn = st.button("⚡ 一鍵批次分析", use_container_width=True, key="batch_analysis_btn")
+        with col3:
+            choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+            
         
         # 篩選出選中的房子
         selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
@@ -1498,8 +1500,6 @@ def tab1_module():
                         "格局流動性": round(b_score_layout, 1),
                     }
 
-                    # ── 呼叫 Gemini ──
-                    import google.generativeai as genai
                     genai.configure(api_key=gemini_key)
                     b_model = genai.GenerativeModel("gemini-2.5-flash")
 
