@@ -2656,36 +2656,162 @@ def tab1_module():
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
-    """真正的浮動聊天視窗，用 HTML + JS 直接呼叫 Gemini API"""
-    
-    # 取得背景資料
+    """浮動聊天視窗 - 循序漸進式 context"""
+
+    # ── 取得背景資料（循序漸進）──
     context = ""
-    if 'solo_analysis_result' in st.session_state:
+    fav_basic_info = {}
+
+    if 'solo_analysis_result' not in st.session_state:
+        # 情境一：尚未分析，嘗試取得基本資訊
+        try:
+            if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
+                all_df = st.session_state.all_properties_df
+            elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
+                all_df = st.session_state.filtered_df
+            else:
+                all_df = None
+
+            if all_df is not None and 'favorites' in st.session_state and st.session_state.favorites:
+                fav_ids = st.session_state.favorites
+                fav_df = all_df[all_df['編號'].isin(fav_ids)]
+                if not fav_df.empty:
+                    current_choice = st.session_state.get('analysis_solo', '')
+                    if current_choice:
+                        matched = fav_df[fav_df['標題'] == current_choice]
+                        if not matched.empty:
+                            fav_basic_info = matched.iloc[0].to_dict()
+                    if not fav_basic_info:
+                        fav_basic_info = fav_df.iloc[0].to_dict()
+        except Exception:
+            pass
+
+        if fav_basic_info:
+            context = f"""你是一位台灣房市分析顧問，請根據以下房屋基本資料回答問題，用繁體中文回答，簡潔清楚，不超過 200 字。
+
+【房屋基本資訊】
+標題：{fav_basic_info.get('標題', '未提供')}
+地址：{fav_basic_info.get('地址', '未提供')}
+行政區：{fav_basic_info.get('行政區', '未提供')}
+類型：{fav_basic_info.get('類型', '未提供')}
+總價：{fav_basic_info.get('總價(萬)', '未提供')} 萬
+建坪：{fav_basic_info.get('建坪', '未提供')} 坪
+實際坪數：{fav_basic_info.get('主+陽', '未提供')} 坪
+格局：{fav_basic_info.get('格局', '未提供')}
+樓層：{fav_basic_info.get('樓層', '未提供')}
+屋齡：{fav_basic_info.get('屋齡', '未提供')}
+車位：{fav_basic_info.get('車位', '未提供')}
+
+⚠️ 注意：目前只有基本資訊，尚未進行完整市場分析。
+回答問題時請基於基本資訊給予初步看法，並在回答結尾建議使用者點擊「開始分析」按鈕取得更詳細的市場比較數據與 AI 分析結論。"""
+        else:
+            context = """你是一位台灣房市分析顧問。目前使用者尚未選擇或收藏任何房屋，也尚未進行分析。請提醒使用者先到搜尋頁面找到喜歡的房屋加入收藏，再到分析頁面進行分析。"""
+
+    else:
+        # 情境二或三：已有分析結果
         r = st.session_state['solo_analysis_result']
         selected = r.get('selected_row', {})
-        context = f"""你是一位台灣房市分析顧問，以下是使用者目前正在分析的房屋資料，請根據這些資料回答問題。
+
+        context = f"""你是一位台灣房市分析顧問，請根據以下房屋資料與市場數據回答問題，用繁體中文回答，簡潔清楚，不超過 200 字。
+
 【房屋基本資訊】
 標題：{selected.get('標題', '未提供')}
 地址：{selected.get('地址', '未提供')}
-類型：{selected.get('類型', '未提供')}
 行政區：{selected.get('行政區', '未提供')}
+類型：{selected.get('類型', '未提供')}
 總價：{selected.get('總價(萬)', '未提供')} 萬
 建坪：{selected.get('建坪', '未提供')} 坪
 實際坪數：{selected.get('主+陽', '未提供')} 坪
 格局：{selected.get('格局', '未提供')}
 樓層：{selected.get('樓層', '未提供')}
 屋齡：{selected.get('屋齡', '未提供')}
+車位：{selected.get('車位', '未提供')}
 綜合評分：{r.get('total_score', '未提供')} 分
-【AI 分析結論】
-價格分析：{r.get('price_text', '')}
-坪數分析：{r.get('space_text', '')}
-屋齡分析：{r.get('age_text', '')}
-樓層分析：{r.get('floor_text', '')}
-格局分析：{r.get('layout_text', '')}
-綜合總結：{r.get('summary_text', '')}"""
 
-    gemini_key = st.session_state.get("GEMINI_KEY", "")
-    has_context = bool(context)
+【各面向分數（0-10分）】
+價格競爭力：{r.get('scores', {}).get('價格競爭力', '未提供')}
+空間效率：{r.get('scores', {}).get('空間效率', '未提供')}
+屋齡優勢：{r.get('scores', {}).get('屋齡優勢', '未提供')}
+樓層定位：{r.get('scores', {}).get('樓層定位', '未提供')}
+格局流動性：{r.get('scores', {}).get('格局流動性', '未提供')}
+
+【市場數據】
+價格百分位：{r.get('analysis_payload', {}).get('價格分布', {}).get('價格百分位', '未提供')}%（越低越便宜）
+市場中位數：{r.get('analysis_payload', {}).get('價格分布', {}).get('市場中位數(萬)', '未提供')} 萬
+空間使用率百分位：{r.get('floor_area_payload', {}).get('坪數分布', {}).get('使用率百分位', '未提供')}%
+屋齡百分位：{r.get('age_analysis_payload', {}).get('屋齡分布', {}).get('屋齡百分位', '未提供') if r.get('age_analysis_payload') else '未提供'}%（越低越新）
+樓層百分位：{r.get('floor_analysis_payload', {}).get('樓層分布', {}).get('樓層百分位', '未提供') if r.get('floor_analysis_payload') else '未提供'}%
+
+【AI 分析結論摘要】
+綜合總結：{r.get('summary_text', '未提供')}"""
+
+        # 情境三：有排名資料才加入
+        if st.session_state.get('t_rank') and st.session_state.get('df_rank'):
+            t_rank = st.session_state['t_rank']
+            total_cnt = len(st.session_state['df_rank'])
+            percentile = round((1 - t_rank / total_cnt) * 100, 1)
+            context += f"""
+
+【同區同類型排名】
+排名：第 {t_rank} 名（共 {total_cnt} 筆）
+超越比例：{percentile}%（超越同區同類型 {percentile}% 的物件）"""
+        else:
+            context += """
+
+⚠️ 尚未計算同區排名，如需排名比較建議點擊「📊 計算此區域排名」按鈕。"""
+
+    # ── 預算資訊（有套用才加入）──
+    monthly_income = st.session_state.get('budget_monthly_income', 0)
+    down_payment = st.session_state.get('budget_down_payment', 0)
+    if st.session_state.get('budget_applied') and monthly_income > 0 and down_payment > 0:
+        loan_years = st.session_state.get('budget_years', 30)
+        interest_rate = st.session_state.get('budget_rate', 2.0)
+        monthly_rate = interest_rate / 100 / 12
+        n = loan_years * 12
+        max_monthly_payment = monthly_income * 10000 * 0.3
+        if monthly_rate > 0:
+            max_loan = max_monthly_payment * (1 - (1 + monthly_rate) ** (-n)) / monthly_rate
+        else:
+            max_loan = max_monthly_payment * n
+        max_loan_wan = max_loan / 10000
+        max_total_price = max_loan_wan + down_payment
+        monthly_payment_val = max_loan * monthly_rate / (1 - (1 + monthly_rate) ** (-n)) if monthly_rate > 0 else max_loan / n
+        total_interest_wan = (monthly_payment_val * n - max_loan) / 10000
+        down_ratio = (down_payment / max_total_price * 100) if max_total_price > 0 else 0
+
+        try:
+            house_price = float(
+                st.session_state.get('solo_analysis_result', {}).get('selected_row', {}).get('總價(萬)', 0)
+                or fav_basic_info.get('總價(萬)', 0)
+                or 0
+            )
+            if house_price > 0:
+                budget_status = (
+                    f"在預算範圍內（尚餘 {max_total_price - house_price:.0f} 萬）"
+                    if house_price <= max_total_price
+                    else f"超出預算上限 {house_price - max_total_price:.0f} 萬"
+                )
+            else:
+                budget_status = "無法判斷"
+        except Exception:
+            budget_status = "無法判斷"
+
+        context += f"""
+
+【使用者預算資訊】
+月收入：{monthly_income} 萬
+頭期款：{down_payment} 萬
+貸款年限：{loan_years} 年
+年利率：{interest_rate}%
+建議總價上限：{max_total_price:.0f} 萬
+最高可貸金額：{max_loan_wan:.0f} 萬
+每月還款：{monthly_payment_val/10000:.2f} 萬
+總利息：{total_interest_wan:.0f} 萬
+頭期款佔比：{down_ratio:.1f}%
+此房預算狀況：{budget_status}"""
+
+    # ── 其餘設定 ──
+    has_context_str = '✅ 已載入分析資料' if 'solo_analysis_result' in st.session_state else '📋 基本資訊模式'
 
     preset_questions = [
         "這間房子適合首購族嗎？",
@@ -2695,14 +2821,14 @@ def render_float_chat():
         "有什麼需要特別注意的地方？",
     ]
     preset_btns_html = "".join([
-        f'<button class="preset-btn" onclick="fillInput(`{q}`)">{q}</button>'
+        f'<button class="preset-btn" data-q="{q}" onclick="fillInput(this.dataset.q)">{q}</button>'
         for q in preset_questions
     ])
 
     import json
     context_js = json.dumps(context)
+    gemini_key = st.session_state.get("GEMINI_KEY", "")
     gemini_key_js = json.dumps(gemini_key)
-    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
 
     html_code = f"""<!DOCTYPE html>
 <html>
@@ -2710,148 +2836,79 @@ def render_float_chat():
 <meta charset="utf-8">
 <style>
   * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    background: transparent;
-    font-family: sans-serif;
-    overflow: hidden;
-  }}
+  body {{ background: transparent; font-family: sans-serif; overflow: hidden; }}
 
   #chat-container {{
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
-    padding: 16px;
-    pointer-events: none;
+    position: fixed; bottom: 0; right: 0;
+    display: flex; flex-direction: column; align-items: flex-end;
+    gap: 8px; padding: 16px; pointer-events: none;
   }}
-
   #fab {{
-    pointer-events: all;
-    width: 54px;
-    height: 54px;
-    border-radius: 50%;
-    background: #4CAF50;
-    color: white;
-    font-size: 24px;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s, transform 0.15s;
-    flex-shrink: 0;
+    pointer-events: all; width: 54px; height: 54px; border-radius: 50%;
+    background: #4CAF50; color: white; font-size: 24px; border: none;
+    cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+    display: flex; align-items: center; justify-content: center;
+    transition: background 0.2s, transform 0.15s; flex-shrink: 0;
   }}
   #fab:hover {{ background: #388E3C; transform: scale(1.08); }}
-
   #chat-window {{
-    pointer-events: all;
-    width: 340px;
-    height: 500px;
-    background: #1a1a1a;
-    border: 1.5px solid #4CAF50;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
+    pointer-events: all; width: 340px; height: 500px;
+    background: #1a1a1a; border: 1.5px solid #4CAF50;
+    border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    display: none; flex-direction: column; overflow: hidden;
   }}
   #chat-window.open {{ display: flex; }}
-
   .chat-header {{
-    background: #4CAF50;
-    color: white;
-    padding: 11px 14px;
-    font-weight: bold;
-    font-size: 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
+    background: #4CAF50; color: white; padding: 11px 14px;
+    font-weight: bold; font-size: 14px; display: flex;
+    justify-content: space-between; align-items: center; flex-shrink: 0;
   }}
   .chat-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
   .close-btn {{
     background: none; border: none; color: white;
     font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
   }}
-
   .chat-body {{
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    flex: 1; overflow-y: auto; padding: 10px;
+    display: flex; flex-direction: column; gap: 8px;
   }}
   .chat-body::-webkit-scrollbar {{ width: 4px; }}
   .chat-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
-
   .msg-row {{ display: flex; }}
   .user-row {{ justify-content: flex-end; }}
   .ai-row   {{ justify-content: flex-start; }}
   .msg {{
-    max-width: 82%;
-    padding: 7px 11px;
-    border-radius: 12px;
-    font-size: 12.5px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-word;
+    max-width: 82%; padding: 7px 11px; border-radius: 12px;
+    font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; word-break: break-word;
   }}
   .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
   .ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
   .typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
   .empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
-
   .preset-area {{
-    padding: 6px 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
+    padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 5px;
+    border-top: 1px solid #2a2a2a; flex-shrink: 0;
   }}
   .preset-btn {{
-    background: #222; color: #999;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    padding: 3px 9px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.15s;
+    background: #222; color: #999; border: 1px solid #3a3a3a;
+    border-radius: 10px; padding: 3px 9px; font-size: 11px;
+    cursor: pointer; transition: all 0.15s;
   }}
   .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
-
+  .preset-btn:disabled {{ background: #1a1a1a; color: #444; border-color: #2a2a2a; cursor: not-allowed; }}
   .input-area {{
-    display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
-    align-items: center;
+    display: flex; gap: 6px; padding: 8px 10px;
+    border-top: 1px solid #2a2a2a; flex-shrink: 0; align-items: center;
   }}
   #msg-input {{
-    flex: 1;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    color: #e0e0e0;
-    font-size: 12.5px;
-    padding: 6px 10px;
-    outline: none;
-    resize: none;
-    height: 34px;
-    line-height: 1.4;
+    flex: 1; background: #2a2a2a; border: 1px solid #3a3a3a;
+    border-radius: 8px; color: #e0e0e0; font-size: 12.5px;
+    padding: 6px 10px; outline: none; resize: none; height: 34px; line-height: 1.4;
   }}
   #msg-input:focus {{ border-color: #4CAF50; }}
   #send-btn {{
-    background: #4CAF50; color: white;
-    border: none; border-radius: 8px;
-    padding: 6px 12px; font-size: 13px;
-    cursor: pointer; flex-shrink: 0;
+    background: #4CAF50; color: white; border: none; border-radius: 8px;
+    padding: 6px 12px; font-size: 13px; cursor: pointer; flex-shrink: 0;
     transition: background 0.15s;
   }}
   #send-btn:hover {{ background: #388E3C; }}
@@ -2859,28 +2916,21 @@ def render_float_chat():
 </style>
 </head>
 <body>
-
 <div id="chat-container">
   <div id="chat-window">
     <div class="chat-header">
-      <div>
-        🤖 AI 房產顧問
-        <div class="chat-header-sub">{has_context_str}</div>
-      </div>
+      <div>🤖 AI 房產顧問<div class="chat-header-sub">{has_context_str}</div></div>
       <button class="close-btn" onclick="toggleChat()">✕</button>
     </div>
     <div class="chat-body" id="chat-body">
       <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
     </div>
-    <div class="preset-area">
-      {preset_btns_html}
-    </div>
+    <div class="preset-area">{preset_btns_html}</div>
     <div class="input-area">
       <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
       <button id="send-btn" onclick="sendMsg()">送出</button>
     </div>
   </div>
-
   <button id="fab" onclick="toggleChat()">💬</button>
 </div>
 
@@ -2898,8 +2948,9 @@ function toggleChat() {{
 }}
 
 function fillInput(text) {{
+  if (document.getElementById('send-btn').disabled) return;
   document.getElementById('msg-input').value = text;
-  document.getElementById('msg-input').focus();
+  sendMsg();
 }}
 
 function handleKey(e) {{
@@ -2917,7 +2968,6 @@ function scrollBottom() {{
 function appendMsg(role, text) {{
   const hint = document.getElementById('empty-hint');
   if (hint) hint.remove();
-
   const body = document.getElementById('chat-body');
   const row  = document.createElement('div');
   row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
@@ -2930,19 +2980,28 @@ function appendMsg(role, text) {{
   return bubble;
 }}
 
+function lockBtns() {{
+  document.getElementById('send-btn').disabled = true;
+  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = true);
+}}
+
+function unlockBtns() {{
+  document.getElementById('send-btn').disabled = false;
+  document.querySelectorAll('.preset-btn').forEach(b => b.disabled = false);
+}}
+
 async function sendMsg() {{
   const input = document.getElementById('msg-input');
-  const btn   = document.getElementById('send-btn');
   const text  = input.value.trim();
-  if (!text) return;
+  if (!text || document.getElementById('send-btn').disabled) return;
   if (!GEMINI_KEY) {{
     appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
     return;
   }}
 
+  lockBtns();
   appendMsg('user', text);
   input.value = '';
-  btn.disabled = true;
 
   const body = document.getElementById('chat-body');
   const typing = document.createElement('div');
@@ -2966,6 +3025,12 @@ async function sendMsg() {{
       }}
     );
     const data = await res.json();
+    if (data.error) {{
+      document.getElementById('typing')?.remove();
+      appendMsg('ai', '❌ API 錯誤：' + data.error.message);
+      unlockBtns();
+      return;
+    }}
     const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
     document.getElementById('typing')?.remove();
     appendMsg('ai', reply);
@@ -2974,7 +3039,7 @@ async function sendMsg() {{
     appendMsg('ai', '抱歉，發生錯誤：' + e.message);
   }}
 
-  btn.disabled = false;
+  unlockBtns();
   scrollBottom();
 }}
 </script>
