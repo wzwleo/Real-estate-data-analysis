@@ -158,7 +158,7 @@ def render_sidebar():
         
         # ── 初始化 ──
         if 'budget_monthly_income' not in st.session_state:
-            st.session_state.budget_monthly_income = 60
+            st.session_state.budget_monthly_income = 10
         if 'budget_down_payment' not in st.session_state:
             st.session_state.budget_down_payment = 200
         if 'budget_years' not in st.session_state:
@@ -242,36 +242,15 @@ def render_sidebar():
         # ── 輸出區 ──
         st.markdown("#### 📊 試算結果")
     
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric(
-                "建議總價上限",
-                f"{max_total_price:.0f} 萬",
-                help="頭期款 + 最高可貸金額"
-            )
-        with col2:
-            st.metric(
-                "最高可貸金額",
-                f"{max_loan_wan:.0f} 萬",
-                help="以月還款不超過月收入 30% 計算"
-            )
+        st.metric("🏠 建議總價上限", f"{max_total_price:.0f} 萬")
+        st.metric("🏦 最高可貸金額", f"{max_loan_wan:.0f} 萬")
+        st.metric("📅 每月還款金額", f"{actual_monthly/10000:.2f} 萬")
+        st.metric("💸 總利息支出", f"{total_interest_wan:.0f} 萬")
+        st.metric("📊 頭期款佔比", f"{down_payment_ratio:.1f}%")
     
-        col3, col4 = st.columns(2)
-        with col3:
-            st.metric(
-                "每月還款",
-                f"{actual_monthly/10000:.2f} 萬",
-                help="本金＋利息"
-            )
-        with col4:
-            st.metric(
-                "總利息",
-                f"{total_interest_wan:.0f} 萬",
-                help=f"{loan_years} 年共付利息"
-            )
+        st.divider()
     
         # 頭期款比例提示
-        st.divider()
         if down_payment_ratio >= 30:
             st.success(f"✅ 頭期款佔 {down_payment_ratio:.1f}%，資金充裕，還款壓力較小")
         elif down_payment_ratio >= 20:
