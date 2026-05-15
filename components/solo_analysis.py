@@ -2656,8 +2656,9 @@ def tab1_module():
                     st.dataframe(target_display_df, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
-    """真正的浮動聊天視窗，用 HTML + JS 直接呼叫 Gemini API"""
-    
+    """浮動 AI 聊天視窗 - 固定右下角 + 可互動版本"""
+    import json
+
     # 取得背景資料
     context = ""
     if 'solo_analysis_result' in st.session_state:
@@ -2686,6 +2687,7 @@ def render_float_chat():
 
     gemini_key = st.session_state.get("GEMINI_KEY", "")
     has_context = bool(context)
+    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
 
     preset_questions = [
         "這間房子適合首購族嗎？",
@@ -2695,292 +2697,272 @@ def render_float_chat():
         "有什麼需要特別注意的地方？",
     ]
     preset_btns_html = "".join([
-        f'<button class="preset-btn" onclick="fillInput(`{q}`)">{q}</button>'
+        f'<button class="fc-preset-btn" onclick="fcFillInput(`{q}`)">{q}</button>'
         for q in preset_questions
     ])
 
-    import json
+    # 用 json.dumps 安全地把 Python 字串轉成 JS 字串字面值（處理換行、引號等）
     context_js = json.dumps(context)
     gemini_key_js = json.dumps(gemini_key)
-    has_context_str = '✅ 已載入分析資料' if has_context else '⚠️ 尚無分析資料'
 
-    html_code = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    background: transparent;
-    font-family: sans-serif;
-    overflow: hidden;
-  }}
+    # 直接注入到主頁面，position:fixed 就會相對於整個視窗
+    st.markdown(f"""
+    <style>
+    /* 所有 class 加上 fc- 前綴，避免污染其他元件 */
+    #fc-fab {{
+        position: fixed;
+        bottom: 32px;
+        right: 32px;
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: #4CAF50;
+        color: white;
+        font-size: 26px;
+        border: none;
+        cursor: pointer;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.35);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.2s, transform 0.15s;
+    }}
+    #fc-fab:hover {{ background: #388E3C; transform: scale(1.08); }}
 
-  #chat-container {{
-    position: fixed;
-    bottom: 0;
-    right: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-end;
-    gap: 8px;
-    padding: 16px;
-    pointer-events: none;
-  }}
+    #fc-window {{
+        position: fixed;
+        bottom: 100px;
+        right: 32px;
+        width: 340px;
+        height: 500px;
+        background: #1a1a1a;
+        border: 1.5px solid #4CAF50;
+        border-radius: 16px;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+        z-index: 99998;
+        display: none;
+        flex-direction: column;
+        overflow: hidden;
+        font-family: sans-serif;
+    }}
+    #fc-window.fc-open {{ display: flex; }}
 
-  #fab {{
-    pointer-events: all;
-    width: 54px;
-    height: 54px;
-    border-radius: 50%;
-    background: #4CAF50;
-    color: white;
-    font-size: 24px;
-    border: none;
-    cursor: pointer;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.35);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.2s, transform 0.15s;
-    flex-shrink: 0;
-  }}
-  #fab:hover {{ background: #388E3C; transform: scale(1.08); }}
+    .fc-header {{
+        background: #4CAF50;
+        color: white;
+        padding: 11px 14px;
+        font-weight: bold;
+        font-size: 14px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+    }}
+    .fc-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
+    .fc-close-btn {{
+        background: none; border: none; color: white;
+        font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
+    }}
 
-  #chat-window {{
-    pointer-events: all;
-    width: 340px;
-    height: 500px;
-    background: #1a1a1a;
-    border: 1.5px solid #4CAF50;
-    border-radius: 16px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-    display: none;
-    flex-direction: column;
-    overflow: hidden;
-  }}
-  #chat-window.open {{ display: flex; }}
+    .fc-body {{
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }}
+    .fc-body::-webkit-scrollbar {{ width: 4px; }}
+    .fc-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
 
-  .chat-header {{
-    background: #4CAF50;
-    color: white;
-    padding: 11px 14px;
-    font-weight: bold;
-    font-size: 14px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-  }}
-  .chat-header-sub {{ font-size: 11px; opacity: 0.88; font-weight: normal; }}
-  .close-btn {{
-    background: none; border: none; color: white;
-    font-size: 18px; cursor: pointer; line-height: 1; padding: 0 2px;
-  }}
+    .fc-msg-row {{ display: flex; }}
+    .fc-user-row {{ justify-content: flex-end; }}
+    .fc-ai-row   {{ justify-content: flex-start; }}
+    .fc-msg {{
+        max-width: 82%;
+        padding: 7px 11px;
+        border-radius: 12px;
+        font-size: 12.5px;
+        line-height: 1.55;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }}
+    .fc-user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
+    .fc-ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
+    .fc-typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
+    .fc-empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
 
-  .chat-body {{
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }}
-  .chat-body::-webkit-scrollbar {{ width: 4px; }}
-  .chat-body::-webkit-scrollbar-thumb {{ background: #444; border-radius: 4px; }}
+    .fc-preset-area {{
+        padding: 6px 10px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        border-top: 1px solid #2a2a2a;
+        flex-shrink: 0;
+    }}
+    .fc-preset-btn {{
+        background: #222; color: #999;
+        border: 1px solid #3a3a3a;
+        border-radius: 10px;
+        padding: 3px 9px;
+        font-size: 11px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }}
+    .fc-preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
 
-  .msg-row {{ display: flex; }}
-  .user-row {{ justify-content: flex-end; }}
-  .ai-row   {{ justify-content: flex-start; }}
-  .msg {{
-    max-width: 82%;
-    padding: 7px 11px;
-    border-radius: 12px;
-    font-size: 12.5px;
-    line-height: 1.55;
-    white-space: pre-wrap;
-    word-break: break-word;
-  }}
-  .user-msg {{ background: #4CAF50; color: white; border-bottom-right-radius: 3px; }}
-  .ai-msg   {{ background: #2a2a2a; color: #e0e0e0; border-bottom-left-radius: 3px; }}
-  .typing   {{ color: #888; font-size: 12px; font-style: italic; padding: 4px 8px; }}
-  .empty-hint {{ color: #555; font-size: 12px; text-align: center; margin: auto; }}
+    .fc-input-area {{
+        display: flex;
+        gap: 6px;
+        padding: 8px 10px;
+        border-top: 1px solid #2a2a2a;
+        flex-shrink: 0;
+        align-items: center;
+    }}
+    #fc-msg-input {{
+        flex: 1;
+        background: #2a2a2a;
+        border: 1px solid #3a3a3a;
+        border-radius: 8px;
+        color: #e0e0e0;
+        font-size: 12.5px;
+        padding: 6px 10px;
+        outline: none;
+        resize: none;
+        height: 34px;
+        line-height: 1.4;
+        font-family: sans-serif;
+    }}
+    #fc-msg-input:focus {{ border-color: #4CAF50; }}
+    #fc-send-btn {{
+        background: #4CAF50; color: white;
+        border: none; border-radius: 8px;
+        padding: 6px 12px; font-size: 13px;
+        cursor: pointer; flex-shrink: 0;
+        transition: background 0.15s;
+    }}
+    #fc-send-btn:hover {{ background: #388E3C; }}
+    #fc-send-btn:disabled {{ background: #444; cursor: not-allowed; }}
+    </style>
 
-  .preset-area {{
-    padding: 6px 10px;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
-  }}
-  .preset-btn {{
-    background: #222; color: #999;
-    border: 1px solid #3a3a3a;
-    border-radius: 10px;
-    padding: 3px 9px;
-    font-size: 11px;
-    cursor: pointer;
-    transition: all 0.15s;
-  }}
-  .preset-btn:hover {{ background: #4CAF50; color: white; border-color: #4CAF50; }}
+    <!-- 浮動按鈕 -->
+    <button id="fc-fab" onclick="fcToggle()" title="AI 房產顧問">💬</button>
 
-  .input-area {{
-    display: flex;
-    gap: 6px;
-    padding: 8px 10px;
-    border-top: 1px solid #2a2a2a;
-    flex-shrink: 0;
-    align-items: center;
-  }}
-  #msg-input {{
-    flex: 1;
-    background: #2a2a2a;
-    border: 1px solid #3a3a3a;
-    border-radius: 8px;
-    color: #e0e0e0;
-    font-size: 12.5px;
-    padding: 6px 10px;
-    outline: none;
-    resize: none;
-    height: 34px;
-    line-height: 1.4;
-  }}
-  #msg-input:focus {{ border-color: #4CAF50; }}
-  #send-btn {{
-    background: #4CAF50; color: white;
-    border: none; border-radius: 8px;
-    padding: 6px 12px; font-size: 13px;
-    cursor: pointer; flex-shrink: 0;
-    transition: background 0.15s;
-  }}
-  #send-btn:hover {{ background: #388E3C; }}
-  #send-btn:disabled {{ background: #444; cursor: not-allowed; }}
-</style>
-</head>
-<body>
-
-<div id="chat-container">
-  <div id="chat-window">
-    <div class="chat-header">
-      <div>
-        🤖 AI 房產顧問
-        <div class="chat-header-sub">{has_context_str}</div>
-      </div>
-      <button class="close-btn" onclick="toggleChat()">✕</button>
+    <!-- 聊天視窗 -->
+    <div id="fc-window">
+        <div class="fc-header">
+            <div>
+                🤖 AI 房產顧問
+                <div class="fc-header-sub">{has_context_str}</div>
+            </div>
+            <button class="fc-close-btn" onclick="fcToggle()">✕</button>
+        </div>
+        <div class="fc-body" id="fc-body">
+            <div class="fc-empty-hint" id="fc-empty-hint">請輸入問題，或點選下方快速提問</div>
+        </div>
+        <div class="fc-preset-area">
+            {preset_btns_html}
+        </div>
+        <div class="fc-input-area">
+            <textarea id="fc-msg-input" placeholder="輸入問題..." onkeydown="fcHandleKey(event)"></textarea>
+            <button id="fc-send-btn" onclick="fcSend()">送出</button>
+        </div>
     </div>
-    <div class="chat-body" id="chat-body">
-      <div class="empty-hint" id="empty-hint">請輸入問題，或點選下方快速提問</div>
-    </div>
-    <div class="preset-area">
-      {preset_btns_html}
-    </div>
-    <div class="input-area">
-      <textarea id="msg-input" placeholder="輸入問題..." onkeydown="handleKey(event)"></textarea>
-      <button id="send-btn" onclick="sendMsg()">送出</button>
-    </div>
-  </div>
 
-  <button id="fab" onclick="toggleChat()">💬</button>
-</div>
+    <script>
+    const FC_GEMINI_KEY = {gemini_key_js};
+    const FC_CONTEXT    = {context_js};
 
-<script>
-const GEMINI_KEY = {gemini_key_js};
-const CONTEXT    = {context_js};
+    function fcToggle() {{
+        const win = document.getElementById('fc-window');
+        win.classList.toggle('fc-open');
+        if (win.classList.contains('fc-open')) {{
+            fcScrollBottom();
+            document.getElementById('fc-msg-input').focus();
+        }}
+    }}
 
-function toggleChat() {{
-  const win = document.getElementById('chat-window');
-  win.classList.toggle('open');
-  if (win.classList.contains('open')) {{
-    scrollBottom();
-    document.getElementById('msg-input').focus();
-  }}
-}}
+    function fcFillInput(text) {{
+        document.getElementById('fc-msg-input').value = text;
+        document.getElementById('fc-msg-input').focus();
+    }}
 
-function fillInput(text) {{
-  document.getElementById('msg-input').value = text;
-  document.getElementById('msg-input').focus();
-}}
+    function fcHandleKey(e) {{
+        if (e.key === 'Enter' && !e.shiftKey) {{
+            e.preventDefault();
+            fcSend();
+        }}
+    }}
 
-function handleKey(e) {{
-  if (e.key === 'Enter' && !e.shiftKey) {{
-    e.preventDefault();
-    sendMsg();
-  }}
-}}
+    function fcScrollBottom() {{
+        const body = document.getElementById('fc-body');
+        if (body) body.scrollTop = body.scrollHeight;
+    }}
 
-function scrollBottom() {{
-  const body = document.getElementById('chat-body');
-  body.scrollTop = body.scrollHeight;
-}}
+    function fcAppendMsg(role, text) {{
+        const hint = document.getElementById('fc-empty-hint');
+        if (hint) hint.remove();
 
-function appendMsg(role, text) {{
-  const hint = document.getElementById('empty-hint');
-  if (hint) hint.remove();
+        const body   = document.getElementById('fc-body');
+        const row    = document.createElement('div');
+        row.className = 'fc-msg-row ' + (role === 'user' ? 'fc-user-row' : 'fc-ai-row');
+        const bubble = document.createElement('div');
+        bubble.className = 'fc-msg ' + (role === 'user' ? 'fc-user-msg' : 'fc-ai-msg');
+        bubble.textContent = text;
+        row.appendChild(bubble);
+        body.appendChild(row);
+        fcScrollBottom();
+        return bubble;
+    }}
 
-  const body = document.getElementById('chat-body');
-  const row  = document.createElement('div');
-  row.className = 'msg-row ' + (role === 'user' ? 'user-row' : 'ai-row');
-  const bubble = document.createElement('div');
-  bubble.className = 'msg ' + (role === 'user' ? 'user-msg' : 'ai-msg');
-  bubble.textContent = text;
-  row.appendChild(bubble);
-  body.appendChild(row);
-  scrollBottom();
-  return bubble;
-}}
+    async function fcSend() {{
+        const input = document.getElementById('fc-msg-input');
+        const btn   = document.getElementById('fc-send-btn');
+        const text  = input.value.trim();
+        if (!text) return;
+        if (!FC_GEMINI_KEY) {{
+            fcAppendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
+            return;
+        }}
 
-async function sendMsg() {{
-  const input = document.getElementById('msg-input');
-  const btn   = document.getElementById('send-btn');
-  const text  = input.value.trim();
-  if (!text) return;
-  if (!GEMINI_KEY) {{
-    appendMsg('ai', '⚠️ 請先在側邊欄設定 Gemini API Key');
-    return;
-  }}
+        fcAppendMsg('user', text);
+        input.value = '';
+        btn.disabled = true;
 
-  appendMsg('user', text);
-  input.value = '';
-  btn.disabled = true;
+        const body   = document.getElementById('fc-body');
+        const typing = document.createElement('div');
+        typing.className = 'fc-typing';
+        typing.id = 'fc-typing';
+        typing.textContent = 'AI 思考中...';
+        body.appendChild(typing);
+        fcScrollBottom();
 
-  const body = document.getElementById('chat-body');
-  const typing = document.createElement('div');
-  typing.className = 'typing';
-  typing.id = 'typing';
-  typing.textContent = 'AI 思考中...';
-  body.appendChild(typing);
-  scrollBottom();
+        try {{
+            const res = await fetch(
+                `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{FC_GEMINI_KEY}}`,
+                {{
+                    method: 'POST',
+                    headers: {{ 'Content-Type': 'application/json' }},
+                    body: JSON.stringify({{
+                        contents: [{{
+                            parts: [{{ text: FC_CONTEXT + '\\n\\n【使用者問題】\\n' + text + '\\n\\n請用繁體中文回答，簡潔清楚，不超過 200 字。' }}]
+                        }}]
+                    }})
+                }}
+            );
+            const data  = await res.json();
+            const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
+            document.getElementById('fc-typing')?.remove();
+            fcAppendMsg('ai', reply);
+        }} catch(e) {{
+            document.getElementById('fc-typing')?.remove();
+            fcAppendMsg('ai', '抱歉，發生錯誤：' + e.message);
+        }}
 
-  try {{
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${{GEMINI_KEY}}`,
-      {{
-        method: 'POST',
-        headers: {{ 'Content-Type': 'application/json' }},
-        body: JSON.stringify({{
-          contents: [{{
-            parts: [{{ text: CONTEXT + '\\n\\n【使用者問題】\\n' + text + '\\n\\n請用繁體中文回答，簡潔清楚，不超過 200 字。' }}]
-          }}]
-        }})
-      }}
-    );
-    const data = await res.json();
-    const reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || '抱歉，無法取得回應。';
-    document.getElementById('typing')?.remove();
-    appendMsg('ai', reply);
-  }} catch(e) {{
-    document.getElementById('typing')?.remove();
-    appendMsg('ai', '抱歉，發生錯誤：' + e.message);
-  }}
-
-  btn.disabled = false;
-  scrollBottom();
-}}
-</script>
-</body>
-</html>"""
-
-    import streamlit.components.v1 as components
-    components.html(html_code, height=620, scrolling=False)
+        btn.disabled = false;
+        fcScrollBottom();
+    }}
+    </script>
+    """, unsafe_allow_html=True)
 
