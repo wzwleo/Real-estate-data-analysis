@@ -270,6 +270,15 @@ def render_sidebar():
             st.warning(f"⚠️ 月還款佔月收入 {payment_ratio:.1f}%，壓力稍重，建議增加頭期款")
         else:
             st.error(f"❌ 月還款佔月收入 {payment_ratio:.1f}%，還款壓力過重")
-    
+
+        # 套用按鈕
+        if st.button("💾 套用預算設定", use_container_width=True, key="budget_apply"):
+            st.session_state.budget_applied = True
+            st.success("✅ 預算已套用，AI 顧問將納入預算資訊")
+        
+        if st.session_state.get('budget_applied'):
+            st.info("💬 AI 顧問已載入您的預算資訊")
+        
         st.caption("⚠️ 以上為試算參考，實際核貸金額依銀行審核為準")
+
 
