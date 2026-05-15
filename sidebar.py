@@ -154,9 +154,143 @@ def render_sidebar():
             elif total_weight != 100:
                 st.error(f"❌ 總和需為 100% (目前 {total_weight}%)")
         
+    with st.sidebar.expander("💰 購屋預算規劃師"):
+        
+        # ── 初始化 ──
+        if 'budget_monthly_income' not in st.session_state:
+            st.session_state.budget_monthly_income = 60
+        if 'budget_down_payment' not in st.session_state:
+            st.session_state.budget_down_payment = 200
+        if 'budget_years' not in st.session_state:
+            st.session_state.budget_years = 30
+        if 'budget_rate' not in st.session_state:
+            st.session_state.budget_rate = 2.0
+    
+        st.caption("📌 根據您的財務狀況試算購屋能力")
+        
+        # ── 輸入區 ──
+        monthly_income = st.number_input(
+            "💵 月收入（萬元）",
+            min_value=1,
+            max_value=500,
+            value=st.session_state.budget_monthly_income,
+            step=1,
+            key="budget_monthly_income",
+            help="稅後實際月收入"
+        )
+    
+        down_payment = st.number_input(
+            "🏦 頭期款（萬元）",
+            min_value=0,
+            max_value=10000,
+            value=st.session_state.budget_down_payment,
+            step=10,
+            key="budget_down_payment",
+            help="目前可用於頭期款的資金"
+        )
+    
+        loan_years = st.selectbox(
+            "📅 貸款年限",
+            options=[20, 30, 40],
+            index=1,
+            key="budget_years",
+            help="一般建議 30 年攤還壓力較小"
+        )
+    
+        interest_rate = st.slider(
+            "📈 年利率（%）",
+            min_value=1.0,
+            max_value=5.0,
+            value=st.session_state.budget_rate,
+            step=0.1,
+            format="%.1f%%",
+            key="budget_rate",
+            help="目前台灣房貸利率約 2.0~2.5%"
+        )
+    
+        st.divider()
+    
+        # ── 計算核心 ──
+        monthly_rate = interest_rate / 100 / 12
+        n = loan_years * 12
+    
+        # 月還款不超過月收入 30% → 反推最高可貸金額
+        max_monthly_payment = monthly_income * 10000 * 0.3
+    
+        if monthly_rate > 0:
+            max_loan = max_monthly_payment * (1 - (1 + monthly_rate) ** (-n)) / monthly_rate
+        else:
+            max_loan = max_monthly_payment * n
+    
+        max_loan_wan = max_loan / 10000
+        max_total_price = max_loan_wan + down_payment
+    
+        # 頭期款比例（以最高總價為基準）
+        down_payment_ratio = (down_payment / max_total_price * 100) if max_total_price > 0 else 0
+    
+        # 實際月還款（以最高可貸金額計算）
+        if monthly_rate > 0:
+            actual_monthly = max_loan * monthly_rate / (1 - (1 + monthly_rate) ** (-n))
+        else:
+            actual_monthly = max_loan / n
+    
+        # 總利息
+        total_paid = actual_monthly * n
+        total_interest = total_paid - max_loan
+        total_interest_wan = total_interest / 10000
+    
+        # ── 輸出區 ──
+        st.markdown("#### 📊 試算結果")
+    
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric(
+                "建議總價上限",
+                f"{max_total_price:.0f} 萬",
+                help="頭期款 + 最高可貸金額"
+            )
+        with col2:
+            st.metric(
+                "最高可貸金額",
+                f"{max_loan_wan:.0f} 萬",
+                help="以月還款不超過月收入 30% 計算"
+            )
+    
+        col3, col4 = st.columns(2)
+        with col3:
+            st.metric(
+                "每月還款",
+                f"{actual_monthly/10000:.2f} 萬",
+                help="本金＋利息"
+            )
+        with col4:
+            st.metric(
+                "總利息",
+                f"{total_interest_wan:.0f} 萬",
+                help=f"{loan_years} 年共付利息"
+            )
+    
+        # 頭期款比例提示
+        st.divider()
+        if down_payment_ratio >= 30:
+            st.success(f"✅ 頭期款佔 {down_payment_ratio:.1f}%，資金充裕，還款壓力較小")
+        elif down_payment_ratio >= 20:
+            st.info(f"ℹ️ 頭期款佔 {down_payment_ratio:.1f}%，符合銀行建議的兩成標準")
+        elif down_payment_ratio >= 10:
+            st.warning(f"⚠️ 頭期款佔 {down_payment_ratio:.1f}%，低於建議兩成，貸款成數較高")
+        else:
+            st.error(f"❌ 頭期款佔 {down_payment_ratio:.1f}%，頭期款不足，建議先累積資金")
+    
+        # 月還款壓力提示
+        payment_ratio = actual_monthly / (monthly_income * 10000) * 100
+        if payment_ratio <= 25:
+            st.success(f"✅ 月還款佔月收入 {payment_ratio:.1f}%，還款壓力輕鬆")
+        elif payment_ratio <= 30:
+            st.info(f"ℹ️ 月還款佔月收入 {payment_ratio:.1f}%，在合理範圍內")
+        elif payment_ratio <= 40:
+            st.warning(f"⚠️ 月還款佔月收入 {payment_ratio:.1f}%，壓力稍重，建議增加頭期款")
+        else:
+            st.error(f"❌ 月還款佔月收入 {payment_ratio:.1f}%，還款壓力過重")
+    
+        st.caption("⚠️ 以上為試算參考，實際核貸金額依銀行審核為準")
 
-    if st.sidebar.button("其他功能一", use_container_width=True, key="updata_button"):
-        st.sidebar.write("施工中...")
-
-    if st.sidebar.button("💬智能小幫手", use_container_width=True, key="line_button"):
-        st.sidebar.write("施工中...")
