@@ -6,7 +6,7 @@ permissions:
 
 on:
   schedule:
-    - cron: '0 20 * * *'  # 每天台灣時間 04:00 執行
+    - cron: '0 20 * * 0'  # 每天台灣時間 04:00 執行
   workflow_dispatch:       # 支援手動觸發
 
 jobs:
@@ -48,7 +48,7 @@ jobs:
         run: |
           export DISPLAY=:99
           Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
-          python ./download_data/download6.py
+          python ./download_data/sinyi_taichung_buy.py
 
       - name: Commit and push data
         run: |
