@@ -1,0 +1,66 @@
+name: Auto Download Data (Taichung Buy)
+
+permissions:
+  contents: write
+  actions: read
+
+on:
+  schedule:
+    - cron: '0 20 * * *'  # 每天台灣時間 04:00 執行
+  workflow_dispatch:       # 支援手動觸發
+
+jobs:
+  run-download:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6 小時
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip xvfb
+
+      - name: Install Chrome
+        run: |
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          sudo apt-get update
+          sudo apt-get install -y google-chrome-stable
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install selenium beautifulsoup4 pandas webdriver-manager
+
+      - name: Run download script
+        env:
+          SINGLE_CITY: "Taichung-city"
+        run: |
+          export DISPLAY=:99
+          Xvfb :99 -screen 0 1920x1080x24 > /dev/null 2>&1 &
+          python ./download_data/download6.py
+
+      - name: Commit and push data
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add ./Data/Taichung-city_buy_properties.csv
+          git diff --cached --quiet || git commit -m "Auto update: Taichung-city buy properties $(date +'%Y-%m-%d')"
+          git push
+
+      - name: Final status
+        run: |
+          echo "=== Data directory ==="
+          ls -la ./Data/
+          echo "=== Git status ==="
+          git status
