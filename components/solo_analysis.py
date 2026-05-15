@@ -1153,11 +1153,14 @@ def tab1_module():
         st.info("⭐ 尚未有收藏房產，無法比較")
     else:
         options = fav_df['標題']
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
             st.header("個別分析")
         with col2:
             choice = st.selectbox("選擇房屋", options, key="analysis_solo")
+        with col3:
+            st.write("")
+            batch_btn = st.button("⚡ 一鍵批次分析", use_container_width=True, key="batch_analysis_btn")
         
         # 篩選出選中的房子
         selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
@@ -1302,7 +1305,323 @@ def tab1_module():
             if property_id:
                 property_url = f"https://www.sinyi.com.tw/buy/house/{property_id}?breadcrumb=list"
                 st.link_button("🏠 查看房產詳情", property_url, use_container_width=True)
+
+
+        # ── 批次分析 ──────────────────────────────────────────
+        if batch_btn:
+            if not gemini_key:
+                st.error("❌ 請先設定 Gemini API Key")
+                st.stop()
+
+            total_fav = len(fav_df)
+            st.markdown(f"### ⚡ 批次分析中（共 {total_fav} 間）")
+            progress_bar = st.progress(0)
+            status_text  = st.empty()
+
+            if 'ai_results' not in st.session_state:
+                st.session_state.ai_results = []
+            if 'ai_results_summary' not in st.session_state:
+                st.session_state.ai_results_summary = []
+            if 'analysis_store' not in st.session_state:
+                st.session_state.analysis_store = {}
+
+            success_count = 0
+            fail_count    = 0
+
+            for i, (_, row) in enumerate(fav_df.iterrows()):
+                house_title = row.get('標題', f'第{i+1}間')
+                status_text.info(f"🔄 正在分析第 {i+1}/{total_fav} 間：{house_title}")
+                progress_bar.progress((i) / total_fav)
+
+                try:
+                    # ── 取得比較母體 ──
+                    if all_df is not None and not all_df.empty:
+                        b_district = row.get('行政區', '')
+                        b_type = str(row.get('類型', '')).strip()
+                        if '/' in b_type:
+                            b_type = b_type.split('/')[0].strip()
+                        b_df_filtered = all_df[
+                            (all_df['行政區'] == b_district) &
+                            (all_df['類型'].astype(str).str.contains(b_type, case=False, na=False))
+                        ].copy()
+                    else:
+                        status_text.warning(f"⚠️ 找不到比較資料，跳過：{house_title}")
+                        fail_count += 1
+                        continue
+
+                    if b_df_filtered.empty:
+                        status_text.warning(f"⚠️ 找不到同區同類型資料，跳過：{house_title}")
+                        fail_count += 1
+                        continue
+
+                    # ── 價格分析 ──
+                    b_compare_df = b_df_filtered.copy()
+                    b_compare_df['總價'] = pd.to_numeric(b_compare_df['總價(萬)'], errors='coerce')
+                    b_compare_df['建坪數'] = pd.to_numeric(b_compare_df['建坪'], errors='coerce')
+                    b_compare_df = b_compare_df.dropna(subset=['總價', '建坪數'])
+
+                    b_target_price = float(row['總價(萬)'])
+                    b_target_area  = float(row['建坪'])
+                    b_price_per_ping = round(b_target_price / b_target_area, 2)
+
+                    b_price_percentile = (b_compare_df['總價'] < b_target_price).sum() / len(b_compare_df) * 100
+                    b_price_rank    = int((b_compare_df['總價'] < b_target_price).sum()) + 1
+                    b_total_count   = len(b_compare_df)
+                    b_median_price  = b_compare_df['總價'].median()
+                    b_is_dense      = 40 <= b_price_percentile <= 60
+                    b_dense_ratio   = (
+                        ((b_compare_df['總價'] >= b_compare_df['總價'].quantile(0.4)) &
+                         (b_compare_df['總價'] <= b_compare_df['總價'].quantile(0.6)))
+                        .sum() / b_total_count
+                    )
+
+                    b_analysis_payload = {
+                        "區域": b_district, "房屋類型": b_type, "比較樣本數": b_total_count,
+                        "目標房屋": {"總價(萬)": b_target_price, "建坪": b_target_area, "建坪單價(萬/坪)": b_price_per_ping},
+                        "價格分布": {"價格百分位": round(b_price_percentile, 1), "價格排名": f"{b_price_rank}/{b_total_count}", "市場中位數(萬)": round(b_median_price, 1), "與中位數差距(萬)": round(b_target_price - b_median_price, 1)},
+                        "市場密集度": {"是否位於主流價格帶": "是" if b_is_dense else "否", "主流價格帶占比(%)": round(b_dense_ratio * 100, 1)}
+                    }
+
+                    # ── 坪數分析 ──
+                    b_compare_df['實際坪數'] = pd.to_numeric(b_compare_df.get('主+陽', 0), errors='coerce')
+                    b_compare_df['建坪']     = pd.to_numeric(b_compare_df.get('建坪', 0), errors='coerce')
+                    b_compare_df['空間使用率'] = b_compare_df['實際坪數'] / b_compare_df['建坪']
+                    b_target_usage_rate = float(row['主+陽']) / float(row['建坪']) if float(row.get('建坪', 0)) > 0 else 0
+                    b_usage_percentile  = (b_compare_df['空間使用率'] <= b_target_usage_rate).sum() / b_total_count * 100
+                    b_median_usage      = b_compare_df['空間使用率'].median()
+
+                    b_floor_area_payload = {
+                        "區域": b_district, "房屋類型": b_type, "比較樣本數": b_total_count,
+                        "目標房屋": {"建坪": row['建坪'], "實際坪數": row['主+陽'], "空間使用率": round(b_target_usage_rate, 2), "實際單價(萬/坪)": round(b_target_price / b_target_area, 2)},
+                        "坪數分布": {"使用率百分位": round(b_usage_percentile, 1), "中位數使用率": round(b_median_usage, 2)}
+                    }
+
+                    # ── 屋齡分析 ──
+                    def b_parse_age(x):
+                        if pd.isna(x): return np.nan
+                        match = re.search(r"(\d+\.?\d*)", str(x))
+                        return float(match.group(1)) if match else np.nan
+
+                    b_compare_df['屋齡數值'] = b_compare_df['屋齡'].apply(b_parse_age)
+                    b_target_age = b_parse_age(row['屋齡'])
+                    b_df_age     = b_compare_df.dropna(subset=['屋齡數值'])
+                    b_age_percentile = 50.0
+                    b_age_analysis_payload = None
+
+                    if len(b_df_age) > 0 and not pd.isna(b_target_age):
+                        b_age_percentile = (b_df_age['屋齡數值'] < b_target_age).sum() / len(b_df_age) * 100
+                        b_age_category   = "偏新" if b_age_percentile <= 33 else ("主流" if b_age_percentile <= 66 else "偏舊")
+                        b_age_analysis_payload = {
+                            "區域": b_district, "房屋類型": b_type,
+                            "目標房屋": {"屋齡(年)": round(b_target_age, 1)},
+                            "屋齡分布": {"屋齡百分位": round(b_age_percentile, 1), "屋齡評估": b_age_category,
+                                        "同區平均屋齡(年)": round(b_df_age['屋齡數值'].mean(), 1),
+                                        "同區中位數屋齡(年)": round(b_df_age['屋齡數值'].median(), 1)}
+                        }
+
+                    # ── 樓層分析 ──
+                    def b_parse_floor(x):
+                        if pd.isna(x): return np.nan
+                        try: return int(str(x).split('樓')[0])
+                        except: return np.nan
+
+                    b_compare_df['樓層數值'] = b_compare_df['樓層'].apply(b_parse_floor)
+                    b_target_floor = b_parse_floor(row['樓層'])
+                    b_df_floor     = b_compare_df.dropna(subset=['樓層數值'])
+                    b_floor_percentile = 50.0
+                    b_floor_analysis_payload = None
+
+                    if len(b_df_floor) > 0 and not pd.isna(b_target_floor):
+                        b_floor_percentile = (b_df_floor['樓層數值'] < b_target_floor).sum() / len(b_df_floor) * 100
+                        b_floor_category   = "低樓層" if b_floor_percentile <= 33 else ("中樓層" if b_floor_percentile <= 66 else "高樓層")
+                        b_floor_analysis_payload = {
+                            "區域": b_district, "房屋類型": b_type,
+                            "目標房屋": {"樓層": int(b_target_floor)},
+                            "樓層分布": {"樓層百分位": round(b_floor_percentile, 1), "樓層評估": b_floor_category,
+                                        "同區平均樓層": round(b_df_floor['樓層數值'].mean(), 1),
+                                        "同區中位數樓層": round(b_df_floor['樓層數值'].median(), 1)}
+                        }
+
+                    # ── 格局分析 ──
+                    def b_parse_layout(text):
+                        text = str(text)
+                        result = {'房數': 0, '廳數': 0, '衛數': 0, '室數': 0}
+                        for key in result.keys():
+                            match = re.search(rf'(\d+){key[0]}', text)
+                            if match: result[key] = int(match.group(1))
+                        return pd.Series(result)
+
+                    b_df_layout = b_compare_df.copy()
+                    b_df_layout[['房數', '廳數', '衛數', '室數']] = b_df_layout['格局'].apply(b_parse_layout)
+                    b_df_layout = b_df_layout[b_df_layout['房數'] > 0].copy()
+                    b_same_layout_pct = 0.0
+                    b_layout_analysis_payload = None
+
+                    if len(b_df_layout) > 0:
+                        b_df_layout['總價_l']    = pd.to_numeric(b_df_layout.get('總價(萬)', 0), errors='coerce')
+                        b_df_layout['建坪數值_l'] = pd.to_numeric(b_df_layout.get('建坪', 0), errors='coerce')
+                        b_df_valid_layout = b_df_layout[(b_df_layout['總價_l'] > 0) & (b_df_layout['建坪數值_l'] > 0)].copy()
+                        if len(b_df_valid_layout) > 0:
+                            b_target_layout    = str(row.get('格局', '')).strip()
+                            b_same_layout_count = (b_df_valid_layout['格局'].astype(str).str.strip() == b_target_layout).sum()
+                            b_same_layout_pct   = (b_same_layout_count / len(b_df_valid_layout)) * 100
+                            b_layout_analysis_payload = {
+                                "區域": b_district, "房屋類型": b_type,
+                                "目標房屋": {"格局": b_target_layout},
+                                "格局排名": {"相同格局占比(%)": round(b_same_layout_pct, 1)}
+                            }
+
+                    # ── 計算分數 ──
+                    b_weights = st.session_state.get('score_weights', {
+                        "價格競爭力": 30, "空間效率": 25,
+                        "屋齡優勢": 20, "樓層定位": 15, "格局流動性": 10
+                    })
+                    b_score_price  = max(0, min(10, 10 - b_price_percentile / 10))
+                    b_score_space  = max(0, min(10, (b_target_usage_rate / b_median_usage) * 5)) if b_median_usage > 0 else 5.0
+                    b_score_age    = max(0, min(10, 10 - b_age_percentile / 10))
+                    b_score_floor  = max(0, min(10, 10 - abs(b_floor_percentile - 50) / 5))
+                    b_score_layout = max(0, min(10, b_same_layout_pct / 3))
+
+                    b_weighted_total = (
+                        b_score_price  * (b_weights["價格競爭力"] / 100) +
+                        b_score_space  * (b_weights["空間效率"]   / 100) +
+                        b_score_age    * (b_weights["屋齡優勢"]   / 100) +
+                        b_score_floor  * (b_weights["樓層定位"]   / 100) +
+                        b_score_layout * (b_weights["格局流動性"] / 100)
+                    )
+                    b_total_score = round(b_weighted_total * 10, 1)
+                    b_scores = {
+                        "價格競爭力": round(b_score_price,  1),
+                        "空間效率":   round(b_score_space,  1),
+                        "屋齡優勢":   round(b_score_age,    1),
+                        "樓層定位":   round(b_score_floor,  1),
+                        "格局流動性": round(b_score_layout, 1),
+                    }
+
+                    # ── 呼叫 Gemini ──
+                    import google.generativeai as genai
+                    genai.configure(api_key=gemini_key)
+                    b_model = genai.GenerativeModel("gemini-2.5-flash")
+
+                    b_price_prompt = f"你是台灣房市分析顧問，以下是價格分析數據，請用繁體中文完成：1️⃣解讀價格位置 2️⃣說明是否在主流區間 3️⃣給購屋建議（不超過150字）\n{json.dumps(b_analysis_payload, ensure_ascii=False)}"
+                    b_space_prompt = f"你是台灣房市分析顧問，以下是坪數分析數據，請用繁體中文完成：1️⃣解讀空間使用效率 2️⃣說明百分位排名 3️⃣給購屋建議（不超過150字）\n{json.dumps(b_floor_area_payload, ensure_ascii=False)}"
+
+                    b_age_prompt   = f"你是台灣房市分析顧問，以下是屋齡分析數據，請用繁體中文分析屋齡評估、維護成本考量、購屋建議（不超過150字）\n{json.dumps(b_age_analysis_payload, ensure_ascii=False)}" if b_age_analysis_payload else ""
+                    b_floor_prompt = f"你是台灣房市分析顧問，以下是樓層分析數據，請用繁體中文分析樓層評估、優缺點、購屋建議（不超過150字）\n{json.dumps(b_floor_analysis_payload, ensure_ascii=False)}" if b_floor_analysis_payload else ""
+                    b_layout_prompt = f"你是台灣房市分析顧問，以下是格局分析數據，請用繁體中文分析格局市場定位、空間效率、購屋建議（不超過150字）\n{json.dumps(b_layout_analysis_payload, ensure_ascii=False)}" if b_layout_analysis_payload else ""
+
+                    b_summary_data = {
+                        "價格": b_analysis_payload,
+                        "坪數": b_floor_area_payload,
+                        "屋齡": b_age_analysis_payload or {},
+                        "樓層": b_floor_analysis_payload or {},
+                        "格局": b_layout_analysis_payload or {},
+                        "分數": b_scores,
+                        "總分": b_total_score
+                    }
+                    b_summary_prompt = f"你是台灣房市分析顧問，請根據以下五大面向數據，用繁體中文提供：1.整體評價 2.三大優勢 3.三大劣勢 4.購屋建議（不超過200字）\n{json.dumps(b_summary_data, ensure_ascii=False)}"
+
+                    b_price_text   = safe_generate(b_model, b_price_prompt,   "價格分析暫時無法產生。")
+                    b_space_text   = safe_generate(b_model, b_space_prompt,   "坪數分析暫時無法產生。")
+                    b_age_text     = safe_generate(b_model, b_age_prompt,     "屋齡分析暫時無法產生。") if b_age_prompt   else "（無屋齡資料）"
+                    b_floor_text   = safe_generate(b_model, b_floor_prompt,   "樓層分析暫時無法產生。") if b_floor_prompt  else "（無樓層資料）"
+                    b_layout_text  = safe_generate(b_model, b_layout_prompt,  "格局分析暫時無法產生。") if b_layout_prompt else "（無格局資料）"
+                    b_summary_text = safe_generate(b_model, b_summary_prompt, "綜合總結暫時無法產生。")
+
+                    # ── 存入 session_state ──
+                    b_property_id  = normalize_property_id(row.get('編號', ''))
+                    b_row_dict     = row.to_dict()
+
+                    b_analysis_result = {
+                        'timestamp':   pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        'property_id': b_property_id,
+                        'house_title': b_row_dict.get('標題', '未知房屋'),
+                        'house_address': b_row_dict.get('地址', '未提供'),
+                        'house_data': {
+                            '總價(萬)': b_row_dict.get('總價(萬)', '未提供'),
+                            '建坪':     b_row_dict.get('建坪', '未提供'),
+                            '實際坪數': b_row_dict.get('主+陽', '未提供'),
+                            '格局':     b_row_dict.get('格局', '未提供'),
+                            '樓層':     b_row_dict.get('樓層', '未提供'),
+                            '屋齡':     b_row_dict.get('屋齡', '未提供'),
+                            '車位':     b_row_dict.get('車位', '未提供'),
+                            '類型':     b_row_dict.get('類型', '未提供'),
+                            '行政區':   b_row_dict.get('行政區', '未提供'),
+                        },
+                        'ai_analysis': {
+                            'price': b_price_text, 'space': b_space_text,
+                            'age': b_age_text, 'floor': b_floor_text,
+                            'layout': b_layout_text, 'summary': b_summary_text,
+                        },
+                        'analysis_data': {
+                            'price_data':  b_analysis_payload,
+                            'space_data':  b_floor_area_payload,
+                            'age_data':    b_age_analysis_payload,
+                            'floor_data':  b_floor_analysis_payload,
+                            'layout_data': b_layout_analysis_payload,
+                        },
+                        'compare_base_df': b_df_filtered.to_dict('records'),
+                        'selected_row':    b_row_dict,
+                        'scores':          b_scores,
+                        'total_score':     b_total_score,
+                    }
+
+                    # 覆蓋舊結果
+                    st.session_state.ai_results = [
+                        r for r in st.session_state.ai_results
+                        if r.get('property_id') != b_property_id
+                    ]
+                    st.session_state.ai_results.append(b_analysis_result)
+
+                    st.session_state.analysis_store[b_property_id] = {
+                        'property_id':   b_property_id,
+                        'basic_info': {
+                            '編號':   b_property_id,
+                            '標題':   b_row_dict.get('標題', '未提供'),
+                            '地址':   b_row_dict.get('地址', '未提供'),
+                            '類型':   b_row_dict.get('類型', '未提供'),
+                            '行政區': b_row_dict.get('行政區', '未提供'),
+                            '建坪':   b_row_dict.get('建坪', '未提供'),
+                            '實際坪數': b_row_dict.get('主+陽', '未提供'),
+                            '格局':   b_row_dict.get('格局', '未提供'),
+                            '樓層':   b_row_dict.get('樓層', '未提供'),
+                            '屋齡':   b_row_dict.get('屋齡', '未提供'),
+                            '車位':   b_row_dict.get('車位', '未提供'),
+                            '總價':   b_row_dict.get('總價(萬)', '未提供'),
+                        },
+                        'analysis_text': {
+                            'price': b_price_text, 'space': b_space_text,
+                            'age': b_age_text, 'floor': b_floor_text,
+                            'layout': b_layout_text, 'summary': b_summary_text,
+                        },
+                        'analysis_data': {
+                            'price_data':  b_analysis_payload,
+                            'space_data':  b_floor_area_payload,
+                            'age_data':    b_age_analysis_payload,
+                            'floor_data':  b_floor_analysis_payload,
+                            'layout_data': b_layout_analysis_payload,
+                        },
+                        'scores':      b_scores,
+                        'total_score': b_total_score,
+                    }
+
+                    success_count += 1
+
+                except Exception as e:
+                    fail_count += 1
+                    status_text.warning(f"⚠️ 第 {i+1} 間分析失敗（{house_title}）：{str(e)}")
+
+                progress_bar.progress((i + 1) / total_fav)
+
+            # 完成
+            progress_bar.progress(1.0)
+            if fail_count == 0:
+                status_text.success(f"✅ 批次分析完成！共分析 {success_count} 間，已全部存入分析結果總覽")
+            else:
+                status_text.warning(f"⚠️ 批次分析完成：成功 {success_count} 間，失敗 {fail_count} 間")
+
         
+
         if analyze_clicked:
             if not gemini_key:
                 st.error("❌ 右側 gemini API Key 有誤")
