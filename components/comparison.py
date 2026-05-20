@@ -963,8 +963,8 @@ class ComparisonAnalyzer:
                             places_data[name] = []
                         
                         for n in all_nuisances:
-                            # 格式：主要類別、設施子類別、設施名稱、緯度、經度、距離、place_id
-                            places_data[name].append(("嫌惡設施", n[0], n[2], n[3], n[4], n[5], n[6]))
+                            # 格式：主要類別、設施子類別、設施名稱、緯度、經度、距離、place_id、設施說明、AI判斷原因
+                            places_data[name].append(("嫌惡設施", n[0], n[2], n[3], n[4], n[5], n[6], n[7] if len(n) > 7 else "", n[8] if len(n) > 8 else ""))
                         
                         st.write(f"     找到 {len(all_nuisances)} 處嫌惡設施")
                 
@@ -1056,42 +1056,132 @@ class ComparisonAnalyzer:
         results.sort(key=lambda x: x[5])
         return results
     
+    def _filter_nuisance_results_with_ai(self, nuisance_type, candidates):
+        """Use Gemini to batch-filter Google Places nuisance candidates."""
+        if not candidates:
+            return []
+        fallback = []
+        for c in candidates:
+            item = dict(c)
+            item["is_match"] = True
+            item["matched_type"] = nuisance_type
+            item["place_description"] = "\u672a\u7d93 AI \u5224\u65b7"
+            item["reason"] = "AI \u5224\u65b7\u5931\u6557\uff0c\u4fdd\u7559\u539f\u59cb\u641c\u5c0b\u7d50\u679c"
+            fallback.append(item)
+        try:
+            import google.generativeai as genai
+            key = self._get_gemini_key()
+            if not key:
+                return fallback
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            filtered = []
+            for start in range(0, len(candidates), 20):
+                batch = candidates[start:start + 20]
+                payload = [
+                    {
+                        "place_id": c.get("place_id", ""),
+                        "name": c.get("name", ""),
+                        "query_keyword": c.get("keyword", ""),
+                        "address_or_vicinity": c.get("address", ""),
+                        "distance_meters": c.get("distance", ""),
+                    }
+                    for c in batch
+                ]
+                prompt = f"""
+\u4f60\u662f\u53f0\u7063\u623f\u5730\u7522\u5468\u908a\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599\u5be9\u6838\u54e1\u3002\u8acb\u56b4\u683c\u5224\u65b7\u4e0b\u5217 Google Places \u5019\u9078\u5730\u9ede\u662f\u5426\u771f\u7684\u5c6c\u65bc\u300c{nuisance_type}\u300d\u3002
+
+\u5224\u65b7\u898f\u5247\uff1a
+- \u5fc5\u9808\u56b4\u683c\u5224\u65b7\u662f\u5426\u771f\u7684\u5c6c\u65bc\u300c{nuisance_type}\u300d\u3002
+- \u4e0d\u78ba\u5b9a\u6642 is_match = false\u3002
+- \u4e0d\u8981\u56e0\u70ba\u540d\u7a31\u90e8\u5206\u76f8\u4f3c\u5c31\u5224\u5b9a\u7b26\u5408\u3002
+- \u8acb\u6839\u64da\u540d\u7a31\u3001\u67e5\u8a62\u95dc\u9375\u5b57\u3001\u5730\u5740\u6216 vicinity \u7d9c\u5408\u5224\u65b7\u3002
+- \u53ea\u8f38\u51fa JSON array\uff0c\u4e0d\u8981\u8f38\u51fa markdown code block\uff0c\u4e0d\u8981\u52a0\u4efb\u4f55\u8aaa\u660e\u6587\u5b57\u3002
+
+\u56de\u50b3\u683c\u5f0f\uff1a
+[
+  {{
+    "place_id": "xxx",
+    "is_match": true,
+    "matched_type": "{nuisance_type}",
+    "place_description": "\u5730\u65b9\u5b97\u6559\u796d\u7940\u5834\u6240\uff0c\u53ef\u80fd\u6709\u9999\u706b\u3001\u5edf\u6703\u8207\u4eba\u6f6e\u3002",
+    "reason": "\u540d\u7a31\u5305\u542b\u5bae\uff0c\u4e14\u7b26\u5408\u5b97\u6559\u796d\u7940\u5834\u6240\u7279\u5fb5\u3002"
+  }}
+]
+
+\u5019\u9078\u8cc7\u6599 JSON\uff1a
+{json.dumps(payload, ensure_ascii=False)}
+"""
+                resp = model.generate_content(prompt)
+                raw = (getattr(resp, "text", "") or "").strip()
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
+                verdicts = json.loads(raw)
+                verdict_by_id = {str(v.get("place_id", "")): v for v in verdicts if isinstance(v, dict)}
+                for c in batch:
+                    verdict = verdict_by_id.get(str(c.get("place_id", "")))
+                    if not verdict or verdict.get("is_match") is not True:
+                        continue
+                    item = dict(c)
+                    item["is_match"] = True
+                    item["matched_type"] = verdict.get("matched_type") or nuisance_type
+                    item["place_description"] = verdict.get("place_description") or ""
+                    item["reason"] = verdict.get("reason") or ""
+                    filtered.append(item)
+            return filtered
+        except Exception:
+            return fallback
+    
     def _query_nuisances_no_progress(self, lat, lng, api_key, nuisances, radius):
-        """查詢嫌惡設施"""
-        results = []
+        """Query nuisance candidates, then ask Gemini to filter false positives."""
+        candidates = []
         seen = set()
-        
-        keywords = []
-        for nuisance in nuisances:
-            if nuisance in NUISANCE_TYPES:
-                keywords.extend(NUISANCE_TYPES[nuisance].get("keywords", []))
-        
-        if not keywords:
-            return results
-        
-        for keyword in keywords:
-            try:
-                places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
-                for p in places:
-                    if p[5] > radius:
-                        continue
-                    pid = p[6]
-                    if pid in seen:
-                        continue
-                    seen.add(pid)
-                    
-                    found_nuisance = "其他"
-                    for nuisance_name, nuisance_info in NUISANCE_TYPES.items():
-                        if keyword in nuisance_info.get("keywords", []):
-                            found_nuisance = nuisance_name
-                            break
-                    
-                    results.append((found_nuisance, keyword, p[2], p[3], p[4], p[5], p[6]))
-                
-                time.sleep(0.3)
-            except:
+        for selected_nuisance in nuisances:
+            keywords = NUISANCE_TYPES.get(selected_nuisance, {}).get("keywords", [])
+            for keyword in keywords:
+                try:
+                    places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
+                    for p in places:
+                        if p[5] > radius:
+                            continue
+                        pid = p[6]
+                        if pid in seen:
+                            continue
+                        seen.add(pid)
+                        candidates.append({
+                            "nuisance_type": selected_nuisance,
+                            "keyword": keyword,
+                            "name": p[2],
+                            "lat": p[3],
+                            "lng": p[4],
+                            "distance": p[5],
+                            "place_id": p[6],
+                            "address": p[7] if len(p) > 7 else "",
+                        })
+                    time.sleep(0.3)
+                except Exception:
+                    continue
+        if not candidates:
+            return []
+        filtered = []
+        for nuisance_type in sorted({c["nuisance_type"] for c in candidates}):
+            batch_candidates = [c for c in candidates if c["nuisance_type"] == nuisance_type]
+            filtered.extend(self._filter_nuisance_results_with_ai(nuisance_type, batch_candidates))
+        results = []
+        for c in filtered:
+            if c.get("is_match") is not True:
                 continue
-        
+            results.append((
+                c.get("matched_type") or c.get("nuisance_type", ""),
+                c.get("keyword", ""),
+                c.get("name", ""),
+                c.get("lat"),
+                c.get("lng"),
+                c.get("distance", 0),
+                c.get("place_id", ""),
+                c.get("place_description", ""),
+                c.get("reason", ""),
+            ))
         results.sort(key=lambda x: x[5])
         return results
     
@@ -1124,7 +1214,8 @@ class ComparisonAnalyzer:
                 loc["lat"],
                 loc["lng"],
                 dist,
-                p.get("place_id", "")
+                p.get("place_id", ""),
+                p.get("formatted_address") or p.get("vicinity", "")
             ))
         return results
     
@@ -1143,7 +1234,9 @@ class ComparisonAnalyzer:
                     "距離(公尺)": p[5],
                     "經度": p[4],
                     "緯度": p[3],
-                    "place_id": p[6]
+                    "place_id": p[6],
+                    "\u8a2d\u65bd\u8aaa\u660e": p[7] if len(p) > 7 else "",
+                    "AI\u5224\u65b7\u539f\u56e0": p[8] if len(p) > 8 else ""
                 })
         return pd.DataFrame(rows)
     
@@ -1174,6 +1267,7 @@ class ComparisonAnalyzer:
                 "嫌惡設施類型": subtype,
                 "影響分類": "、".join(impacts) if impacts else "未分類",
                 "最近設施名稱": nearest.get("設施名稱", ""),
+                "\u8a2d\u65bd\u8aaa\u660e": nearest.get("\u8a2d\u65bd\u8aaa\u660e", ""),
                 "最近距離(公尺)": int(round(distance)),
                 "周圍數量": count,
                 "提醒": self._get_nuisance_notice(subtype, distance, count),
@@ -1700,6 +1794,13 @@ class ComparisonAnalyzer:
                     )
                 with col5:
                     st.link_button("Google\u5730\u5716", maps_url, use_container_width=True)
+                if nuisance:
+                    desc = row.get("\u8a2d\u65bd\u8aaa\u660e", "")
+                    reason = row.get("AI\u5224\u65b7\u539f\u56e0", "")
+                    if desc:
+                        st.caption(f"\u8a2d\u65bd\u8aaa\u660e\uff1a{desc}")
+                    if reason:
+                        st.caption(f"AI\u5224\u65b7\u539f\u56e0\uff1a{reason}")
                 st.divider()
     
     def _display_facility_summary_tables(self, res, include_nuisance=False):
@@ -1737,13 +1838,14 @@ class ComparisonAnalyzer:
                         }).copy()
                         summary_df["Google\u5730\u5716"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
                         st.dataframe(
-                            summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
+                            summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u8a2d\u65bd\u8aaa\u660e", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
                             use_container_width=True,
                             column_config={
                                 "\u623f\u5c4b\u540d\u7a31": st.column_config.TextColumn(width="medium"),
                                 "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b": st.column_config.TextColumn(width="small"),
                                 "\u5f71\u97ff\u5206\u985e": st.column_config.TextColumn(width="medium"),
                                 "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31": st.column_config.TextColumn(width="large"),
+                                "\u8a2d\u65bd\u8aaa\u660e": st.column_config.TextColumn(width="large"),
                                 "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)": st.column_config.NumberColumn(format="%d \u516c\u5c3a"),
                                 "\u5468\u570d\u6578\u91cf": st.column_config.NumberColumn(format="%d \u8655"),
                                 "\u63d0\u9192": st.column_config.TextColumn(width="large"),
@@ -1757,6 +1859,7 @@ class ComparisonAnalyzer:
                                 f"**{row['\u623f\u5c4b']}\uff5c{row['\u5acc\u60e1\u8a2d\u65bd\u985e\u578b']}**  \\n"
                                 f"\u5f71\u97ff\u5206\u985e\uff1a{row.get('\u5f71\u97ff\u5206\u985e', '\u672a\u5206\u985e')}  \\n"
                                 f"\u6700\u8fd1\u8a2d\u65bd\uff1a{row['\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31']}\uff5c"
+                                f"\u8a2d\u65bd\u8aaa\u660e\uff1a{row.get('\u8a2d\u65bd\u8aaa\u660e', '')}  \n"
                                 f"\u6700\u8fd1\u8ddd\u96e2\uff1a{row['\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)']} \u516c\u5c3a\uff5c"
                                 f"\u5468\u570d\u6578\u91cf\uff1a{row['\u5468\u570d\u6578\u91cf']} \u8655  \\n"
                                 f"{row['\u63d0\u9192']}"
@@ -1884,12 +1987,12 @@ class ComparisonAnalyzer:
         if not nuisance_summary_df.empty:
             nuisance_summary_df = nuisance_summary_df.rename(columns={"房屋": "房屋名稱"}).copy()
             nuisance_summary_df["Google地圖"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
-        self._add_pdf_section(story, "4. 嫌惡設施摘要", self._pdf_table_from_df(nuisance_summary_df, ["房屋名稱", "嫌惡設施類型", "影響分類", "最近設施名稱", "最近距離(公尺)", "周圍數量", "提醒", "Google地圖"], styles, 40), styles)
+        self._add_pdf_section(story, "4. 嫌惡設施摘要", self._pdf_table_from_df(nuisance_summary_df, ["房屋名稱", "嫌惡設施類型", "影響分類", "最近設施名稱", "\u8a2d\u65bd\u8aaa\u660e", "最近距離(公尺)", "周圍數量", "提醒", "Google地圖"], styles, 40), styles)
         
         if not nuisance_df.empty:
             nuisance_df = nuisance_df.rename(columns={"房屋": "房屋名稱"}).copy()
             nuisance_df["Google地圖"] = nuisance_df.apply(self._build_maps_url, axis=1)
-        self._add_pdf_section(story, "5. 嫌惡設施明細總表", self._pdf_table_from_df(nuisance_df, ["房屋名稱", "主要類別", "設施子類別", "設施名稱", "距離(公尺)", "Google地圖"], styles, 60), styles)
+        self._add_pdf_section(story, "5. 嫌惡設施明細總表", self._pdf_table_from_df(nuisance_df, ["房屋名稱", "主要類別", "設施子類別", "設施名稱", "\u8a2d\u65bd\u8aaa\u660e", "AI\u5224\u65b7\u539f\u56e0", "距離(公尺)", "Google地圖"], styles, 60), styles)
         
         story.append(Paragraph("6. AI 智能分析", styles["Heading"]))
         story.append(Paragraph(self._pdf_clean_text(ai_text), styles["Body"]))
@@ -1979,8 +2082,8 @@ class ComparisonAnalyzer:
             ("1. \u623f\u5c4b\u672c\u9ad4\u5206\u6790\u6458\u8981", self._html_table_from_df(house_df, ["\u623f\u5c4b\u540d\u7a31"] + fields, 30)),
             ("2. \u8a2d\u65bd\u7d71\u8a08", self._html_table_from_df(stat_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e00\u822c\u8a2d\u65bd\u6578", "\u5acc\u60e1\u8a2d\u65bd\u6578", "\u7e3d\u6578"], 50)),
             ("3. \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868", self._html_table_from_df(normal_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
-            ("4. \u5acc\u60e1\u8a2d\u65bd\u6458\u8981", self._html_table_from_df(nuisance_summary_df, ["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"], 80)),
-            ("5. \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", self._html_table_from_df(nuisance_detail_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
+            ("4. \u5acc\u60e1\u8a2d\u65bd\u6458\u8981", self._html_table_from_df(nuisance_summary_df, ["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u8a2d\u65bd\u8aaa\u660e", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"], 80)),
+            ("5. \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", self._html_table_from_df(nuisance_detail_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8a2d\u65bd\u8aaa\u660e", "AI\u5224\u65b7\u539f\u56e0", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
             ("6. AI \u667a\u80fd\u5206\u6790", f'<div class="ai-text">{self._html_escape(ai_text).replace(chr(10), "<br>")}</div>'),
         ]
         section_html = "".join(f'<section class="card"><h2>{self._html_escape(title)}</h2>{body}</section>' for title, body in sections)
