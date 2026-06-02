@@ -1094,7 +1094,7 @@ class ComparisonAnalyzer:
                 st.error(msg)
                 return fallback
             genai.configure(api_key=key)
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            model = genai.GenerativeModel("gemini-flash-latest")
             analyzed = {}
             for start in range(0, len(candidates), 20):
                 batch = candidates[start:start + 20]
@@ -2540,7 +2540,7 @@ th, td {{ border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }} 
                     return
                 
                 genai.configure(api_key=key)
-                model = genai.GenerativeModel("gemini-2.0-flash")
+                model = genai.GenerativeModel("gemini-flash-latest")
                 resp = model.generate_content(prompt)
                 
                 st.session_state.gemini_result = resp.text
