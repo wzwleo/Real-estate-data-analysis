@@ -329,7 +329,7 @@ class ComparisonAnalyzer:
         """舊版權重設定已停用。嫌惡設施目前不使用分數、不使用權重。"""
         st.info("目前嫌惡設施採資訊揭露制：只顯示影響分類、最近距離與周圍數量，不計算分數或權重。")
 
-    def _get_nuisance_notice(self, nuisance_type, distance, count):
+    def _get_nuisance_notice(self, nuisance_type, distance, count, ai_relevance=None):
         """依距離與數量產生嫌惡設施提醒文字，不使用風險分數"""
         try:
             distance = float(distance)
@@ -357,7 +357,16 @@ class ComparisonAnalyzer:
         else:
             count_text = "周邊同類設施有 1 處。"
 
-        return f"{level_text}，可能影響：{impact_text}。{count_text}{advice}"
+        relevance_advice = {
+            "\u9ad8\u5ea6\u76f8\u95dc": "AI\u5224\u8b80\u70ba\u9ad8\u5ea6\u76f8\u95dc\uff0c\u5efa\u8b70\u73fe\u5834\u78ba\u8a8d\u3002",
+            "\u90e8\u5206\u76f8\u95dc": "AI\u5224\u8b80\u70ba\u90e8\u5206\u76f8\u95dc\uff0c\u5efa\u8b70\u78ba\u8a8d\u5be6\u969b\u7528\u9014\u3002",
+            "\u4f4e\u5ea6\u76f8\u95dc": "AI\u5224\u8b80\u70ba\u4f4e\u5ea6\u76f8\u95dc\uff0c\u8cc7\u6599\u53ef\u80fd\u4e0d\u660e\u78ba\u3002",
+            "\u7121\u95dc": "AI\u5224\u8b80\u70ba\u7121\u95dc\uff0c\u8a72\u7d50\u679c\u53ef\u80fd\u662f Google \u641c\u5c0b\u8aa4\u5224\u3002",
+        }.get(ai_relevance, "")
+        if relevance_advice:
+            relevance_advice = relevance_advice + " "
+
+        return f"{level_text}，可能影響：{impact_text}。{count_text}{relevance_advice}{advice}"
 
     def _render_nuisance_selection_with_weights(self):
         """先用影響類型篩選，再選擇受影響的嫌惡設施；不使用權重與分數"""
@@ -963,8 +972,8 @@ class ComparisonAnalyzer:
                             places_data[name] = []
                         
                         for n in all_nuisances:
-                            # 格式：主要類別、設施子類別、設施名稱、緯度、經度、距離、place_id
-                            places_data[name].append(("嫌惡設施", n[0], n[2], n[3], n[4], n[5], n[6]))
+                            # 格式：主要類別、設施子類別、設施名稱、緯度、經度、距離、place_id、AI相關性、設施用途、AI說明
+                            places_data[name].append(("嫌惡設施", n[0], n[2], n[3], n[4], n[5], n[6], n[7] if len(n) > 7 else "", n[8] if len(n) > 8 else "", n[9] if len(n) > 9 else ""))
                         
                         st.write(f"     找到 {len(all_nuisances)} 處嫌惡設施")
                 
@@ -1056,42 +1065,155 @@ class ComparisonAnalyzer:
         results.sort(key=lambda x: x[5])
         return results
     
+    def _analyze_nuisance_relevance_with_ai(self, nuisance_type, candidates):
+        """Use Gemini to label nuisance candidate relevance without removing results."""
+        allowed = {"\u9ad8\u5ea6\u76f8\u95dc", "\u90e8\u5206\u76f8\u95dc", "\u4f4e\u5ea6\u76f8\u95dc", "\u7121\u95dc"}
+        if not candidates:
+            return {}
+
+        fallback = {}
+        for c in candidates:
+            pid = str(c.get("place_id", ""))
+            fallback[pid] = {
+                "ai_relevance": "\u672a\u7d93AI\u5224\u65b7",
+                "place_purpose": "AI\u5224\u65b7\u5931\u6557",
+                "ai_explanation": "Gemini \u7121\u6cd5\u5b8c\u6210\u5224\u65b7\uff0c\u4fdd\u7559\u539f\u59cb Google Places \u641c\u5c0b\u7d50\u679c\u3002",
+            }
+
+        try:
+            import google.generativeai as genai
+            key = self._get_gemini_key()
+            if not key:
+                return fallback
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel("gemini-2.0-flash")
+            analyzed = {}
+            for start in range(0, len(candidates), 20):
+                batch = candidates[start:start + 20]
+                payload = [
+                    {
+                        "place_id": c.get("place_id", ""),
+                        "name": c.get("name", ""),
+                        "query_keyword": c.get("keyword", ""),
+                        "address_or_vicinity": c.get("address", ""),
+                        "google_types": c.get("types", []),
+                        "distance_meters": c.get("distance", ""),
+                    }
+                    for c in batch
+                ]
+                prompt = f"""
+\u4f60\u662f\u53f0\u7063\u623f\u5730\u7522\u5468\u908a\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599\u5be9\u6838\u54e1\u3002\u8acb\u5224\u65b7\u4e0b\u5217 Google Places \u5730\u9ede\u8207\u4f7f\u7528\u8005\u641c\u5c0b\u7684\u5acc\u60e1\u8a2d\u65bd\u985e\u578b\u300c{nuisance_type}\u300d\u7684\u76f8\u95dc\u6027\u3002
+
+\u8acb\u6839\u64da\uff1a
+- \u4f7f\u7528\u8005\u641c\u5c0b\u7684\u5acc\u60e1\u8a2d\u65bd\u985e\u578b
+- Google Places \u56de\u50b3\u7684\u8a2d\u65bd\u540d\u7a31
+- \u67e5\u8a62\u95dc\u9375\u5b57
+- \u5730\u5740\u6216 vicinity
+- Google types
+
+\u5224\u65b7\u6a19\u6e96\uff1a
+1. \u9ad8\u5ea6\u76f8\u95dc\uff1a\u8a72\u5730\u9ede\u660e\u78ba\u5c31\u662f\u76ee\u6a19\u5acc\u60e1\u8a2d\u65bd\uff0c\u6216\u4e3b\u8981\u696d\u52d9\u660e\u78ba\u7b26\u5408\u3002
+2. \u90e8\u5206\u76f8\u95dc\uff1a\u8207\u76ee\u6a19\u8a2d\u65bd\u6709\u95dc\uff0c\u4f46\u4e0d\u4e00\u5b9a\u662f\u4e3b\u8981\u5acc\u60e1\u4f86\u6e90\u3002
+3. \u4f4e\u5ea6\u76f8\u95dc\uff1a\u540d\u7a31\u6216\u696d\u52d9\u6709\u4e00\u9ede\u95dc\u806f\uff0c\u4f46\u662f\u5426\u5c6c\u65bc\u76ee\u6a19\u5acc\u60e1\u8a2d\u65bd\u4e0d\u660e\u78ba\u3002
+4. \u7121\u95dc\uff1a\u8207\u76ee\u6a19\u5acc\u60e1\u8a2d\u65bd\u6c92\u6709\u5408\u7406\u95dc\u4fc2\u3002
+
+\u91cd\u8981\u898f\u5247\uff1a
+- \u53ea\u80fd\u7528\uff1a\u9ad8\u5ea6\u76f8\u95dc\u3001\u90e8\u5206\u76f8\u95dc\u3001\u4f4e\u5ea6\u76f8\u95dc\u3001\u7121\u95dc\u3002
+- \u4e0d\u8981\u8f38\u51fa AI \u4fe1\u5fc3\u5ea6\u3001\u767e\u5206\u6bd4\u6216\u5206\u6578\u3002
+- \u5982\u679c\u7121\u6cd5\u5224\u65b7\uff0cai_relevance \u8acb\u586b\u300c\u4f4e\u5ea6\u76f8\u95dc\u300d\uff0cplace_purpose \u586b\u300c\u7121\u6cd5\u5f9e\u540d\u7a31\u5224\u65b7\u4e3b\u8981\u7528\u9014\u300d\uff0cai_explanation \u586b\u300c\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u4f7f\u7528\u8005\u81ea\u884c\u78ba\u8a8d\u3002\u300d
+- \u53ea\u8f38\u51fa JSON array\uff0c\u4e0d\u8981 markdown\uff0c\u4e0d\u8981 code block\uff0c\u4e0d\u8981\u52a0\u4efb\u4f55\u8aaa\u660e\u6587\u5b57\u3002
+
+\u56de\u50b3\u683c\u5f0f\uff1a
+[
+  {{
+    "place_id": "\u539f\u59cb place_id",
+    "ai_relevance": "\u9ad8\u5ea6\u76f8\u95dc",
+    "place_purpose": "\u6876\u88dd\u74e6\u65af\u4f9b\u61c9\u696d\u8005\u3002",
+    "ai_explanation": "\u540d\u7a31\u8207\u696d\u52d9\u660e\u78ba\u6307\u5411\u74e6\u65af\u4f9b\u61c9\uff0c\u7b26\u5408\u74e6\u65af\u884c\u985e\u578b\u3002"
+  }}
+]
+
+\u5019\u9078\u8cc7\u6599 JSON\uff1a
+{json.dumps(payload, ensure_ascii=False)}
+"""
+                resp = model.generate_content(prompt)
+                raw = (getattr(resp, "text", "") or "").strip()
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
+                verdicts = json.loads(raw)
+                verdict_by_id = {str(v.get("place_id", "")): v for v in verdicts if isinstance(v, dict)}
+                for c in batch:
+                    pid = str(c.get("place_id", ""))
+                    verdict = verdict_by_id.get(pid, {})
+                    relevance = verdict.get("ai_relevance")
+                    if relevance not in allowed:
+                        relevance = "\u4f4e\u5ea6\u76f8\u95dc"
+                    analyzed[pid] = {
+                        "ai_relevance": relevance,
+                        "place_purpose": verdict.get("place_purpose") or "\u7121\u6cd5\u5f9e\u540d\u7a31\u5224\u65b7\u4e3b\u8981\u7528\u9014\u3002",
+                        "ai_explanation": verdict.get("ai_explanation") or "\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u4f7f\u7528\u8005\u81ea\u884c\u78ba\u8a8d\u3002",
+                    }
+            for pid, item in fallback.items():
+                analyzed.setdefault(pid, item)
+            return analyzed
+        except Exception:
+            return fallback
+    
     def _query_nuisances_no_progress(self, lat, lng, api_key, nuisances, radius):
-        """查詢嫌惡設施"""
-        results = []
+        """Query nuisance candidates and annotate AI relevance without removing results."""
+        candidates = []
         seen = set()
-        
-        keywords = []
-        for nuisance in nuisances:
-            if nuisance in NUISANCE_TYPES:
-                keywords.extend(NUISANCE_TYPES[nuisance].get("keywords", []))
-        
-        if not keywords:
-            return results
-        
-        for keyword in keywords:
-            try:
-                places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
-                for p in places:
-                    if p[5] > radius:
-                        continue
-                    pid = p[6]
-                    if pid in seen:
-                        continue
-                    seen.add(pid)
-                    
-                    found_nuisance = "其他"
-                    for nuisance_name, nuisance_info in NUISANCE_TYPES.items():
-                        if keyword in nuisance_info.get("keywords", []):
-                            found_nuisance = nuisance_name
-                            break
-                    
-                    results.append((found_nuisance, keyword, p[2], p[3], p[4], p[5], p[6]))
-                
-                time.sleep(0.3)
-            except:
-                continue
-        
+        for selected_nuisance in nuisances:
+            keywords = NUISANCE_TYPES.get(selected_nuisance, {}).get("keywords", [])
+            for keyword in keywords:
+                try:
+                    places = self._search_google_places_chinese(lat, lng, api_key, keyword, radius)
+                    for place in places:
+                        if place[5] > radius:
+                            continue
+                        pid = place[6]
+                        dedupe_key = pid or f"{place[2]}|{place[3]}|{place[4]}"
+                        if dedupe_key in seen:
+                            continue
+                        seen.add(dedupe_key)
+                        candidates.append({
+                            "nuisance_type": selected_nuisance,
+                            "keyword": keyword,
+                            "name": place[2],
+                            "lat": place[3],
+                            "lng": place[4],
+                            "distance": place[5],
+                            "place_id": pid,
+                            "address": place[7] if len(place) > 7 else "",
+                            "types": place[8] if len(place) > 8 else [],
+                        })
+                    time.sleep(0.3)
+                except Exception:
+                    continue
+        if not candidates:
+            return []
+
+        relevance_by_type = {}
+        for nuisance_type in sorted({c["nuisance_type"] for c in candidates}):
+            batch_candidates = [c for c in candidates if c["nuisance_type"] == nuisance_type]
+            relevance_by_type[nuisance_type] = self._analyze_nuisance_relevance_with_ai(nuisance_type, batch_candidates)
+
+        results = []
+        for c in candidates:
+            pid = str(c.get("place_id", ""))
+            ai = relevance_by_type.get(c.get("nuisance_type", ""), {}).get(pid, {})
+            results.append((
+                c.get("nuisance_type", ""),
+                c.get("keyword", ""),
+                c.get("name", ""),
+                c.get("lat"),
+                c.get("lng"),
+                c.get("distance", 0),
+                c.get("place_id", ""),
+                ai.get("ai_relevance", "\u672a\u7d93AI\u5224\u65b7"),
+                ai.get("place_purpose", "AI\u5224\u65b7\u5931\u6557"),
+                ai.get("ai_explanation", "Gemini \u7121\u6cd5\u5b8c\u6210\u5224\u65b7\uff0c\u4fdd\u7559\u539f\u59cb Google Places \u641c\u5c0b\u7d50\u679c\u3002"),
+            ))
         results.sort(key=lambda x: x[5])
         return results
     
@@ -1124,7 +1246,9 @@ class ComparisonAnalyzer:
                 loc["lat"],
                 loc["lng"],
                 dist,
-                p.get("place_id", "")
+                p.get("place_id", ""),
+                p.get("formatted_address") or p.get("vicinity", ""),
+                p.get("types", [])
             ))
         return results
     
@@ -1143,7 +1267,10 @@ class ComparisonAnalyzer:
                     "距離(公尺)": p[5],
                     "經度": p[4],
                     "緯度": p[3],
-                    "place_id": p[6]
+                    "place_id": p[6],
+                    "AI\u76f8\u95dc\u6027": p[7] if len(p) > 7 else "",
+                    "\u8a2d\u65bd\u7528\u9014": p[8] if len(p) > 8 else "",
+                    "AI\u8aaa\u660e": p[9] if len(p) > 9 else ""
                 })
         return pd.DataFrame(rows)
     
@@ -1174,9 +1301,12 @@ class ComparisonAnalyzer:
                 "嫌惡設施類型": subtype,
                 "影響分類": "、".join(impacts) if impacts else "未分類",
                 "最近設施名稱": nearest.get("設施名稱", ""),
+                "AI\u76f8\u95dc\u6027": nearest.get("AI\u76f8\u95dc\u6027", ""),
+                "\u8a2d\u65bd\u7528\u9014": nearest.get("\u8a2d\u65bd\u7528\u9014", ""),
+                "AI\u8aaa\u660e": nearest.get("AI\u8aaa\u660e", ""),
                 "最近距離(公尺)": int(round(distance)),
                 "周圍數量": count,
-                "提醒": self._get_nuisance_notice(subtype, distance, count),
+                "提醒": self._get_nuisance_notice(subtype, distance, count, nearest.get("AI\u76f8\u95dc\u6027", "")),
                 "\u7def\u5ea6": nearest.get("\u7def\u5ea6", ""),
                 "\u7d93\u5ea6": nearest.get("\u7d93\u5ea6", ""),
                 "place_id": nearest.get("place_id", "")
@@ -1700,6 +1830,16 @@ class ComparisonAnalyzer:
                     )
                 with col5:
                     st.link_button("Google\u5730\u5716", maps_url, use_container_width=True)
+                if nuisance:
+                    relevance = row.get("AI\u76f8\u95dc\u6027", "")
+                    purpose = row.get("\u8a2d\u65bd\u7528\u9014", "")
+                    explanation = row.get("AI\u8aaa\u660e", "")
+                    if relevance:
+                        st.caption(f"AI\u76f8\u95dc\u6027\uff1a{relevance}")
+                    if purpose:
+                        st.caption(f"\u8a2d\u65bd\u7528\u9014\uff1a{purpose}")
+                    if explanation:
+                        st.caption(f"AI\u8aaa\u660e\uff1a{explanation}")
                 st.divider()
     
     def _display_facility_summary_tables(self, res, include_nuisance=False):
@@ -1737,13 +1877,16 @@ class ComparisonAnalyzer:
                         }).copy()
                         summary_df["Google\u5730\u5716"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
                         st.dataframe(
-                            summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
+                            summary_df[["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "AI\u76f8\u95dc\u6027", "\u8a2d\u65bd\u7528\u9014", "AI\u8aaa\u660e", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"]],
                             use_container_width=True,
                             column_config={
                                 "\u623f\u5c4b\u540d\u7a31": st.column_config.TextColumn(width="medium"),
                                 "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b": st.column_config.TextColumn(width="small"),
                                 "\u5f71\u97ff\u5206\u985e": st.column_config.TextColumn(width="medium"),
                                 "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31": st.column_config.TextColumn(width="large"),
+                                "AI\u76f8\u95dc\u6027": st.column_config.TextColumn(width="small"),
+                                "\u8a2d\u65bd\u7528\u9014": st.column_config.TextColumn(width="large"),
+                                "AI\u8aaa\u660e": st.column_config.TextColumn(width="large"),
                                 "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)": st.column_config.NumberColumn(format="%d \u516c\u5c3a"),
                                 "\u5468\u570d\u6578\u91cf": st.column_config.NumberColumn(format="%d \u8655"),
                                 "\u63d0\u9192": st.column_config.TextColumn(width="large"),
@@ -1757,6 +1900,7 @@ class ComparisonAnalyzer:
                                 f"**{row['\u623f\u5c4b']}\uff5c{row['\u5acc\u60e1\u8a2d\u65bd\u985e\u578b']}**  \\n"
                                 f"\u5f71\u97ff\u5206\u985e\uff1a{row.get('\u5f71\u97ff\u5206\u985e', '\u672a\u5206\u985e')}  \\n"
                                 f"\u6700\u8fd1\u8a2d\u65bd\uff1a{row['\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31']}\uff5c"
+                                f"\u8a2d\u65bd\u8aaa\u660e\uff1a{row.get('\u8a2d\u65bd\u8aaa\u660e', '')}  \n"
                                 f"\u6700\u8fd1\u8ddd\u96e2\uff1a{row['\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)']} \u516c\u5c3a\uff5c"
                                 f"\u5468\u570d\u6578\u91cf\uff1a{row['\u5468\u570d\u6578\u91cf']} \u8655  \\n"
                                 f"{row['\u63d0\u9192']}"
@@ -1884,12 +2028,12 @@ class ComparisonAnalyzer:
         if not nuisance_summary_df.empty:
             nuisance_summary_df = nuisance_summary_df.rename(columns={"房屋": "房屋名稱"}).copy()
             nuisance_summary_df["Google地圖"] = nuisance_summary_df.apply(self._build_maps_url, axis=1)
-        self._add_pdf_section(story, "4. 嫌惡設施摘要", self._pdf_table_from_df(nuisance_summary_df, ["房屋名稱", "嫌惡設施類型", "影響分類", "最近設施名稱", "最近距離(公尺)", "周圍數量", "提醒", "Google地圖"], styles, 40), styles)
+        self._add_pdf_section(story, "4. 嫌惡設施摘要", self._pdf_table_from_df(nuisance_summary_df, ["房屋名稱", "嫌惡設施類型", "影響分類", "最近設施名稱", "AI\u76f8\u95dc\u6027", "\u8a2d\u65bd\u7528\u9014", "AI\u8aaa\u660e", "最近距離(公尺)", "周圍數量", "提醒", "Google地圖"], styles, 40), styles)
         
         if not nuisance_df.empty:
             nuisance_df = nuisance_df.rename(columns={"房屋": "房屋名稱"}).copy()
             nuisance_df["Google地圖"] = nuisance_df.apply(self._build_maps_url, axis=1)
-        self._add_pdf_section(story, "5. 嫌惡設施明細總表", self._pdf_table_from_df(nuisance_df, ["房屋名稱", "主要類別", "設施子類別", "設施名稱", "距離(公尺)", "Google地圖"], styles, 60), styles)
+        self._add_pdf_section(story, "5. 嫌惡設施明細總表", self._pdf_table_from_df(nuisance_df, ["房屋名稱", "主要類別", "設施子類別", "設施名稱", "AI\u76f8\u95dc\u6027", "\u8a2d\u65bd\u7528\u9014", "AI\u8aaa\u660e", "距離(公尺)", "Google地圖"], styles, 60), styles)
         
         story.append(Paragraph("6. AI 智能分析", styles["Heading"]))
         story.append(Paragraph(self._pdf_clean_text(ai_text), styles["Body"]))
@@ -1979,8 +2123,8 @@ class ComparisonAnalyzer:
             ("1. \u623f\u5c4b\u672c\u9ad4\u5206\u6790\u6458\u8981", self._html_table_from_df(house_df, ["\u623f\u5c4b\u540d\u7a31"] + fields, 30)),
             ("2. \u8a2d\u65bd\u7d71\u8a08", self._html_table_from_df(stat_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e00\u822c\u8a2d\u65bd\u6578", "\u5acc\u60e1\u8a2d\u65bd\u6578", "\u7e3d\u6578"], 50)),
             ("3. \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868", self._html_table_from_df(normal_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
-            ("4. \u5acc\u60e1\u8a2d\u65bd\u6458\u8981", self._html_table_from_df(nuisance_summary_df, ["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"], 80)),
-            ("5. \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", self._html_table_from_df(nuisance_detail_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
+            ("4. \u5acc\u60e1\u8a2d\u65bd\u6458\u8981", self._html_table_from_df(nuisance_summary_df, ["\u623f\u5c4b\u540d\u7a31", "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b", "\u5f71\u97ff\u5206\u985e", "\u6700\u8fd1\u8a2d\u65bd\u540d\u7a31", "AI\u76f8\u95dc\u6027", "\u8a2d\u65bd\u7528\u9014", "AI\u8aaa\u660e", "\u6700\u8fd1\u8ddd\u96e2(\u516c\u5c3a)", "\u5468\u570d\u6578\u91cf", "\u63d0\u9192", "Google\u5730\u5716"], 80)),
+            ("5. \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", self._html_table_from_df(nuisance_detail_df, ["\u623f\u5c4b\u540d\u7a31", "\u4e3b\u8981\u985e\u5225", "\u8a2d\u65bd\u5b50\u985e\u5225", "\u8a2d\u65bd\u540d\u7a31", "AI\u76f8\u95dc\u6027", "\u8a2d\u65bd\u7528\u9014", "AI\u8aaa\u660e", "\u8ddd\u96e2(\u516c\u5c3a)", "Google\u5730\u5716"], 120)),
             ("6. AI \u667a\u80fd\u5206\u6790", f'<div class="ai-text">{self._html_escape(ai_text).replace(chr(10), "<br>")}</div>'),
         ]
         section_html = "".join(f'<section class="card"><h2>{self._html_escape(title)}</h2>{body}</section>' for title, body in sections)
