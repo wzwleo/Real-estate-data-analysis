@@ -1071,6 +1071,10 @@ class ComparisonAnalyzer:
         if not candidates:
             return {}
 
+        print("\u958b\u59cb AI \u5acc\u60e1\u8a2d\u65bd\u5206\u6790")
+        print(f"AI\u5acc\u60e1\u8a2d\u65bd\u985e\u578b: {nuisance_type}")
+        print(f"AI\u5acc\u60e1\u8a2d\u65bd\u5019\u9078\u7b46\u6578: {len(candidates)}")
+
         fallback = {}
         for c in candidates:
             pid = str(c.get("place_id", ""))
@@ -1081,15 +1085,20 @@ class ComparisonAnalyzer:
             }
 
         try:
+            import traceback
             import google.generativeai as genai
             key = self._get_gemini_key()
             if not key:
+                msg = "AI\u5acc\u60e1\u8a2d\u65bd\u5206\u6790\u5931\u6557: \u672a\u53d6\u5f97 Gemini API Key"
+                print(msg)
+                st.error(msg)
                 return fallback
             genai.configure(api_key=key)
             model = genai.GenerativeModel("gemini-2.0-flash")
             analyzed = {}
             for start in range(0, len(candidates), 20):
                 batch = candidates[start:start + 20]
+                print(f"AI\u5acc\u60e1\u8a2d\u65bd\u6279\u6b21: {start // 20 + 1}, \u7b46\u6578: {len(batch)}")
                 payload = [
                     {
                         "place_id": c.get("place_id", ""),
@@ -1136,10 +1145,34 @@ class ComparisonAnalyzer:
 \u5019\u9078\u8cc7\u6599 JSON\uff1a
 {json.dumps(payload, ensure_ascii=False)}
 """
+                print("AI\u5acc\u60e1\u8a2d\u65bd prompt \u524d1000\u5b57:")
+                print(prompt[:1000])
                 resp = model.generate_content(prompt)
-                raw = (getattr(resp, "text", "") or "").strip()
+
+                raw = ""
+                raw_source = "response.text"
+                try:
+                    raw = (getattr(resp, "text", "") or "").strip()
+                except Exception as text_error:
+                    print(f"\u8b80\u53d6 response.text \u5931\u6557: {text_error}")
+                    raw = ""
+                if not raw:
+                    raw_source = "response.candidates[0].content.parts[0].text"
+                    try:
+                        raw = (resp.candidates[0].content.parts[0].text or "").strip()
+                    except Exception as candidate_error:
+                        print(f"\u8b80\u53d6 response.candidates[0].content.parts[0].text \u5931\u6557: {candidate_error}")
+                        raw = ""
+
+                print(f"Gemini response text source: {raw_source}")
+                print("Gemini raw response text:")
+                print(raw)
+
+                raw = raw.replace("```json", "").replace("```", "").strip()
                 raw = re.sub(r"^```(?:json)?\s*", "", raw)
                 raw = re.sub(r"\s*```$", "", raw)
+                print("Gemini JSON text:", raw[:2000])
+
                 verdicts = json.loads(raw)
                 verdict_by_id = {str(v.get("place_id", "")): v for v in verdicts if isinstance(v, dict)}
                 for c in batch:
@@ -1156,7 +1189,12 @@ class ComparisonAnalyzer:
             for pid, item in fallback.items():
                 analyzed.setdefault(pid, item)
             return analyzed
-        except Exception:
+        except Exception as e:
+            import traceback
+            msg = f"AI\u5acc\u60e1\u8a2d\u65bd\u5206\u6790\u5931\u6557: {e}"
+            print(msg)
+            print(traceback.format_exc())
+            st.error(msg)
             return fallback
     
     def _query_nuisances_no_progress(self, lat, lng, api_key, nuisances, radius):
