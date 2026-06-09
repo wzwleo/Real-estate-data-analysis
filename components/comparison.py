@@ -73,10 +73,19 @@ try:
         infer_city_from_address,
     )
     REAL_PRICE_AVAILABLE = True
-except Exception:
+    REAL_PRICE_IMPORT_ERROR = ""
+except Exception as real_price_import_error:
     try:
         import importlib.util
-        real_price_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "components", "real_price.py")
+        current_file_dir = os.path.dirname(os.path.abspath(__file__))
+        real_price_candidates = [
+            os.path.join(current_file_dir, "real_price.py"),
+            os.path.join(current_file_dir, "components", "real_price.py"),
+            os.path.join(os.path.dirname(current_file_dir), "components", "real_price.py"),
+        ]
+        real_price_path = next((path for path in real_price_candidates if os.path.exists(path)), None)
+        if not real_price_path:
+            raise FileNotFoundError("找不到 real_price.py，已嘗試：" + " | ".join(real_price_candidates))
         spec = importlib.util.spec_from_file_location("real_price", real_price_path)
         real_price_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(real_price_module)
@@ -87,8 +96,10 @@ except Exception:
         format_real_price_metrics_for_prompt = real_price_module.format_real_price_metrics_for_prompt
         infer_city_from_address = real_price_module.infer_city_from_address
         REAL_PRICE_AVAILABLE = True
-    except Exception:
+        REAL_PRICE_IMPORT_ERROR = ""
+    except Exception as fallback_error:
         REAL_PRICE_AVAILABLE = False
+        REAL_PRICE_IMPORT_ERROR = f"{real_price_import_error}；fallback: {fallback_error}"
 
 # 設定台灣時區
 try:
@@ -1500,7 +1511,7 @@ class ComparisonAnalyzer:
         results = {}
         if not REAL_PRICE_AVAILABLE:
             for house_name in houses_data.keys():
-                results[house_name] = {"error": "實價登錄模組無法載入"}
+                results[house_name] = {"error": f"實價登錄模組無法載入：{REAL_PRICE_IMPORT_ERROR}"}
             return results
 
         for house_name, info in houses_data.items():
@@ -1545,7 +1556,7 @@ class ComparisonAnalyzer:
     def _format_real_price_for_prompt(self, res):
         """Format real price metrics for Gemini prompt."""
         if not REAL_PRICE_AVAILABLE:
-            return "\n【實價登錄價格分析】\n實價登錄模組無法載入\n"
+            return f"\n【實價登錄價格分析】\n實價登錄模組無法載入：{REAL_PRICE_IMPORT_ERROR}\n"
         return format_real_price_metrics_for_prompt(res.get("real_price_results", {}) or {})
 
     def _display_analysis_results(self, res):
