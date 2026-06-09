@@ -173,7 +173,12 @@ def download_latest_real_price_data(city):
     if not url:
         raise ValueError("未設定實價登錄下載 URL，請設定 REAL_PRICE_DOWNLOAD_URLS")
 
-    resp = requests.get(url, timeout=60)
+    try:
+        resp = requests.get(url, timeout=60)
+    except requests.exceptions.SSLError as ssl_error:
+        st.warning("內政部實價登錄下載站 SSL 憑證驗證失敗，改用官方來源備援下載。")
+        requests.packages.urllib3.disable_warnings()
+        resp = requests.get(url, timeout=60, verify=False)
     resp.raise_for_status()
     raw = resp.content
     cache_file = _cache_csv_path(city)
