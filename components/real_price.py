@@ -10,8 +10,18 @@ import requests
 import streamlit as st
 
 
+SUPPORTED_REAL_PRICE_CITY = "臺中市"
+
 REAL_PRICE_DOWNLOAD_URLS = {
-    "default": "https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip",
+    "臺中市": [
+        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=csv&fileName=b_lvr_land_a.csv",
+        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip",
+    ],
+    "台中市": [
+        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=csv&fileName=b_lvr_land_a.csv",
+        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip",
+    ],
+    "default": ["https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip"],
 }
 
 CITY_FILE_CODES = {
@@ -194,16 +204,7 @@ def _prepare_real_price_df(df, city=""):
     return out.reset_index(drop=True)
 
 
-def download_latest_real_price_data(city):
-    """Download official ZIP/CSV real price data for a city and cache it locally."""
-    city = normalize_city_name(city)
-    if not city:
-        raise ValueError("未提供縣市，無法下載實價登錄資料")
-
-    url = REAL_PRICE_DOWNLOAD_URLS.get(city) or REAL_PRICE_DOWNLOAD_URLS.get("default")
-    if not url:
-        raise ValueError("未設定實價登錄下載 URL，請設定 REAL_PRICE_DOWNLOAD_URLS")
-
+def _download_real_price_bytes(url):
     try:
         resp = requests.get(url, timeout=60)
     except Exception as e:
@@ -215,21 +216,20 @@ def download_latest_real_price_data(city):
         else:
             raise
     resp.raise_for_status()
-    raw = resp.content
-    cache_file = _cache_csv_path(city)
+    return resp.content
 
+
+def _read_taichung_real_price_from_bytes(raw, city):
     dfs = []
+    code = CITY_FILE_CODES.get(city)
+    expected_name = f"{code}_lvr_land_a.csv" if code else "b_lvr_land_a.csv"
+
     if zipfile.is_zipfile(io.BytesIO(raw)):
-        code = CITY_FILE_CODES.get(city)
         with zipfile.ZipFile(io.BytesIO(raw)) as zf:
             names = zf.namelist()
-            target_names = []
-            if code:
-                target_names = [n for n in names if n.lower().endswith(f"{code}_lvr_land_a.csv")]
-            if not target_names and code:
-                target_names = [n for n in names if f"{code}_lvr_land" in n.lower() and n.lower().endswith(".csv")]
+            target_names = [n for n in names if n.lower().endswith(expected_name)]
             if not target_names:
-                target_names = [n for n in names if n.lower().endswith("_lvr_land_a.csv")]
+                raise ValueError(f"ZIP 中找不到臺中市不動產買賣檔案 {expected_name}")
             for name in target_names:
                 with zf.open(name) as f:
                     dfs.append(_read_csv_bytes(f.read()))
@@ -237,13 +237,43 @@ def download_latest_real_price_data(city):
         dfs.append(_read_csv_bytes(raw))
 
     if not dfs:
-        raise ValueError(f"下載資料中找不到 {city} 的實價登錄 CSV")
+        raise ValueError("下載資料中找不到臺中市實價登錄 CSV")
+    return pd.concat(dfs, ignore_index=True)
 
-    merged = pd.concat(dfs, ignore_index=True)
+
+def download_latest_real_price_data(city):
+    """Download official ZIP/CSV real price data for Taichung and cache it locally."""
+    city = normalize_city_name(city)
+    if not city:
+        raise ValueError("未提供縣市，無法下載實價登錄資料")
+    if city != SUPPORTED_REAL_PRICE_CITY:
+        raise ValueError("目前實價登錄價格分析只支援臺中市")
+
+    urls = REAL_PRICE_DOWNLOAD_URLS.get(city) or REAL_PRICE_DOWNLOAD_URLS.get("台中市") or REAL_PRICE_DOWNLOAD_URLS.get("default")
+    if isinstance(urls, str):
+        urls = [urls]
+    if not urls:
+        raise ValueError("未設定臺中市實價登錄下載 URL，請設定 REAL_PRICE_DOWNLOAD_URLS")
+
+    errors = []
+    merged = pd.DataFrame()
+    for url in urls:
+        try:
+            raw = _download_real_price_bytes(url)
+            merged = _read_taichung_real_price_from_bytes(raw, city)
+            break
+        except Exception as e:
+            errors.append(f"{url} -> {e}")
+            continue
+
+    if merged.empty:
+        raise ValueError("臺中市實價登錄資料下載或解析失敗：" + "；".join(errors))
+
     prepared = _prepare_real_price_df(merged, city)
     if prepared.empty:
-        raise ValueError(f"{city} 實價登錄資料解析後為空")
+        raise ValueError("臺中市實價登錄資料解析後為空")
 
+    cache_file = _cache_csv_path(city)
     prepared.to_csv(cache_file, index=False, encoding="utf-8-sig")
     return prepared
 
