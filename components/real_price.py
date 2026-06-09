@@ -123,13 +123,44 @@ def _pick_column(df, candidates):
     return None
 
 
-def _read_csv_bytes(data):
+def _decode_csv_text(data):
     for enc in ("utf-8-sig", "utf-8", "cp950", "big5"):
         try:
-            return pd.read_csv(io.BytesIO(data), encoding=enc, low_memory=False)
+            return data.decode(enc), enc
         except Exception:
             continue
-    return pd.read_csv(io.BytesIO(data), low_memory=False)
+    return data.decode("utf-8", errors="ignore"), "utf-8-ignore"
+
+
+def _find_real_price_header_line(lines):
+    required_tokens = ["交易年月日", "總價", "建物"]
+    for idx, line in enumerate(lines):
+        if all(token in line for token in required_tokens):
+            return idx
+    for idx, line in enumerate(lines):
+        if "鄉鎮市區" in line and "交易" in line:
+            return idx
+    return None
+
+
+def _read_csv_bytes(data):
+    text, enc = _decode_csv_text(data)
+    lines = text.splitlines()
+    header_idx = _find_real_price_header_line(lines)
+    if header_idx is None:
+        preview = "\n".join(lines[:5])[:500]
+        raise ValueError(f"找不到實價登錄 CSV 表頭，可能下載到非 CSV 內容。前段內容：{preview}")
+
+    csv_text = "\n".join(lines[header_idx:])
+    read_kwargs = {
+        "dtype": str,
+        "engine": "python",
+        "on_bad_lines": "skip",
+    }
+    try:
+        return pd.read_csv(io.StringIO(csv_text), **read_kwargs)
+    except TypeError:
+        return pd.read_csv(io.StringIO(csv_text), dtype=str, engine="python", error_bad_lines=False)
 
 
 def _prepare_real_price_df(df, city=""):
@@ -175,10 +206,14 @@ def download_latest_real_price_data(city):
 
     try:
         resp = requests.get(url, timeout=60)
-    except requests.exceptions.SSLError as ssl_error:
-        st.warning("內政部實價登錄下載站 SSL 憑證驗證失敗，改用官方來源備援下載。")
-        requests.packages.urllib3.disable_warnings()
-        resp = requests.get(url, timeout=60, verify=False)
+    except Exception as e:
+        err = str(e)
+        if "SSL" in err or "CERTIFICATE_VERIFY_FAILED" in err or "certificate verify failed" in err:
+            st.warning("內政部實價登錄下載站 SSL 憑證驗證失敗，改用官方來源備援下載。")
+            requests.packages.urllib3.disable_warnings()
+            resp = requests.get(url, timeout=60, verify=False)
+        else:
+            raise
     resp.raise_for_status()
     raw = resp.content
     cache_file = _cache_csv_path(city)
