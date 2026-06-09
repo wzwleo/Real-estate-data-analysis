@@ -63,6 +63,33 @@ except ImportError as e:
     DEFAULT_RADIUS = 500
     IMPACT_TYPES = {}
 
+try:
+    from components.real_price import (
+        update_real_price_cache_if_needed,
+        filter_nearby_transactions,
+        calculate_price_metrics,
+        render_real_price_analysis,
+        format_real_price_metrics_for_prompt,
+        infer_city_from_address,
+    )
+    REAL_PRICE_AVAILABLE = True
+except Exception:
+    try:
+        import importlib.util
+        real_price_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "components", "real_price.py")
+        spec = importlib.util.spec_from_file_location("real_price", real_price_path)
+        real_price_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(real_price_module)
+        update_real_price_cache_if_needed = real_price_module.update_real_price_cache_if_needed
+        filter_nearby_transactions = real_price_module.filter_nearby_transactions
+        calculate_price_metrics = real_price_module.calculate_price_metrics
+        render_real_price_analysis = real_price_module.render_real_price_analysis
+        format_real_price_metrics_for_prompt = real_price_module.format_real_price_metrics_for_prompt
+        infer_city_from_address = real_price_module.infer_city_from_address
+        REAL_PRICE_AVAILABLE = True
+    except Exception:
+        REAL_PRICE_AVAILABLE = False
+
 # 設定台灣時區
 try:
     TZ_TAIWAN = pytz.timezone('Asia/Taipei')
@@ -977,12 +1004,16 @@ class ComparisonAnalyzer:
                         
                         st.write(f"     找到 {len(all_nuisances)} 處嫌惡設施")
                 
-                # 步驟3：計算統計
-                st.write("📊 步驟 3/4：計算統計...")
+                # 步驟3：實價登錄價格分析
+                st.write("💰 步驟 3/5：更新實價登錄快取並分析價格...")
+                real_price_results = self._run_real_price_analysis(houses_data)
+                
+                # 步驟4：計算統計
+                st.write("📊 步驟 4/5：計算統計...")
                 counts = {n: len(p) for n, p in places_data.items()}
                 table = self._create_facilities_table(houses_data, places_data)
                 
-                # 步驟4：儲存結果
+                # 步驟5：儲存結果
                 st.write("💾 步驟 4/4：儲存結果...")
                 
                 analysis_result = {
@@ -999,7 +1030,8 @@ class ComparisonAnalyzer:
                     "timestamp": get_taiwan_time(),
                     "include_nuisance": s.get("include_nuisance", False),
                     "nuisance_data": nuisance_data if s.get("include_nuisance", False) else None,
-                    "nuisance_summary": nuisance_summary if s.get("include_nuisance", False) else None
+                    "nuisance_summary": nuisance_summary if s.get("include_nuisance", False) else None,
+                    "real_price_results": real_price_results
                 }
                 
                 if s["mode"] == "單一房屋分析":
@@ -1454,6 +1486,68 @@ class ComparisonAnalyzer:
             },
         )
     
+    def _build_real_price_target_house(self, house_name, info):
+        """Build target house payload for real price comparison."""
+        summary = dict(info.get("property_summary") or {})
+        summary.setdefault("標題", info.get("title", house_name))
+        summary.setdefault("地址", info.get("address", ""))
+        summary["房屋名稱"] = house_name
+        summary["城市"] = infer_city_from_address(summary.get("地址", "")) if REAL_PRICE_AVAILABLE else ""
+        return summary
+
+    def _run_real_price_analysis(self, houses_data):
+        """Update/load real price data and calculate metrics for selected houses."""
+        results = {}
+        if not REAL_PRICE_AVAILABLE:
+            for house_name in houses_data.keys():
+                results[house_name] = {"error": "實價登錄模組無法載入"}
+            return results
+
+        for house_name, info in houses_data.items():
+            target = self._build_real_price_target_house(house_name, info)
+            city = target.get("城市", "")
+            if not city:
+                results[house_name] = {"error": "無法由地址判斷縣市，資料不足，建議放寬條件"}
+                continue
+            try:
+                df = update_real_price_cache_if_needed(city, max_age_days=10)
+                transactions = filter_nearby_transactions(df, target)
+                metrics = calculate_price_metrics(transactions, target)
+                results[house_name] = {
+                    "city": city,
+                    "target": target,
+                    "metrics": metrics,
+                }
+            except Exception as e:
+                msg = f"實價登錄資料更新或分析失敗：{e}"
+                st.warning(f"{house_name}：{msg}")
+                results[house_name] = {"city": city, "target": target, "error": msg}
+        return results
+
+    def _display_real_price_analysis(self, res):
+        """Display real price analysis below house body summary."""
+        st.subheader("💰 實價登錄價格分析")
+        results = res.get("real_price_results", {}) or {}
+        if not results:
+            st.info("資料不足，建議放寬條件")
+            return
+
+        for house_name, result in results.items():
+            with st.expander(f"{house_name}", expanded=(len(results) == 1)):
+                if not isinstance(result, dict) or result.get("error"):
+                    st.warning(result.get("error", "資料不足，建議放寬條件") if isinstance(result, dict) else "資料不足，建議放寬條件")
+                    continue
+                city = result.get("city", "")
+                if city:
+                    st.caption(f"資料縣市：{city}，快取超過 10 天才自動更新。")
+                render_real_price_analysis(result.get("metrics", {}))
+
+    def _format_real_price_for_prompt(self, res):
+        """Format real price metrics for Gemini prompt."""
+        if not REAL_PRICE_AVAILABLE:
+            return "\n【實價登錄價格分析】\n實價登錄模組無法載入\n"
+        return format_real_price_metrics_for_prompt(res.get("real_price_results", {}) or {})
+
     def _display_analysis_results(self, res):
         """顯示分析結果"""
         if not res:
@@ -1493,6 +1587,10 @@ class ComparisonAnalyzer:
         # House favorite data summary
         self._display_house_body_summary(res)
         
+        st.markdown("---")
+        
+        # Real price registration analysis
+        self._display_real_price_analysis(res)
         
         st.markdown("---")
         
@@ -2198,6 +2296,7 @@ th, td {{ border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }} 
         icon = pinfo.get("icon", "👤")
         
         facilities_text, nuisance_text = self._format_facilities_for_prompt(res, include_nuisance)
+        facilities_text = facilities_text + "\n" + self._format_real_price_for_prompt(res)
         
         depth_texts = {}
         if 'ai_results_summary' in st.session_state:
