@@ -226,19 +226,25 @@ def render_ai_chat_search():
                             ('廳數',   'living_rooms'),
                             ('衛數',   'bathrooms'),
                         ]
-                        layout_scores = []
-                        for col, key in layout_dims:
-                            target = filters.get(key, 0)
-                            if target > 0:
-                                actual = row.get(col, 0) or 0
-                                if actual == target:
-                                    layout_scores.append(100)
-                                elif actual > target:
-                                    layout_scores.append(max(60, round(100 - (actual - target) * 15)))
-                                else:
-                                    layout_scores.append(max(0, round(100 - (target - actual) * 35)))
-                        if layout_scores:
-                            scores.append(round(sum(layout_scores) / len(layout_scores)))
+                        layout_dims = [
+                                    ('房間數', 'rooms'),
+                                    ('廳數',   'living_rooms'),
+                                    ('衛數',   'bathrooms'),
+                                ]
+                                layout_scores = []
+                                for col, key in layout_dims:
+                                    target = filters.get(key, 0)
+                                    if target > 0:
+                                        raw = row.get(col, 0)
+                                        actual = 0 if (raw is None or (isinstance(raw, float) and pd.isna(raw))) else int(raw)
+                                        if actual == target:
+                                            layout_scores.append(100)
+                                        elif actual > target:
+                                            layout_scores.append(max(60, round(100 - (actual - target) * 15)))
+                                        else:
+                                            layout_scores.append(max(0, round(100 - (target - actual) * 35)))
+                                if layout_scores:
+                                    scores.append(round(sum(layout_scores) / len(layout_scores)))
 
                         # 4. 樓層相似度
                         fmin = filters.get('floor_min', 0)
