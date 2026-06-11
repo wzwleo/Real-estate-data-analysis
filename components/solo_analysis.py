@@ -2627,19 +2627,17 @@ def tab1_module():
  
                 # ── 前十名推薦房型 ─────────────────────────────────────────
                 st.markdown("#### 🥇 前 10 名推薦房型")
- 
+
                 show_cols = ['排名', '標題', '行政區', '總價(萬)', '建坪',
                              '格局', '樓層', '屋齡',
                              '價格競爭力', '空間效率', '屋齡優勢', '樓層定位', '格局流動性', '總分']
-                # 只保留存在的欄位
                 show_cols = [c for c in show_cols if c in df_rank.columns]
- 
+
                 numeric_cols = ['總價(萬)', '建坪', '價格競爭力', '空間效率',
                                 '屋齡優勢', '樓層定位', '格局流動性', '總分']
-                
+
                 top10 = df_rank.head(10)[show_cols].copy()
-                
-                # ★ 把 top10 裡目標房屋那列的分數替換成 r['total_score']，確保與雷達圖一致
+
                 target_mask = top10['標題'] == target_title
                 if target_mask.any():
                     score_cols = ['價格競爭力', '空間效率', '屋齡優勢', '樓層定位', '格局流動性', '總分']
@@ -2650,20 +2648,44 @@ def tab1_module():
                             top10.loc[target_mask, col] = r['total_score']
                         elif col in r['scores']:
                             top10.loc[target_mask, col] = r['scores'][col]
-                
+
                 for col in numeric_cols:
                     if col in top10.columns:
                         top10[col] = top10[col].apply(
-                            lambda v: round(float(v), 1) if pd.notna(v) and str(v) not in ('', '—') else v
+                            lambda v: round(float(v), 2) if pd.notna(v) and str(v) not in ('', '—') else v
                         )
- 
-                # 高亮目標房屋
-                def highlight_target(row):
-                    if row.get('標題', '') == target_title:
+
+                # 如果目標房屋不在前十，加在最下面
+                if t_rank is not None and t_rank > 10:
+                    target_extra_row = pd.DataFrame([{
+                        '排名':       str(t_rank),
+                        '標題':       _selected_row_for_rank.get('標題', ''),
+                        '行政區':     _selected_row_for_rank.get('行政區', ''),
+                        '總價(萬)':   _selected_row_for_rank.get('總價(萬)', ''),
+                        '建坪':       _selected_row_for_rank.get('建坪', ''),
+                        '格局':       _selected_row_for_rank.get('格局', ''),
+                        '樓層':       _selected_row_for_rank.get('樓層', ''),
+                        '屋齡':       _selected_row_for_rank.get('屋齡', ''),
+                        '價格競爭力': round(r['scores']['價格競爭力'], 2),
+                        '空間效率':   round(r['scores']['空間效率'], 2),
+                        '屋齡優勢':   round(r['scores']['屋齡優勢'], 2),
+                        '樓層定位':   round(r['scores']['樓層定位'], 2),
+                        '格局流動性': round(r['scores']['格局流動性'], 2),
+                        '總分':       r['total_score'],
+                    }])
+                    target_extra_row = target_extra_row[[c for c in show_cols if c in target_extra_row.columns]]
+                    top10 = pd.concat([top10, target_extra_row], ignore_index=True)
+
+                def highlight_combined(row):
+                    rank_val = str(row.get('排名', ''))
+                    title_val = row.get('標題', '')
+                    if title_val == target_title and rank_val == str(t_rank) and t_rank > 10:
+                        return ['background-color: rgba(255,193,7,0.2)'] * len(row)
+                    if title_val == target_title:
                         return ['background-color: rgba(76,175,80,0.2)'] * len(row)
                     return [''] * len(row)
- 
-                styled = top10.style.apply(highlight_target, axis=1)
+
+                styled = top10.style.apply(highlight_combined, axis=1)
                 st.dataframe(styled, use_container_width=True, hide_index=True)
                 
                 # ★ 快速加入收藏（每列 3 個）
@@ -2712,36 +2734,6 @@ def tab1_module():
                                     st.success(f"✅ 已加入收藏：{house_title}")
                                     st.rerun()
                             
-                # 如果目標房屋不在前十，額外顯示其排名列
-                if t_rank is not None and t_rank > 10:
-                    target_extra_row = pd.DataFrame([{
-                        '排名':       f'{t_rank}',
-                        '標題':       _selected_row_for_rank.get('標題', ''),
-                        '行政區':     _selected_row_for_rank.get('行政區', ''),
-                        '總價(萬)':   _selected_row_for_rank.get('總價(萬)', ''),
-                        '建坪':       _selected_row_for_rank.get('建坪', ''),
-                        '格局':       _selected_row_for_rank.get('格局', ''),
-                        '樓層':       _selected_row_for_rank.get('樓層', ''),
-                        '屋齡':       _selected_row_for_rank.get('屋齡', ''),
-                        '價格競爭力': r['scores']['價格競爭力'],
-                        '空間效率':   r['scores']['空間效率'],
-                        '屋齡優勢':   r['scores']['屋齡優勢'],
-                        '樓層定位':   r['scores']['樓層定位'],
-                        '格局流動性': r['scores']['格局流動性'],
-                        '總分':       r['total_score'],
-                    }])
-                    target_extra_row = target_extra_row[[c for c in show_cols if c in target_extra_row.columns]]
-                    top10_with_target = pd.concat([top10, target_extra_row], ignore_index=True)
-
-                    def highlight_target_extended(row):
-                        if str(row.get('排名', '')).startswith('#'):
-                            return ['background-color: rgba(255,193,7,0.2)'] * len(row)
-                        if row.get('標題', '') == target_title:
-                            return ['background-color: rgba(76,175,80,0.2)'] * len(row)
-                        return [''] * len(row)
-
-                    styled_extended = top10_with_target.style.apply(highlight_target_extended, axis=1)
-                    st.dataframe(styled_extended, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
     """浮動聊天視窗 - 循序漸進式 context"""
