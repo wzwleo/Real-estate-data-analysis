@@ -2948,11 +2948,8 @@ def tab1_module():
                             
                 # 如果目標房屋不在前十，額外顯示其排名列
                 if t_rank is not None and t_rank > 10:
-                    st.info(f"💡 目標房屋「{target_title}」排名第 {t_rank} 名，不在前 10 名內")
-                    
-                    # ★ 改成直接用 r['scores'] 和 r['total_score']，而非從 df_rank 撈
-                    target_display_df = pd.DataFrame([{
-                        '排名':       t_rank,
+                    target_extra_row = pd.DataFrame([{
+                        '排名':       f'#{t_rank} 目標',
                         '標題':       _selected_row_for_rank.get('標題', ''),
                         '行政區':     _selected_row_for_rank.get('行政區', ''),
                         '總價(萬)':   _selected_row_for_rank.get('總價(萬)', ''),
@@ -2967,12 +2964,18 @@ def tab1_module():
                         '格局流動性': r['scores']['格局流動性'],
                         '總分':       r['total_score'],
                     }])
-                    
-                    # 只保留 show_cols 裡存在的欄位，維持欄位順序一致
-                    target_display_df = target_display_df[[c for c in show_cols if c in target_display_df.columns]]
-                    
-                    st.markdown("**目標房屋詳細分數：**")
-                    st.dataframe(target_display_df, use_container_width=True, hide_index=True)
+                    target_extra_row = target_extra_row[[c for c in show_cols if c in target_extra_row.columns]]
+                    top10_with_target = pd.concat([top10, target_extra_row], ignore_index=True)
+
+                    def highlight_target_extended(row):
+                        if str(row.get('排名', '')).startswith('#'):
+                            return ['background-color: rgba(255,193,7,0.2)'] * len(row)
+                        if row.get('標題', '') == target_title:
+                            return ['background-color: rgba(76,175,80,0.2)'] * len(row)
+                        return [''] * len(row)
+
+                    styled_extended = top10_with_target.style.apply(highlight_target_extended, axis=1)
+                    st.dataframe(styled_extended, use_container_width=True, hide_index=True)
         render_float_chat()
 def render_float_chat():
     """浮動聊天視窗 - 循序漸進式 context"""
