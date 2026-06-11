@@ -308,8 +308,18 @@ def plot_layout_distribution(target_row, df, chart_key=None):
         st.info("ℹ️ 無足夠有效價格資料進行分析")
         return
     df_valid['單價'] = df_valid['總價'] / df_valid['建坪數值']
+    
     layout_counts = df_valid['格局'].value_counts()
     top5_layouts = layout_counts.head(5).index.tolist()
+
+    # 如果目標格局不在前5名，擴展到包含目標格局為止
+    target_layout = target_row.get('格局', None)
+    if target_layout and target_layout not in top5_layouts:
+        all_layouts = layout_counts.index.tolist()
+        if target_layout in all_layouts:
+            target_rank = all_layouts.index(target_layout) + 1
+            top5_layouts = layout_counts.head(target_rank).index.tolist()
+            
     if len(top5_layouts) == 0:
         st.info("ℹ️ 無足夠格局資料進行分析")
         return
