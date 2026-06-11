@@ -195,7 +195,8 @@ def render_ai_chat_search():
                         bmin = filters.get('budget_min', 0)
                         bmax = filters.get('budget_max', 0)
                         if bmin > 0 or bmax > 0:
-                            price = row.get('總價(萬)', 0) or 0
+                            raw_price = row.get('總價(萬)', 0)
+                            price = 0 if (raw_price is None or (isinstance(raw_price, float) and pd.isna(raw_price))) else float(raw_price)
                             if bmin > 0 and bmax > 0:
                                 if bmin <= price <= bmax:
                                     scores.append(100)
@@ -244,7 +245,8 @@ def render_ai_chat_search():
                         amin = filters.get('area_min', 0)
                         amax = filters.get('area_max', 0)
                         if amin > 0 or amax > 0:
-                            area = row.get('建坪', 0) or 0
+                            raw_area = row.get('建坪', 0)
+                            area = 0 if (raw_area is None or (isinstance(raw_area, float) and pd.isna(raw_area))) else float(raw_area)
                             if amin > 0 and amax > 0:
                                 if amin <= area <= amax:
                                     scores.append(100)
@@ -260,7 +262,8 @@ def render_ai_chat_search():
                         age_min = filters.get('age_min', 0)
                         age_max = filters.get('age_max', 0)
                         if age_min > 0 or age_max > 0:
-                            age = row.get('屋齡', 0) or 0
+                            raw_age = row.get('屋齡', 0)
+                            age = 0 if (raw_age is None or (isinstance(raw_age, float) and pd.isna(raw_age))) else float(raw_age)
                             if age_min > 0 and age_max > 0:
                                 if age_min <= age <= age_max:
                                     scores.append(100)
