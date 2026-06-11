@@ -185,7 +185,6 @@ def render_ai_chat_search():
                     def calc_similarity(row, filters):
                         scores = []
 
-                        # 1. 地區相似度
                         target_district = filters.get('district', '')
                         if target_district and target_district != '不限':
                             row_district = str(row.get('行政區', ''))
@@ -193,7 +192,6 @@ def render_ai_chat_search():
                             district_match = any(d in row_district or row_district in d for d in dist_list)
                             scores.append(100 if district_match else 30)
 
-                        # 2. 價格相似度
                         bmin = filters.get('budget_min', 0)
                         bmax = filters.get('budget_max', 0)
                         if bmin > 0 or bmax > 0:
@@ -202,46 +200,30 @@ def render_ai_chat_search():
                                 if bmin <= price <= bmax:
                                     scores.append(100)
                                 elif price < bmin:
-                                    gap = (bmin - price) / bmin
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                    scores.append(max(0, round(100 - (bmin - price) / bmin * 150)))
                                 else:
-                                    gap = (price - bmax) / bmax
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                    scores.append(max(0, round(100 - (price - bmax) / bmax * 150)))
                             elif bmax > 0:
-                                if price <= bmax:
-                                    scores.append(100)
-                                else:
-                                    gap = (price - bmax) / bmax
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                scores.append(100 if price <= bmax else max(0, round(100 - (price - bmax) / bmax * 150)))
                             elif bmin > 0:
-                                if price >= bmin:
-                                    scores.append(100)
+                                scores.append(100 if price >= bmin else max(0, round(100 - (bmin - price) / bmin * 150)))
+
+                        layout_dims = [('房間數', 'rooms'), ('廳數', 'living_rooms'), ('衛數', 'bathrooms')]
+                        layout_scores = []
+                        for lcol, lkey in layout_dims:
+                            ltarget = filters.get(lkey, 0)
+                            if ltarget > 0:
+                                raw = row.get(lcol, 0)
+                                lactual = 0 if (raw is None or (isinstance(raw, float) and pd.isna(raw))) else int(raw)
+                                if lactual == ltarget:
+                                    layout_scores.append(100)
+                                elif lactual > ltarget:
+                                    layout_scores.append(max(60, round(100 - (lactual - ltarget) * 15)))
                                 else:
-                                    gap = (bmin - price) / bmin
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                    layout_scores.append(max(0, round(100 - (ltarget - lactual) * 35)))
+                        if layout_scores:
+                            scores.append(round(sum(layout_scores) / len(layout_scores)))
 
-                        # 3. 格局相似度（房廳衛各自計算取平均）
-                        layout_dims = [
-                                    ('房間數', 'rooms'),
-                                    ('廳數',   'living_rooms'),
-                                    ('衛數',   'bathrooms'),
-                                ]
-                                layout_scores = []
-                                for col, key in layout_dims:
-                                    target = filters.get(key, 0)
-                                    if target > 0:
-                                        raw = row.get(col, 0)
-                                        actual = 0 if (raw is None or (isinstance(raw, float) and pd.isna(raw))) else int(raw)
-                                        if actual == target:
-                                            layout_scores.append(100)
-                                        elif actual > target:
-                                            layout_scores.append(max(60, round(100 - (actual - target) * 15)))
-                                        else:
-                                            layout_scores.append(max(0, round(100 - (target - actual) * 35)))
-                                if layout_scores:
-                                    scores.append(round(sum(layout_scores) / len(layout_scores)))
-
-                        # 4. 樓層相似度
                         fmin = filters.get('floor_min', 0)
                         fmax = filters.get('floor_max', 0)
                         if fmin > 0 or fmax > 0:
@@ -254,17 +236,10 @@ def render_ai_chat_search():
                                 else:
                                     scores.append(max(0, round(100 - (floor - fmax) * 20)))
                             elif fmin > 0:
-                                if floor >= fmin:
-                                    scores.append(100)
-                                else:
-                                    scores.append(max(0, round(100 - (fmin - floor) * 20)))
+                                scores.append(100 if floor >= fmin else max(0, round(100 - (fmin - floor) * 20)))
                             elif fmax > 0:
-                                if floor <= fmax:
-                                    scores.append(100)
-                                else:
-                                    scores.append(max(0, round(100 - (floor - fmax) * 20)))
+                                scores.append(100 if floor <= fmax else max(0, round(100 - (floor - fmax) * 20)))
 
-                        # 5. 坪數相似度
                         amin = filters.get('area_min', 0)
                         amax = filters.get('area_max', 0)
                         if amin > 0 or amax > 0:
@@ -273,25 +248,14 @@ def render_ai_chat_search():
                                 if amin <= area <= amax:
                                     scores.append(100)
                                 elif area < amin:
-                                    gap = (amin - area) / amin
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                    scores.append(max(0, round(100 - (amin - area) / amin * 150)))
                                 else:
-                                    gap = (area - amax) / amax
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                    scores.append(max(0, round(100 - (area - amax) / amax * 150)))
                             elif amin > 0:
-                                if area >= amin:
-                                    scores.append(100)
-                                else:
-                                    gap = (amin - area) / amin
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                scores.append(100 if area >= amin else max(0, round(100 - (amin - area) / amin * 150)))
                             elif amax > 0:
-                                if area <= amax:
-                                    scores.append(100)
-                                else:
-                                    gap = (area - amax) / amax
-                                    scores.append(max(0, round(100 - gap * 150)))
+                                scores.append(100 if area <= amax else max(0, round(100 - (area - amax) / amax * 150)))
 
-                        # 6. 屋齡相似度
                         age_min = filters.get('age_min', 0)
                         age_max = filters.get('age_max', 0)
                         if age_min > 0 or age_max > 0:
@@ -304,15 +268,9 @@ def render_ai_chat_search():
                                 else:
                                     scores.append(max(0, round(100 - (age - age_max) * 8)))
                             elif age_max > 0:
-                                if age <= age_max:
-                                    scores.append(100)
-                                else:
-                                    scores.append(max(0, round(100 - (age - age_max) * 8)))
+                                scores.append(100 if age <= age_max else max(0, round(100 - (age - age_max) * 8)))
                             elif age_min > 0:
-                                if age >= age_min:
-                                    scores.append(100)
-                                else:
-                                    scores.append(max(0, round(100 - (age_min - age) * 8)))
+                                scores.append(100 if age >= age_min else max(0, round(100 - (age_min - age) * 8)))
 
                         if not scores:
                             return 100
