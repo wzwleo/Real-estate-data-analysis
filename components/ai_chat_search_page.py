@@ -222,11 +222,6 @@ def render_ai_chat_search():
 
                         # 3. 格局相似度（房廳衛各自計算取平均）
                         layout_dims = [
-                            ('房間數', 'rooms'),
-                            ('廳數',   'living_rooms'),
-                            ('衛數',   'bathrooms'),
-                        ]
-                        layout_dims = [
                                     ('房間數', 'rooms'),
                                     ('廳數',   'living_rooms'),
                                     ('衛數',   'bathrooms'),
