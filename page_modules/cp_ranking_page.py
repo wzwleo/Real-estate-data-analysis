@@ -200,11 +200,11 @@ def render_cp_ranking_page():
                                 c1, c2 = st.columns([4, 1])
                                 with c1:
                                     st.markdown(
-                                        f"<div style='margin-bottom:2px'>"
-                                        f"<span style='font-size:14px;font-weight:500;color:white'>{medal} {title}</span>"
-                                        f"<span style='font-size:14px;font-weight:bold;color:{color};margin-left:8px'>{cp} 分</span>"
+                                        f"<div style='margin-bottom:4px'>"
+                                        f"<span style='font-size:15px;font-weight:600;color:white'>{medal} {title}</span>"
+                                        f"<span style='font-size:15px;font-weight:bold;color:{color};margin-left:10px'>{cp} 分</span>"
                                         f"</div>"
-                                        f"<div style='font-size:11px;color:#888;margin-bottom:6px'>"
+                                        f"<div style='font-size:13px;color:#aaa;margin-bottom:8px'>"
                                         f"💰 {price} 萬 ｜ {layout} ｜ 屋齡 {age}"
                                         f"</div>",
                                         unsafe_allow_html=True
@@ -221,6 +221,7 @@ def render_cp_ranking_page():
                                             new_favs.append(property_id)
                                             st.session_state.favorites = new_favs
                                             st.rerun()
-    
-                                st.divider()
+
+                                if rank < len(df_dist):
+                                    st.divider()
     
