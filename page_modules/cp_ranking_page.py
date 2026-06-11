@@ -175,12 +175,13 @@ def render_cp_ranking_page():
     
             for row_start in range(0, len(districts_in_result), 2):
                 row_districts = districts_in_result[row_start:row_start + 2]
-                cols = st.columns(2)
+                cols = st.columns([1, 1], gap="large")
     
                 for col_idx, district in enumerate(row_districts):
                     df_dist = df_all[df_all['行政區'] == district].copy()
     
                     with cols[col_idx]:
+                        st.write("")
                         with st.container(border=True):
                             st.markdown(f"#### 📍 {district}")
     
