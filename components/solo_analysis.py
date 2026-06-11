@@ -665,16 +665,23 @@ def plot_price_scatter(target_row, df, chart_key=None):
         hovertemplate='%{customdata}<extra></extra>',
         customdata=hover_others
     )
-    # 中位數水平線
-    median_price_val = others_df['總價'].median()
-    fig.add_hline(
-        y=median_price_val,
-        line_dash="dot",
-        line_color="orange",
-        annotation_text=f"中位數 {median_price_val:.0f} 萬",
-        annotation_position="top right",
-        annotation_font_size=11,
-    )
+    # 市場趨勢迴歸線
+    valid_for_reg = others_df.dropna(subset=['建坪', '總價'])
+    if len(valid_for_reg) > 1:
+        slope, intercept, r_value, p_value, std_err = stats.linregress(
+            valid_for_reg['建坪'], valid_for_reg['總價']
+        )
+        x_line = np.linspace(valid_for_reg['建坪'].min(), valid_for_reg['建坪'].max(), 100)
+        y_line = slope * x_line + intercept
+        fig.add_scatter(
+            x=x_line,
+            y=y_line,
+            mode='lines',
+            line=dict(color='orange', width=2, dash='dot'),
+            name=f"市場趨勢線（R²={r_value**2:.2f}）",
+            hovertemplate='建坪 %{x:.1f} 坪<br>預估總價 %{y:.0f} 萬<extra></extra>'
+        )
+    # 目標房型紅星
     hover_target = make_hover(target_df)
     fig.add_scatter(
         x=target_df['建坪'], y=target_df['總價'],
