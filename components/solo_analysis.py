@@ -936,14 +936,11 @@ def tab1_module():
         # 篩選出選中的房子
         selected_row = fav_df[fav_df['標題'] == choice].iloc[0]
         
-        # ⭐ 補充：取得完整資料集
+        # ⭐ 取得完整資料集（永遠用完整 CSV，不用 filtered_df）
         all_df = None
         if 'all_properties_df' in st.session_state and not st.session_state.all_properties_df.empty:
             all_df = st.session_state.all_properties_df
-        elif 'filtered_df' in st.session_state and not st.session_state.filtered_df.empty:
-            all_df = st.session_state.filtered_df
         else:
-            # 直接從 CSV 載入，確保不管有沒有搜尋都能分析
             try:
                 all_df = pd.read_csv('./Data/Taichung-city_buy_properties.csv')
                 if '行政區' not in all_df.columns and '地址' in all_df.columns:
@@ -951,7 +948,7 @@ def tab1_module():
                         lambda addr: re.search(r'[市縣](.+?[區鄉鎮市])', str(addr)).group(1)
                         if pd.notna(addr) and re.search(r'[市縣](.+?[區鄉鎮市])', str(addr)) else ""
                     )
-                st.session_state.all_properties_df = all_df  # 快取，下次不用再讀
+                st.session_state.all_properties_df = all_df
             except Exception as e:
                 all_df = None
         
