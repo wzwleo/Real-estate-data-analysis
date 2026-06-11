@@ -678,7 +678,7 @@ def plot_price_scatter(target_row, df, chart_key=None):
             y=y_line,
             mode='lines',
             line=dict(color='orange', width=2, dash='dot'),
-            name=f"市場趨勢線（R²={r_value**2:.2f}）",
+            name="市場趨勢線",
             hovertemplate='建坪 %{x:.1f} 坪<br>預估總價 %{y:.0f} 萬<extra></extra>'
         )
     # 目標房型紅星
