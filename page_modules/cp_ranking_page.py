@@ -173,44 +173,60 @@ def render_cp_ranking_page():
 
         districts_in_result = df_all['行政區'].unique().tolist()
 
-        for district in districts_in_result:
-            df_dist = df_all[df_all['行政區'] == district].copy()
+        for row_start in range(0, len(districts_in_result), 3):
+            row_districts = districts_in_result[row_start:row_start + 3]
+            cols = st.columns(3)
 
-            with st.expander(f"📍 {district}（共 {len(df_dist)} 筆）", expanded=True):
-                for _, row in df_dist.iterrows():
-                    rank = int(row['區內排名'])
-                    medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉"
-                    cp = row.get('CP分數', 0)
-                    color = "#1D9E75" if cp >= 70 else "#EF9F27" if cp >= 50 else "#888780"
+            for col_idx, district in enumerate(row_districts):
+                df_dist = df_all[df_all['行政區'] == district].copy()
 
-                    col1, col2, col3 = st.columns([5, 2, 1])
-                    with col1:
-                        st.markdown(f"**{medal} {row.get('標題', '未知')}**")
-                        st.caption(
-                            f"📍 {row.get('地址', '')} ｜ "
-                            f"格局 {row.get('格局', '')} ｜ "
-                            f"樓層 {row.get('樓層', '')} ｜ "
-                            f"屋齡 {row.get('屋齡', '')} ｜ "
-                            f"建坪 {row.get('建坪', '')} 坪"
-                        )
-                    with col2:
-                        price = row.get('總價(萬)', 0)
-                        st.metric("總價", f"{price} 萬")
-                        area = row.get('建坪', 0)
-                        if pd.notna(area) and float(area) > 0 and pd.notna(price):
-                            unit = round(float(price) / float(area), 1)
-                            st.caption(f"單價 {unit} 萬/坪")
-                    with col3:
-                        st.markdown(
-                            f"<div style='text-align:center'>"
-                            f"<div style='font-size:11px;color:#888'>CP分數</div>"
-                            f"<div style='font-size:26px;font-weight:bold;color:{color}'>{cp}</div>"
-                            f"</div>",
-                            unsafe_allow_html=True
-                        )
+                with cols[col_idx]:
+                    st.markdown(f"""
+                    <div style="
+                        border: 1.5px solid #4CAF50;
+                        border-radius: 12px;
+                        padding: 14px;
+                        background-color: #1a1a1a;
+                        margin-bottom: 8px;
+                        min-height: 280px;
+                    ">
+                        <div style="font-size:16px; font-weight:bold; color:#4CAF50; margin-bottom:10px;">
+                            📍 {district}
+                        </div>
+                    """, unsafe_allow_html=True)
+
+                    for _, row in df_dist.iterrows():
+                        rank = int(row['區內排名'])
+                        medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉"
+                        cp = row.get('CP分數', 0)
+                        color = "#1D9E75" if cp >= 70 else "#EF9F27" if cp >= 50 else "#888780"
+                        price = row.get('總價(萬)', '')
+                        layout = row.get('格局', '')
+                        age = row.get('屋齡', '')
+
+                        st.markdown(f"""
+                        <div style="
+                            border-top: 0.5px solid #2a2a2a;
+                            padding: 8px 0;
+                        ">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-size:13px; color:white; font-weight:500;">
+                                    {medal} {str(row.get('標題', ''))[:14]}
+                                </span>
+                                <span style="font-size:15px; font-weight:bold; color:{color};">
+                                    {cp}分
+                                </span>
+                            </div>
+                            <div style="font-size:11px; color:#888; margin-top:3px;">
+                                💰 {price} 萬 ｜ {layout} ｜ 屋齡 {age}
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+
                         property_id = normalize_property_id(row.get('編號', ''))
                         current_favs = st.session_state.get('favorites', [])
                         is_fav = property_id in current_favs
+
                         if st.button(
                             "✅ 已收藏" if is_fav else "⭐ 收藏",
                             key=f"cp_fav_{district}_{rank}_{property_id}",
@@ -223,4 +239,4 @@ def render_cp_ranking_page():
                                 st.session_state.favorites = new_favs
                                 st.rerun()
 
-                    st.markdown("---")
+                    st.markdown("</div>", unsafe_allow_html=True)
