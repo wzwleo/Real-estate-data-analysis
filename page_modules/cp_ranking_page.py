@@ -185,7 +185,7 @@ def render_cp_ranking_page():
                             st.markdown(f"#### 📍 {district}")
     
                             for _, row in df_dist.iterrows():
-                                rank = int(row['區内排名'])
+                                rank = int(row['區內排名'])
                                 medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉"
                                 cp = row.get('CP分數', 0)
                                 color = "#1D9E75" if cp >= 70 else "#EF9F27" if cp >= 50 else "#888780"
