@@ -10,7 +10,12 @@ def render_sidebar():
         # 重置搜尋頁面
         if 'current_search_page' in st.session_state:
             del st.session_state.current_search_page
-
+            
+    if st.sidebar.button("🏆 地區CP值排行榜", use_container_width=True, key="cp_ranking_button"):
+            st.session_state.current_page = 'cp_ranking'
+            if 'current_search_page' in st.session_state:
+                del st.session_state.current_search_page
+    
     if st.sidebar.button("🔍 搜尋頁面", use_container_width=True, key="search_button"):
         st.session_state.current_page = 'search'
 
