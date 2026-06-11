@@ -283,7 +283,7 @@ def render_ai_chat_search():
                     filtered_df['相似度'] = filtered_df.apply(
                         lambda row: calc_similarity(row, filters), axis=1
                     )
-                    filtered_df = filtered_df[filtered_df['相似度'] >= 80].reset_index(drop=True)
+                    filtered_df = filtered_df[filtered_df['相似度'] >= 70].reset_index(drop=True)
 
                     st.session_state.ai_search_count += 1
                     st.session_state.ai_filtered_df = filtered_df
