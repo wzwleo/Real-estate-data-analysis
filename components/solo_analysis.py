@@ -3079,56 +3079,6 @@ def render_float_chat():
 
 ⚠️ 尚未計算同區排名，如需排名比較建議點擊「📊 計算此區域排名」按鈕。"""
 
-    # ── 預算資訊（有套用才加入）──
-    monthly_income = st.session_state.get('budget_monthly_income', 0)
-    down_payment = st.session_state.get('budget_down_payment', 0)
-    if st.session_state.get('budget_applied') and monthly_income > 0 and down_payment > 0:
-        loan_years = st.session_state.get('budget_years', 30)
-        interest_rate = st.session_state.get('budget_rate', 2.0)
-        monthly_rate = interest_rate / 100 / 12
-        n = loan_years * 12
-        max_monthly_payment = monthly_income * 10000 * 0.3
-        if monthly_rate > 0:
-            max_loan = max_monthly_payment * (1 - (1 + monthly_rate) ** (-n)) / monthly_rate
-        else:
-            max_loan = max_monthly_payment * n
-        max_loan_wan = max_loan / 10000
-        max_total_price = max_loan_wan + down_payment
-        monthly_payment_val = max_loan * monthly_rate / (1 - (1 + monthly_rate) ** (-n)) if monthly_rate > 0 else max_loan / n
-        total_interest_wan = (monthly_payment_val * n - max_loan) / 10000
-        down_ratio = (down_payment / max_total_price * 100) if max_total_price > 0 else 0
-
-        try:
-            house_price = float(
-                st.session_state.get('solo_analysis_result', {}).get('selected_row', {}).get('總價(萬)', 0)
-                or fav_basic_info.get('總價(萬)', 0)
-                or 0
-            )
-            if house_price > 0:
-                budget_status = (
-                    f"在預算範圍內（尚餘 {max_total_price - house_price:.0f} 萬）"
-                    if house_price <= max_total_price
-                    else f"超出預算上限 {house_price - max_total_price:.0f} 萬"
-                )
-            else:
-                budget_status = "無法判斷"
-        except Exception:
-            budget_status = "無法判斷"
-
-        context += f"""
-
-【使用者預算資訊】
-月收入：{monthly_income} 萬
-頭期款：{down_payment} 萬
-貸款年限：{loan_years} 年
-年利率：{interest_rate}%
-建議總價上限：{max_total_price:.0f} 萬
-最高可貸金額：{max_loan_wan:.0f} 萬
-每月還款：{monthly_payment_val/10000:.2f} 萬
-總利息：{total_interest_wan:.0f} 萬
-頭期款佔比：{down_ratio:.1f}%
-此房預算狀況：{budget_status}"""
-
     # ── 其餘設定 ──
     has_context_str = '✅ 已載入分析資料' if 'solo_analysis_result' in st.session_state else '📋 基本資訊模式'
 
