@@ -201,10 +201,10 @@ def render_cp_ranking_page():
                                 with c1:
                                     st.markdown(
                                         f"<div style='margin-bottom:4px'>"
-                                        f"<span style='font-size:15px;font-weight:600;color:white'>{medal} {title}</span>"
-                                        f"<span style='font-size:15px;font-weight:bold;color:{color};margin-left:10px'>{cp} 分</span>"
+                                        f"<span style='font-size:20px;font-weight:600;color:white'>{medal} {title}</span>"
+                                        f"<span style='font-size:20px;font-weight:bold;color:{color};margin-left:10px'>{cp} 分</span>"
                                         f"</div>"
-                                        f"<div style='font-size:13px;color:#aaa;margin-bottom:8px'>"
+                                        f"<div style='font-size:15px;color:#aaa;margin-bottom:8px'>"
                                         f"💰 {price} 萬 ｜ {layout} ｜ 屋齡 {age}"
                                         f"</div>",
                                         unsafe_allow_html=True
