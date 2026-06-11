@@ -227,7 +227,8 @@ def render_ai_chat_search():
                         fmin = filters.get('floor_min', 0)
                         fmax = filters.get('floor_max', 0)
                         if fmin > 0 or fmax > 0:
-                            floor = row.get('實際樓層', 0) or 0
+                            raw_floor = row.get('實際樓層', 0)
+                            floor = 0 if (raw_floor is None or (isinstance(raw_floor, float) and pd.isna(raw_floor))) else int(raw_floor)
                             if fmin > 0 and fmax > 0:
                                 if fmin <= floor <= fmax:
                                     scores.append(100)
