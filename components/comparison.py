@@ -2008,7 +2008,19 @@ class ComparisonAnalyzer:
             if normal_df.empty:
                 st.info("\U0001f4ed \u7121\u4e00\u822c\u8a2d\u65bd\u8cc7\u6599")
             else:
-                self._render_facility_cards(normal_df, nuisance=False)
+                normal_types = sorted(normal_df["\u4e3b\u8981\u985e\u5225"].dropna().unique().tolist()) if "\u4e3b\u8981\u985e\u5225" in normal_df.columns else []
+                selected_normal_types = st.multiselect(
+                    "\u7be9\u9078\u4e00\u822c\u8a2d\u65bd\u985e\u578b",
+                    options=normal_types,
+                    default=normal_types,
+                    key="normal_facility_type_filter",
+                )
+                normal_display_df = normal_df[normal_df["\u4e3b\u8981\u985e\u5225"].isin(selected_normal_types)].copy() if normal_types else normal_df.copy()
+                st.caption(f"\u76ee\u524d\u986f\u793a {len(normal_display_df)} / \u539f\u59cb {len(normal_df)} \u7b46\u8cc7\u6599")
+                if normal_display_df.empty:
+                    st.info("\u76ee\u524d\u7be9\u9078\u689d\u4ef6\u4e0b\u6c92\u6709\u8cc7\u6599")
+                else:
+                    self._render_facility_cards(normal_display_df, nuisance=False)
         
         if include_nuisance:
             st.markdown("---")
@@ -2016,7 +2028,20 @@ class ComparisonAnalyzer:
                 if nuisance_df.empty:
                     st.info("\U0001f4ed \u7121\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599")
                 else:
-                    self._render_facility_cards(nuisance_df, nuisance=True)
+                    type_col = "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b" if "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b" in nuisance_df.columns else "\u8a2d\u65bd\u5b50\u985e\u5225"
+                    nuisance_types = sorted(nuisance_df[type_col].dropna().unique().tolist()) if type_col in nuisance_df.columns else []
+                    selected_nuisance_types = st.multiselect(
+                        "\u7be9\u9078\u5acc\u60e1\u8a2d\u65bd\u985e\u578b",
+                        options=nuisance_types,
+                        default=nuisance_types,
+                        key="nuisance_facility_type_filter",
+                    )
+                    nuisance_display_df = nuisance_df[nuisance_df[type_col].isin(selected_nuisance_types)].copy() if nuisance_types else nuisance_df.copy()
+                    st.caption(f"\u76ee\u524d\u986f\u793a {len(nuisance_display_df)} / \u539f\u59cb {len(nuisance_df)} \u7b46\u8cc7\u6599")
+                    if nuisance_display_df.empty:
+                        st.info("\u76ee\u524d\u7be9\u9078\u689d\u4ef6\u4e0b\u6c92\u6709\u8cc7\u6599")
+                    else:
+                        self._render_facility_cards(nuisance_display_df, nuisance=True)
     
     def _pdf_clean_text(self, value):
         """Normalize text for reportlab paragraphs."""
