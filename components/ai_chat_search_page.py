@@ -1,3 +1,10 @@
+import streamlit as st
+import google.generativeai as genai
+import json
+import pandas as pd
+import re
+from components.favorites import FavoritesManager, normalize_property_id
+
 def render_ai_chat_search():
     st.header("🤖 AI 房市顧問")
     st.write("你可以輸入自然語言查詢條件，AI 會幫你搜尋適合的物件。")
