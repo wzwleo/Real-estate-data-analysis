@@ -9,6 +9,7 @@ import sys
 import os
 import requests
 import math
+import hashlib
 from streamlit.components.v1 import html
 from streamlit_echarts import st_echarts
 from collections import Counter
@@ -65,7 +66,7 @@ except ImportError as e:
 
 try:
     from components.real_price import (
-        update_real_price_cache_if_needed,
+        load_cached_real_price_data,
         filter_nearby_transactions,
         calculate_price_metrics,
         render_real_price_analysis,
@@ -89,7 +90,7 @@ except Exception as real_price_import_error:
         spec = importlib.util.spec_from_file_location("real_price", real_price_path)
         real_price_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(real_price_module)
-        update_real_price_cache_if_needed = real_price_module.update_real_price_cache_if_needed
+        load_cached_real_price_data = real_price_module.load_cached_real_price_data
         filter_nearby_transactions = real_price_module.filter_nearby_transactions
         calculate_price_metrics = real_price_module.calculate_price_metrics
         render_real_price_analysis = real_price_module.render_real_price_analysis
@@ -1017,7 +1018,7 @@ class ComparisonAnalyzer:
                         st.write(f"     找到 {len(all_nuisances)} 處嫌惡設施")
                 
                 # 步驟3：實價登錄價格分析
-                st.write("💰 步驟 3/5：更新實價登錄快取並分析價格...")
+                st.write("💰 步驟 3/5：讀取手動實價登錄 CSV 並分析價格...")
                 real_price_results = self._run_real_price_analysis(houses_data)
                 
                 # 步驟4：計算統計
@@ -1523,7 +1524,10 @@ class ComparisonAnalyzer:
                 results[house_name] = {"error": "無法由地址判斷縣市，資料不足，建議放寬條件"}
                 continue
             try:
-                df = update_real_price_cache_if_needed(city, max_age_days=10)
+                df = load_cached_real_price_data(city)
+                if df.empty:
+                    results[house_name] = {"city": city, "target": target, "error": "尚未放入該縣市的實價登錄 CSV，暫時無法進行價格分析。"}
+                    continue
                 transactions = filter_nearby_transactions(df, target)
                 metrics = calculate_price_metrics(transactions, target)
                 results[house_name] = {
@@ -1532,7 +1536,7 @@ class ComparisonAnalyzer:
                     "metrics": metrics,
                 }
             except Exception as e:
-                msg = f"實價登錄資料更新或分析失敗：{e}"
+                msg = f"實價登錄資料讀取或分析失敗：{e}"
                 st.warning(f"{house_name}：{msg}")
                 results[house_name] = {"city": city, "target": target, "error": msg}
         return results
@@ -1552,7 +1556,7 @@ class ComparisonAnalyzer:
                     continue
                 city = result.get("city", "")
                 if city:
-                    st.caption(f"資料縣市：{city}，快取超過 10 天才自動更新。")
+                    st.caption(f"資料縣市：{city}，資料來源為專案 data/real_price/ 中的手動 CSV。")
                 render_real_price_analysis(result.get("metrics", {}))
 
     def _format_real_price_for_prompt(self, res):
@@ -1579,11 +1583,12 @@ class ComparisonAnalyzer:
             return out
         nuisance_mask = out["主要類別"] == "嫌惡設施"
         for idx, row in out[nuisance_mask].iterrows():
+            house_name = str(row.get("房屋", "")).strip()
             place_id = str(row.get("place_id", "")).strip()
             if place_id:
-                out.at[idx, "exclude_key"] = place_id
+                out.at[idx, "exclude_key"] = f"{house_name}|{place_id}"
             else:
-                key_parts = [row.get("房屋", ""), row.get("設施子類別", ""), row.get("設施名稱", ""), row.get("距離(公尺)", "")]
+                key_parts = [house_name, row.get("設施子類別", ""), row.get("設施名稱", ""), row.get("距離(公尺)", "")]
                 out.at[idx, "exclude_key"] = "|".join(str(v) for v in key_parts)
         return out
 
@@ -1604,31 +1609,14 @@ class ComparisonAnalyzer:
         return rebuilt
 
     def _render_nuisance_exclusion_controls(self, nuisance_df, analysis_key):
-        """Render nuisance exclusion controls and return selected exclusions."""
+        """Render nuisance exclusion controls and return selected relevance exclusions."""
         relevance_key = f"excluded_relevance_{analysis_key}"
         keys_key = f"excluded_keys_{analysis_key}"
-        labels_key = f"excluded_labels_{analysis_key}"
         allowed_relevance = ["高度相關", "部分相關", "低度相關", "無關", "未經AI判斷"]
         if relevance_key not in st.session_state:
             st.session_state[relevance_key] = []
         if keys_key not in st.session_state:
             st.session_state[keys_key] = []
-        if labels_key not in st.session_state:
-            st.session_state[labels_key] = []
-        if nuisance_df is None or nuisance_df.empty:
-            return st.session_state[relevance_key], st.session_state[keys_key]
-
-        nuisance_df = self._ensure_facility_exclude_keys(nuisance_df)
-        type_col = "嫌惡設施類型" if "嫌惡設施類型" in nuisance_df.columns else "設施子類別"
-        label_to_key = {}
-        for _, row in nuisance_df.iterrows():
-            base_label = f"{row.get('房屋', '')} | {row.get(type_col, '')} | {row.get('設施名稱', '')} | {row.get('距離(公尺)', '')}m | {row.get('AI相關性', '')}"
-            label = base_label
-            duplicate_no = 2
-            while label in label_to_key:
-                label = f"{base_label} #{duplicate_no}"
-                duplicate_no += 1
-            label_to_key[label] = row.get("exclude_key", "")
 
         excluded_relevance = st.multiselect(
             "排除 AI 相關性",
@@ -1637,16 +1625,7 @@ class ComparisonAnalyzer:
             help="選擇後，符合這些 AI 相關性的嫌惡設施將不納入後續分析",
             key=relevance_key,
         )
-        selected_labels = [label for label, key in label_to_key.items() if key in set(st.session_state[keys_key])]
-        excluded_labels = st.multiselect(
-            "單筆排除嫌惡設施",
-            options=list(label_to_key.keys()),
-            default=selected_labels,
-            key=labels_key,
-        )
-        excluded_keys = [label_to_key[label] for label in excluded_labels]
-        st.session_state[keys_key] = excluded_keys
-        return excluded_relevance, excluded_keys
+        return excluded_relevance, st.session_state[keys_key]
 
     def _get_nuisance_exclusion_info(self, res):
         """Return nuisance exclusion counts for the current analysis."""
@@ -1688,45 +1667,24 @@ class ComparisonAnalyzer:
         effective_df = self._get_effective_facilities_df(res)
         effective_res = res.copy()
         effective_res["facilities_table"] = effective_df
+        effective_res["original_facilities_table"] = self._ensure_facility_exclude_keys(res.get("facilities_table", pd.DataFrame()))
         effective_res["places_data"] = self._rebuild_places_data_from_df(effective_df, res.get("houses_data", {}))
         effective_res["exclusion_info"] = self._get_nuisance_exclusion_info(res)
+        analysis_key = self._get_analysis_key(res)
+        exclusion_signature = json.dumps({
+            "relevance": sorted(st.session_state.get(f"excluded_relevance_{analysis_key}", [])),
+            "keys": sorted(st.session_state.get(f"excluded_keys_{analysis_key}", [])),
+        }, ensure_ascii=False)
+        signature_key = f"exclusion_signature_{analysis_key}"
+        if st.session_state.get(signature_key) != exclusion_signature:
+            st.session_state[signature_key] = exclusion_signature
+            for key in ["custom_prompt", "gemini_result", "used_prompt"]:
+                if key in st.session_state:
+                    del st.session_state[key]
         if res.get("include_nuisance", False) and not effective_df.empty and "主要類別" in effective_df.columns:
             nuisance_df = effective_df[effective_df["主要類別"] == "嫌惡設施"]
             effective_res["nuisance_summary"] = nuisance_df.groupby("房屋").size().to_dict() if not nuisance_df.empty else {}
         return effective_res
-
-    def _render_nuisance_exclusion_summary(self, res):
-        """Render exclusion controls before downstream analysis sections."""
-        if not res.get("include_nuisance", False):
-            return
-        df = res.get("facilities_table", pd.DataFrame())
-        if df is None or df.empty or "主要類別" not in df.columns:
-            return
-        df = self._ensure_facility_exclude_keys(df)
-        nuisance_df = df[df["主要類別"] == "嫌惡設施"].copy()
-        if nuisance_df.empty:
-            return
-        analysis_key = self._get_analysis_key(res)
-        st.subheader("⚠️ 嫌惡設施手動排除")
-        before_rel = list(st.session_state.get(f"excluded_relevance_{analysis_key}", []))
-        before_keys = list(st.session_state.get(f"excluded_keys_{analysis_key}", []))
-        excluded_relevance, excluded_keys = self._render_nuisance_exclusion_controls(nuisance_df, analysis_key)
-        if before_rel != list(excluded_relevance) or before_keys != list(excluded_keys):
-            for key in ["custom_prompt", "gemini_result", "used_prompt"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-        info = self._get_nuisance_exclusion_info(res)
-        st.caption(f"原始嫌惡設施：{info['original_count']} 筆｜目前排除：{info['excluded_count']} 筆｜目前納入分析：{info['included_count']} 筆")
-        if info["excluded_count"] > 0:
-            st.warning(f"已排除 {info['excluded_count']} 筆嫌惡設施，這些資料不會納入統計、地圖與 AI 分析。")
-        if st.button("清除所有排除條件", key=f"clear_exclusions_{analysis_key}"):
-            st.session_state[f"excluded_relevance_{analysis_key}"] = []
-            st.session_state[f"excluded_keys_{analysis_key}"] = []
-            st.session_state[f"excluded_labels_{analysis_key}"] = []
-            for key in ["custom_prompt", "gemini_result", "used_prompt"]:
-                if key in st.session_state:
-                    del st.session_state[key]
-            st.rerun()
 
     def _display_analysis_results(self, res):
         """顯示分析結果"""
@@ -1774,7 +1732,6 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
         
-        self._render_nuisance_exclusion_summary(res)
         effective_res = self._build_effective_res(res)
         
         st.markdown("---")
@@ -2121,101 +2078,145 @@ class ComparisonAnalyzer:
             return "#ffc107", "\u4e2d\u7b49"
         return "#dc3545", "\u8f03\u9060"
     
-    def _render_facility_cards(self, df, nuisance=False):
+    def _render_facility_cards(self, df, nuisance=False, analysis_key=None):
         """Render facility rows with distance badges and Google Maps links."""
-        for house_name in df['\u623f\u5c4b'].unique():
-            house_df = df[df['\u623f\u5c4b'] == house_name].sort_values('\u8ddd\u96e2(\u516c\u5c3a)')
-            label = "\u5acc\u60e1\u8a2d\u65bd" if nuisance else "\u4e00\u822c\u8a2d\u65bd"
-            st.markdown(f"**\U0001f3e0 {house_name}** - \u5171 {len(house_df)} \u500b{label}")
+        for house_name in df['房屋'].unique():
+            house_df = df[df['房屋'] == house_name].sort_values('距離(公尺)')
+            label = "嫌惡設施" if nuisance else "一般設施"
+            st.markdown(f"**🏠 {house_name}** - 共 {len(house_df)} 個{label}")
             
             for idx, (_, row) in enumerate(house_df.iterrows(), start=1):
                 maps_url = self._build_maps_url(row)
-                dist = row['\u8ddd\u96e2(\u516c\u5c3a)']
+                dist = row['距離(公尺)']
                 dist_color, dist_badge = self._distance_badge(dist, nuisance=nuisance)
-                type_color = "#dc3545" if nuisance else CATEGORY_COLORS.get(row.get('\u4e3b\u8981\u985e\u5225', ''), "#666")
+                type_color = "#dc3545" if nuisance else CATEGORY_COLORS.get(row.get('主要類別', ''), "#666")
                 
-                col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 1.5])
+                if nuisance:
+                    col1, col2, col3, col4, col5, col6 = st.columns([2.8, 2.0, 1.5, 1.4, 1.2, 1.4])
+                else:
+                    col1, col2, col3, col4, col5 = st.columns([3, 2, 2, 2, 1.5])
                 with col1:
-                    st.markdown(f"**{idx}. {row['\u8a2d\u65bd\u540d\u7a31']}**")
+                    st.markdown(f"**{idx}. {row['設施名稱']}**")
                 with col2:
-                    st.markdown(f"\u623f\u5c4b\u540d\u7a31\uff1a{house_name}")
+                    st.markdown(f"房屋名稱：{house_name}")
                 with col3:
                     st.markdown(
-                        f'<span style="background-color:{type_color}20; color:{type_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["\u8a2d\u65bd\u5b50\u985e\u5225"]}</span>',
+                        f'<span style="background-color:{type_color}20; color:{type_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{row["設施子類別"]}</span>',
                         unsafe_allow_html=True,
                     )
                 with col4:
+                    if nuisance:
+                        distance_text = f"{dist}公尺"
+                    else:
+                        distance_text = f"{dist}公尺 ({dist_badge})"
                     st.markdown(
-                        f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{dist}\u516c\u5c3a ({dist_badge})</span>',
+                        f'<span style="background-color:{dist_color}20; color:{dist_color}; padding:4px 8px; border-radius:8px; font-size:12px; font-weight:bold;">{distance_text}</span>',
                         unsafe_allow_html=True,
                     )
-                with col5:
-                    st.link_button("Google\u5730\u5716", maps_url, use_container_width=True)
                 if nuisance:
-                    relevance = row.get("AI\u76f8\u95dc\u6027", "")
-                    purpose = row.get("\u8a2d\u65bd\u7528\u9014", "")
-                    explanation = row.get("AI\u8aaa\u660e", "")
+                    with col5:
+                        exclude_key = str(row.get("exclude_key", "")).strip()
+                        if exclude_key and analysis_key:
+                            keys_key = f"excluded_keys_{analysis_key}"
+                            if keys_key not in st.session_state:
+                                st.session_state[keys_key] = []
+                            key_hash = hashlib.md5(exclude_key.encode("utf-8")).hexdigest()[:12]
+                            if st.button("❌ 排除此設施", key=f"exclude_nuisance_{analysis_key}_{key_hash}", use_container_width=True):
+                                excluded_keys = list(st.session_state.get(keys_key, []))
+                                if exclude_key not in excluded_keys:
+                                    excluded_keys.append(exclude_key)
+                                    st.session_state[keys_key] = excluded_keys
+                                st.rerun()
+                    with col6:
+                        st.link_button("Google地圖", maps_url, use_container_width=True)
+                else:
+                    with col5:
+                        st.link_button("Google地圖", maps_url, use_container_width=True)
+                if nuisance:
+                    relevance = row.get("AI相關性", "")
+                    purpose = row.get("設施用途", "")
+                    explanation = row.get("AI說明", "")
                     if relevance:
-                        st.caption(f"AI\u76f8\u95dc\u6027\uff1a{relevance}")
+                        st.caption(f"AI相關性：{relevance}")
                     if purpose:
-                        st.caption(f"\u8a2d\u65bd\u7528\u9014\uff1a{purpose}")
+                        st.caption(f"設施用途：{purpose}")
                     if explanation:
-                        st.caption(f"AI\u8aaa\u660e\uff1a{explanation}")
+                        st.caption(f"AI說明：{explanation}")
                 st.divider()
     
     def _display_facility_summary_tables(self, res, include_nuisance=False):
         """Display unified facility sections below the map."""
         st.markdown("---")
         df = res.get("facilities_table", pd.DataFrame())
+        original_all_df = res.get("original_facilities_table", pd.DataFrame())
         if df.empty:
-            st.info("\U0001f4ed \u7121\u8a2d\u65bd\u8cc7\u6599")
-            return
+            if not include_nuisance or original_all_df is None or original_all_df.empty:
+                st.info("📭 無設施資料")
+                return
+            df = pd.DataFrame(columns=original_all_df.columns)
         
-        if include_nuisance and '\u4e3b\u8981\u985e\u5225' in df.columns:
-            normal_df = df[df['\u4e3b\u8981\u985e\u5225'] != "\u5acc\u60e1\u8a2d\u65bd"].copy()
-            nuisance_df = df[df['\u4e3b\u8981\u985e\u5225'] == "\u5acc\u60e1\u8a2d\u65bd"].copy()
+        if include_nuisance and '主要類別' in df.columns:
+            normal_df = df[df['主要類別'] != "嫌惡設施"].copy()
+            nuisance_df = df[df['主要類別'] == "嫌惡設施"].copy()
         else:
             normal_df = df.copy()
             nuisance_df = pd.DataFrame()
         
-        with st.expander("\u2705 \u4e00\u822c\u8a2d\u65bd\u7e3d\u8868", expanded=False):
+        with st.expander("✅ 一般設施總表", expanded=False):
             if normal_df.empty:
-                st.info("\U0001f4ed \u7121\u4e00\u822c\u8a2d\u65bd\u8cc7\u6599")
+                st.info("📭 無一般設施資料")
             else:
-                normal_types = sorted(normal_df["\u4e3b\u8981\u985e\u5225"].dropna().unique().tolist()) if "\u4e3b\u8981\u985e\u5225" in normal_df.columns else []
+                normal_types = sorted(normal_df["主要類別"].dropna().unique().tolist()) if "主要類別" in normal_df.columns else []
                 selected_normal_types = st.multiselect(
-                    "\u7be9\u9078\u4e00\u822c\u8a2d\u65bd\u985e\u578b",
+                    "篩選一般設施類型",
                     options=normal_types,
                     default=normal_types,
                     key="normal_facility_type_filter",
                 )
-                normal_display_df = normal_df[normal_df["\u4e3b\u8981\u985e\u5225"].isin(selected_normal_types)].copy() if normal_types else normal_df.copy()
-                st.caption(f"\u76ee\u524d\u986f\u793a {len(normal_display_df)} / \u539f\u59cb {len(normal_df)} \u7b46\u8cc7\u6599")
+                normal_display_df = normal_df[normal_df["主要類別"].isin(selected_normal_types)].copy() if normal_types else normal_df.copy()
+                st.caption(f"目前顯示 {len(normal_display_df)} / 原始 {len(normal_df)} 筆資料")
                 if normal_display_df.empty:
-                    st.info("\u76ee\u524d\u7be9\u9078\u689d\u4ef6\u4e0b\u6c92\u6709\u8cc7\u6599")
+                    st.info("目前篩選條件下沒有資料")
                 else:
                     self._render_facility_cards(normal_display_df, nuisance=False)
         
         if include_nuisance:
             st.markdown("---")
-            with st.expander("\u26a0\ufe0f \u5acc\u60e1\u8a2d\u65bd\u660e\u7d30\u7e3d\u8868", expanded=True):
-                if nuisance_df.empty:
-                    st.info("\U0001f4ed \u7121\u5acc\u60e1\u8a2d\u65bd\u8cc7\u6599")
+            with st.expander("⚠️ 嫌惡設施明細總表", expanded=True):
+                original_df = res.get("original_facilities_table", df)
+                if original_df is None or original_df.empty or "主要類別" not in original_df.columns:
+                    original_nuisance_df = nuisance_df.copy()
                 else:
-                    type_col = "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b" if "\u5acc\u60e1\u8a2d\u65bd\u985e\u578b" in nuisance_df.columns else "\u8a2d\u65bd\u5b50\u985e\u5225"
-                    nuisance_types = sorted(nuisance_df[type_col].dropna().unique().tolist()) if type_col in nuisance_df.columns else []
-                    selected_nuisance_types = st.multiselect(
-                        "\u7be9\u9078\u5acc\u60e1\u8a2d\u65bd\u985e\u578b",
-                        options=nuisance_types,
-                        default=nuisance_types,
-                        key="nuisance_facility_type_filter",
-                    )
-                    nuisance_display_df = nuisance_df[nuisance_df[type_col].isin(selected_nuisance_types)].copy() if nuisance_types else nuisance_df.copy()
-                    st.caption(f"\u76ee\u524d\u986f\u793a {len(nuisance_display_df)} / \u539f\u59cb {len(nuisance_df)} \u7b46\u8cc7\u6599")
-                    if nuisance_display_df.empty:
-                        st.info("\u76ee\u524d\u7be9\u9078\u689d\u4ef6\u4e0b\u6c92\u6709\u8cc7\u6599")
-                    else:
-                        self._render_facility_cards(nuisance_display_df, nuisance=True)
+                    original_df = self._ensure_facility_exclude_keys(original_df)
+                    original_nuisance_df = original_df[original_df["主要類別"] == "嫌惡設施"].copy()
+                analysis_key = self._get_analysis_key(res)
+                self._render_nuisance_exclusion_controls(original_nuisance_df, analysis_key)
+                
+                type_col = "嫌惡設施類型" if "嫌惡設施類型" in nuisance_df.columns else "設施子類別"
+                nuisance_types = sorted(nuisance_df[type_col].dropna().unique().tolist()) if not nuisance_df.empty and type_col in nuisance_df.columns else []
+                selected_nuisance_types = st.multiselect(
+                    "篩選嫌惡設施類型",
+                    options=nuisance_types,
+                    default=nuisance_types,
+                    key="nuisance_facility_type_filter",
+                )
+                nuisance_display_df = nuisance_df[nuisance_df[type_col].isin(selected_nuisance_types)].copy() if nuisance_types else nuisance_df.copy()
+                st.caption(f"目前顯示 {len(nuisance_display_df)} / 原始 {len(nuisance_df)} 筆資料")
+                info = res.get("exclusion_info") or {"original_count": len(original_nuisance_df), "excluded_count": max(len(original_nuisance_df) - len(nuisance_df), 0), "included_count": len(nuisance_df)}
+                st.caption(f"原始嫌惡設施：{info['original_count']} 筆｜已排除：{info['excluded_count']} 筆｜目前納入分析：{info['included_count']} 筆")
+                if info.get("excluded_count", 0) > 0:
+                    st.warning(f"已排除 {info['excluded_count']} 筆嫌惡設施，這些資料不會納入統計、地圖與 AI 分析。")
+                if st.button("🔄 清除所有排除條件", key=f"clear_exclusions_{analysis_key}"):
+                    st.session_state[f"excluded_relevance_{analysis_key}"] = []
+                    st.session_state[f"excluded_keys_{analysis_key}"] = []
+                    for key in ["custom_prompt", "gemini_result", "used_prompt"]:
+                        if key in st.session_state:
+                            del st.session_state[key]
+                    st.rerun()
+                if nuisance_display_df.empty:
+                    st.info("目前篩選條件下沒有資料")
+                else:
+                    self._render_facility_cards(nuisance_display_df, nuisance=True, analysis_key=analysis_key)
     
     def _pdf_clean_text(self, value):
         """Normalize text for reportlab paragraphs."""
