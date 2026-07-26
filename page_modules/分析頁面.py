@@ -3,8 +3,6 @@ import json
 import pandas as pd
 import os
 from streamlit_echarts import st_echarts
-from modules.updater import check_missing_periods
-from modules.real_estate_merger_pro import main as process_season
 
 st.set_page_config(page_title="台灣不動產分析", layout="wide")
 
@@ -21,80 +19,9 @@ init_state({
 })
 
 # -----------------------------
-# Sidebar - 資料更新
+# Sidebar - 篩選條件
 # -----------------------------
 with st.sidebar:
-    st.markdown("## 📥 資料更新")
-
-    if 'updating' not in st.session_state:
-        st.session_state.updating = False
-    if 'update_complete' not in st.session_state:
-        st.session_state.update_complete = False
-    if 'update_result' not in st.session_state:
-        st.session_state.update_result = None
-
-    if not st.session_state.updating and not st.session_state.update_complete:
-        if st.button("一鍵更新至當前期數"):
-            st.session_state.updating = True
-            st.rerun()
-
-    if st.session_state.updating:
-        with st.spinner("正在檢查和更新資料..."):
-            try:
-                local, online, missing = check_missing_periods()
-                st.info(f"本地共有 {len(local)} 期資料")
-                st.info(f"內政部目前共提供 {len(online)} 期資料")
-
-                if missing:
-                    st.warning(f"缺少以下期數：{', '.join(missing)}")
-
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
-
-                    success_count = 0
-                    failed_periods = []
-
-                    for i, period in enumerate(missing):
-                        status_text.text(f"正在處理期數：{period} ({i+1}/{len(missing)})")
-                        progress_bar.progress((i) / len(missing))
-
-                        try:
-                            process_season(period)
-                            success_count += 1
-                            st.success(f"完成期數 {period}")
-                        except Exception:
-                            failed_periods.append(period)
-                            st.error(f"期數 {period} 更新失敗")
-
-                    progress_bar.progress(1.0)
-                    status_text.text("更新完成！")
-
-                    if failed_periods:
-                        st.session_state.update_result = f"部分成功：成功 {success_count} 期，失敗 {len(failed_periods)} 期"
-                    else:
-                        st.session_state.update_result = f"全部更新完成！成功 {success_count} 期資料"
-
-                else:
-                    st.session_state.update_result = "資料已經是最新！"
-
-                st.session_state.updating = False
-                st.session_state.update_complete = True
-                st.rerun()
-
-            except Exception as e:
-                st.error(f"更新過程發生錯誤：{e}")
-                st.session_state.updating = False
-                st.rerun()
-
-    if st.session_state.update_complete and st.session_state.update_result:
-        st.success(st.session_state.update_result)
-        if st.button("重新檢查更新"):
-            st.session_state.updating = False
-            st.session_state.update_complete = False
-            st.session_state.update_result = None
-            st.rerun()
-
-    st.markdown("---")
     st.markdown("## 📌 縣市選擇")
 
 # -----------------------------
