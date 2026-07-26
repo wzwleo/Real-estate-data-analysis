@@ -549,8 +549,9 @@ class ComparisonAnalyzer:
         txt_lines.append(f"分析模式：{mode}")
         txt_lines.append(f"搜尋半徑：{radius} 公尺")
         if include_nuisance:
-            nuisance_summary = analysis.get('nuisance_summary', {}) or {}
-            txt_lines.append(f"嫌惡設施數量：{nuisance_summary.get(name, 0)} 處")
+            df_for_count = analysis.get('facilities_table', pd.DataFrame())
+            nuisance_count = len(df_for_count[df_for_count['主要類別'] == '嫌惡設施']) if not df_for_count.empty and '主要類別' in df_for_count.columns else 0
+            txt_lines.append(f"嫌惡設施數量：{nuisance_count} 處")
         txt_lines.append("")
         
         houses_data = analysis.get('houses_data', {})
@@ -631,7 +632,7 @@ class ComparisonAnalyzer:
                         with col2:
                             if st.button("📥", key=f"download_{name}", help="下載此分析"):
                                 with st.spinner("生成報告中..."):
-                                    zip_data = self._generate_single_analysis_zip(name, analysis)
+                                    zip_data = self._generate_single_analysis_zip(name, self._build_effective_res(analysis))
                                     if zip_data:
                                         b64 = base64.b64encode(zip_data).decode()
                                         safe_name = re.sub(r'[\\/*?:"<>|]', "", name)[:30]
@@ -1051,6 +1052,7 @@ class ComparisonAnalyzer:
                 else:
                     analysis_name = f"{s.get('profile', '未知')}_{s['mode']}_{len(houses_data)}間"
                 
+                analysis_result["analysis_key"] = analysis_name
                 st.session_state.saved_analyses[analysis_name] = analysis_result
                 st.session_state.current_analysis_name = analysis_name
                 
@@ -1559,6 +1561,173 @@ class ComparisonAnalyzer:
             return f"\n【實價登錄價格分析】\n實價登錄模組無法載入：{REAL_PRICE_IMPORT_ERROR}\n"
         return format_real_price_metrics_for_prompt(res.get("real_price_results", {}) or {})
 
+    def _get_analysis_key(self, res):
+        """Return a stable key for per-analysis UI state."""
+        for name, analysis in st.session_state.get("saved_analyses", {}).items():
+            if analysis is res:
+                return name
+        return res.get("analysis_key") or st.session_state.get("current_analysis_name") or res.get("timestamp", "current_analysis")
+
+    def _ensure_facility_exclude_keys(self, df):
+        """Add exclude_key for nuisance rows without changing source data."""
+        if df is None or df.empty:
+            return pd.DataFrame()
+        out = df.copy()
+        if "exclude_key" not in out.columns:
+            out["exclude_key"] = ""
+        if "主要類別" not in out.columns:
+            return out
+        nuisance_mask = out["主要類別"] == "嫌惡設施"
+        for idx, row in out[nuisance_mask].iterrows():
+            place_id = str(row.get("place_id", "")).strip()
+            if place_id:
+                out.at[idx, "exclude_key"] = place_id
+            else:
+                key_parts = [row.get("房屋", ""), row.get("設施子類別", ""), row.get("設施名稱", ""), row.get("距離(公尺)", "")]
+                out.at[idx, "exclude_key"] = "|".join(str(v) for v in key_parts)
+        return out
+
+    def _rebuild_places_data_from_df(self, effective_df, houses_data):
+        """Rebuild map-friendly places_data from effective facilities table."""
+        rebuilt = {name: [] for name in houses_data.keys()}
+        if effective_df is None or effective_df.empty:
+            return rebuilt
+        for _, row in effective_df.iterrows():
+            house_name = row.get("房屋", "")
+            if house_name not in rebuilt:
+                rebuilt[house_name] = []
+            rebuilt[house_name].append((
+                row.get("主要類別", ""), row.get("設施子類別", ""), row.get("設施名稱", ""),
+                row.get("緯度", ""), row.get("經度", ""), row.get("距離(公尺)", 0), row.get("place_id", ""),
+                row.get("AI相關性", ""), row.get("設施用途", ""), row.get("AI說明", ""),
+            ))
+        return rebuilt
+
+    def _render_nuisance_exclusion_controls(self, nuisance_df, analysis_key):
+        """Render nuisance exclusion controls and return selected exclusions."""
+        relevance_key = f"excluded_relevance_{analysis_key}"
+        keys_key = f"excluded_keys_{analysis_key}"
+        labels_key = f"excluded_labels_{analysis_key}"
+        allowed_relevance = ["高度相關", "部分相關", "低度相關", "無關", "未經AI判斷"]
+        if relevance_key not in st.session_state:
+            st.session_state[relevance_key] = []
+        if keys_key not in st.session_state:
+            st.session_state[keys_key] = []
+        if labels_key not in st.session_state:
+            st.session_state[labels_key] = []
+        if nuisance_df is None or nuisance_df.empty:
+            return st.session_state[relevance_key], st.session_state[keys_key]
+
+        nuisance_df = self._ensure_facility_exclude_keys(nuisance_df)
+        type_col = "嫌惡設施類型" if "嫌惡設施類型" in nuisance_df.columns else "設施子類別"
+        label_to_key = {}
+        for _, row in nuisance_df.iterrows():
+            base_label = f"{row.get('房屋', '')} | {row.get(type_col, '')} | {row.get('設施名稱', '')} | {row.get('距離(公尺)', '')}m | {row.get('AI相關性', '')}"
+            label = base_label
+            duplicate_no = 2
+            while label in label_to_key:
+                label = f"{base_label} #{duplicate_no}"
+                duplicate_no += 1
+            label_to_key[label] = row.get("exclude_key", "")
+
+        excluded_relevance = st.multiselect(
+            "排除 AI 相關性",
+            options=allowed_relevance,
+            default=[v for v in st.session_state[relevance_key] if v in allowed_relevance],
+            help="選擇後，符合這些 AI 相關性的嫌惡設施將不納入後續分析",
+            key=relevance_key,
+        )
+        selected_labels = [label for label, key in label_to_key.items() if key in set(st.session_state[keys_key])]
+        excluded_labels = st.multiselect(
+            "單筆排除嫌惡設施",
+            options=list(label_to_key.keys()),
+            default=selected_labels,
+            key=labels_key,
+        )
+        excluded_keys = [label_to_key[label] for label in excluded_labels]
+        st.session_state[keys_key] = excluded_keys
+        return excluded_relevance, excluded_keys
+
+    def _get_nuisance_exclusion_info(self, res):
+        """Return nuisance exclusion counts for the current analysis."""
+        df = res.get("facilities_table", pd.DataFrame())
+        if df is None or df.empty or "主要類別" not in df.columns:
+            return {"original_count": 0, "excluded_count": 0, "included_count": 0}
+        df = self._ensure_facility_exclude_keys(df)
+        nuisance_df = df[df["主要類別"] == "嫌惡設施"].copy()
+        if nuisance_df.empty:
+            return {"original_count": 0, "excluded_count": 0, "included_count": 0}
+        analysis_key = self._get_analysis_key(res)
+        excluded_relevance = st.session_state.get(f"excluded_relevance_{analysis_key}", [])
+        excluded_keys = st.session_state.get(f"excluded_keys_{analysis_key}", [])
+        excluded_mask = nuisance_df["AI相關性"].isin(excluded_relevance) | nuisance_df["exclude_key"].isin(excluded_keys)
+        excluded_count = int(excluded_mask.sum())
+        return {"original_count": int(len(nuisance_df)), "excluded_count": excluded_count, "included_count": int(len(nuisance_df) - excluded_count)}
+
+    def _get_effective_facilities_df(self, res):
+        """Apply manual nuisance exclusions to facilities_table and return effective df."""
+        original_df = res.get("facilities_table", pd.DataFrame())
+        if original_df is None or original_df.empty:
+            return pd.DataFrame()
+        df = self._ensure_facility_exclude_keys(original_df)
+        if "主要類別" not in df.columns:
+            return df
+        normal_df = df[df["主要類別"] != "嫌惡設施"].copy()
+        nuisance_df = df[df["主要類別"] == "嫌惡設施"].copy()
+        if nuisance_df.empty:
+            return df
+        analysis_key = self._get_analysis_key(res)
+        excluded_relevance = st.session_state.get(f"excluded_relevance_{analysis_key}", [])
+        excluded_keys = st.session_state.get(f"excluded_keys_{analysis_key}", [])
+        keep_mask = ~nuisance_df["AI相關性"].isin(excluded_relevance)
+        keep_mask &= ~nuisance_df["exclude_key"].isin(excluded_keys)
+        return pd.concat([normal_df, nuisance_df[keep_mask].copy()], ignore_index=True)
+
+    def _build_effective_res(self, res):
+        """Build result object that downstream charts/maps/reports can use."""
+        effective_df = self._get_effective_facilities_df(res)
+        effective_res = res.copy()
+        effective_res["facilities_table"] = effective_df
+        effective_res["places_data"] = self._rebuild_places_data_from_df(effective_df, res.get("houses_data", {}))
+        effective_res["exclusion_info"] = self._get_nuisance_exclusion_info(res)
+        if res.get("include_nuisance", False) and not effective_df.empty and "主要類別" in effective_df.columns:
+            nuisance_df = effective_df[effective_df["主要類別"] == "嫌惡設施"]
+            effective_res["nuisance_summary"] = nuisance_df.groupby("房屋").size().to_dict() if not nuisance_df.empty else {}
+        return effective_res
+
+    def _render_nuisance_exclusion_summary(self, res):
+        """Render exclusion controls before downstream analysis sections."""
+        if not res.get("include_nuisance", False):
+            return
+        df = res.get("facilities_table", pd.DataFrame())
+        if df is None or df.empty or "主要類別" not in df.columns:
+            return
+        df = self._ensure_facility_exclude_keys(df)
+        nuisance_df = df[df["主要類別"] == "嫌惡設施"].copy()
+        if nuisance_df.empty:
+            return
+        analysis_key = self._get_analysis_key(res)
+        st.subheader("⚠️ 嫌惡設施手動排除")
+        before_rel = list(st.session_state.get(f"excluded_relevance_{analysis_key}", []))
+        before_keys = list(st.session_state.get(f"excluded_keys_{analysis_key}", []))
+        excluded_relevance, excluded_keys = self._render_nuisance_exclusion_controls(nuisance_df, analysis_key)
+        if before_rel != list(excluded_relevance) or before_keys != list(excluded_keys):
+            for key in ["custom_prompt", "gemini_result", "used_prompt"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+        info = self._get_nuisance_exclusion_info(res)
+        st.caption(f"原始嫌惡設施：{info['original_count']} 筆｜目前排除：{info['excluded_count']} 筆｜目前納入分析：{info['included_count']} 筆")
+        if info["excluded_count"] > 0:
+            st.warning(f"已排除 {info['excluded_count']} 筆嫌惡設施，這些資料不會納入統計、地圖與 AI 分析。")
+        if st.button("清除所有排除條件", key=f"clear_exclusions_{analysis_key}"):
+            st.session_state[f"excluded_relevance_{analysis_key}"] = []
+            st.session_state[f"excluded_keys_{analysis_key}"] = []
+            st.session_state[f"excluded_labels_{analysis_key}"] = []
+            for key in ["custom_prompt", "gemini_result", "used_prompt"]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            st.rerun()
+
     def _display_analysis_results(self, res):
         """顯示分析結果"""
         if not res:
@@ -1605,22 +1774,27 @@ class ComparisonAnalyzer:
         
         st.markdown("---")
         
+        self._render_nuisance_exclusion_summary(res)
+        effective_res = self._build_effective_res(res)
+        
+        st.markdown("---")
+        
         # 設施統計
         st.subheader("📈 設施統計")
         
-        if res["num_houses"] == 1:
-            self._show_single_stats(res, include_nuisance)
+        if effective_res["num_houses"] == 1:
+            self._show_single_stats(effective_res, include_nuisance)
         else:
-            self._show_multi_stats(res, include_nuisance)
+            self._show_multi_stats(effective_res, include_nuisance)
         
         # 地圖檢視
-        self._display_maps(res)
+        self._display_maps(effective_res)
         
         # 設施總表
-        self._display_facility_summary_tables(res, include_nuisance)
+        self._display_facility_summary_tables(effective_res, include_nuisance)
         
         # AI 智能分析
-        self._display_ai_analysis(res)
+        self._display_ai_analysis(effective_res)
     
     def _show_single_stats(self, res, include_nuisance=False):
         """單一房屋統計"""
@@ -2291,6 +2465,9 @@ th, td {{ border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }} 
         
         facilities_text, nuisance_text = self._format_facilities_for_prompt(res, include_nuisance)
         facilities_text = facilities_text + "\n" + self._format_real_price_for_prompt(res)
+        exclusion_info = res.get("exclusion_info", {}) or {}
+        if exclusion_info.get("excluded_count", 0) > 0:
+            nuisance_text += f"\n【使用者手動排除】\n以下分析已排除使用者手動排除的嫌惡設施，共 {exclusion_info.get('excluded_count', 0)} 筆。\n"
         
         depth_texts = {}
         if 'ai_results_summary' in st.session_state:
