@@ -1,28 +1,22 @@
 import io
 import math
 import re
-import zipfile
 from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
-import requests
 import streamlit as st
 
 
 SUPPORTED_REAL_PRICE_CITY = "臺中市"
 
-REAL_PRICE_DOWNLOAD_URLS = {
-    "臺中市": [
-        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=csv&fileName=b_lvr_land_a.csv",
-        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip",
-    ],
-    "台中市": [
-        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=csv&fileName=b_lvr_land_a.csv",
-        "https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip",
-    ],
-    "default": ["https://plvr.land.moi.gov.tw/DownloadOpenData?type=zip&fileName=lvr_landcsv.zip"],
+REAL_PRICE_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "real_price"
+
+CITY_FILE_MAP = {
+    "臺中市": "taichung_real_price.csv",
+    "台中市": "taichung_real_price.csv",
 }
+
 
 CITY_FILE_CODES = {
     "臺北市": "a", "台北市": "a",
@@ -59,13 +53,6 @@ CITY_ALIASES = {
 CITY_NAMES = sorted(set(CITY_FILE_CODES.keys()) | set(CITY_ALIASES.keys()), key=len, reverse=True)
 
 
-def get_cache_path():
-    """Return local cache directory for real price data."""
-    base = Path(__file__).resolve().parents[1]
-    path = base / "data" / "real_price"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
 
 def normalize_city_name(city):
     if not city:
@@ -82,13 +69,6 @@ def infer_city_from_address(address):
     return ""
 
 
-def _safe_filename(city):
-    city = normalize_city_name(city) or "unknown"
-    return re.sub(r"[^0-9A-Za-z\u4e00-\u9fff_-]+", "_", city)
-
-
-def _cache_csv_path(city):
-    return get_cache_path() / f"{_safe_filename(city)}.csv"
 
 
 def _parse_number(value):
@@ -204,99 +184,40 @@ def _prepare_real_price_df(df, city=""):
     return out.reset_index(drop=True)
 
 
-def _download_real_price_bytes(url):
-    try:
-        resp = requests.get(url, timeout=60)
-    except Exception as e:
-        err = str(e)
-        if "SSL" in err or "CERTIFICATE_VERIFY_FAILED" in err or "certificate verify failed" in err:
-            st.warning("內政部實價登錄下載站 SSL 憑證驗證失敗，改用官方來源備援下載。")
-            requests.packages.urllib3.disable_warnings()
-            resp = requests.get(url, timeout=60, verify=False)
-        else:
-            raise
-    resp.raise_for_status()
-    return resp.content
-
-
-def _read_taichung_real_price_from_bytes(raw, city):
-    dfs = []
-    code = CITY_FILE_CODES.get(city)
-    expected_name = f"{code}_lvr_land_a.csv" if code else "b_lvr_land_a.csv"
-
-    if zipfile.is_zipfile(io.BytesIO(raw)):
-        with zipfile.ZipFile(io.BytesIO(raw)) as zf:
-            names = zf.namelist()
-            target_names = [n for n in names if n.lower().endswith(expected_name)]
-            if not target_names:
-                raise ValueError(f"ZIP 中找不到臺中市不動產買賣檔案 {expected_name}")
-            for name in target_names:
-                with zf.open(name) as f:
-                    dfs.append(_read_csv_bytes(f.read()))
-    else:
-        dfs.append(_read_csv_bytes(raw))
-
-    if not dfs:
-        raise ValueError("下載資料中找不到臺中市實價登錄 CSV")
-    return pd.concat(dfs, ignore_index=True)
-
-
-def download_latest_real_price_data(city):
-    """Download official ZIP/CSV real price data for Taichung and cache it locally."""
-    city = normalize_city_name(city)
-    if not city:
-        raise ValueError("未提供縣市，無法下載實價登錄資料")
-    if city != SUPPORTED_REAL_PRICE_CITY:
-        raise ValueError("目前實價登錄價格分析只支援臺中市")
-
-    urls = REAL_PRICE_DOWNLOAD_URLS.get(city) or REAL_PRICE_DOWNLOAD_URLS.get("台中市") or REAL_PRICE_DOWNLOAD_URLS.get("default")
-    if isinstance(urls, str):
-        urls = [urls]
-    if not urls:
-        raise ValueError("未設定臺中市實價登錄下載 URL，請設定 REAL_PRICE_DOWNLOAD_URLS")
-
-    errors = []
-    merged = pd.DataFrame()
-    for url in urls:
+def _read_manual_real_price_csv(file_path):
+    """Read manually committed real price CSV from data/real_price."""
+    for enc in ("utf-8-sig", "utf-8", "cp950", "big5"):
         try:
-            raw = _download_real_price_bytes(url)
-            merged = _read_taichung_real_price_from_bytes(raw, city)
-            break
-        except Exception as e:
-            errors.append(f"{url} -> {e}")
+            return pd.read_csv(file_path, encoding=enc, dtype=str, engine="python", on_bad_lines="skip")
+        except UnicodeDecodeError:
             continue
-
-    if merged.empty:
-        raise ValueError("臺中市實價登錄資料下載或解析失敗：" + "；".join(errors))
-
-    prepared = _prepare_real_price_df(merged, city)
-    if prepared.empty:
-        raise ValueError("臺中市實價登錄資料解析後為空")
-
-    cache_file = _cache_csv_path(city)
-    prepared.to_csv(cache_file, index=False, encoding="utf-8-sig")
-    return prepared
+        except TypeError:
+            return pd.read_csv(file_path, encoding=enc, dtype=str, engine="python", error_bad_lines=False)
+    return pd.read_csv(file_path, dtype=str, engine="python", on_bad_lines="skip")
 
 
 def load_cached_real_price_data(city):
-    """Load cached real price CSV for a city."""
-    cache_file = _cache_csv_path(city)
-    if not cache_file.exists():
+    """Load manually provided real price CSV for a city from the GitHub project."""
+    city = normalize_city_name(city)
+    filename = CITY_FILE_MAP.get(city)
+    if not filename:
         return pd.DataFrame()
-    df = pd.read_csv(cache_file, encoding="utf-8-sig")
-    if "交易日期" in df.columns:
+
+    file_path = REAL_PRICE_DATA_DIR / filename
+    if not file_path.exists():
+        return pd.DataFrame()
+
+    df = _read_manual_real_price_csv(file_path)
+    prepared_columns = {"交易日期", "行政區", "建物型態", "建坪", "總價(萬)", "單價(萬/坪)"}
+    if prepared_columns.issubset(set(df.columns)):
+        df = df.copy()
         df["交易日期"] = pd.to_datetime(df["交易日期"], errors="coerce")
-    return df
+        for col in ["建坪", "屋齡", "總價(萬)", "單價(萬/坪)"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.dropna(subset=["交易日期", "建坪", "總價(萬)", "單價(萬/坪)"]).reset_index(drop=True)
 
-
-def update_real_price_cache_if_needed(city, max_age_days=10):
-    """Refresh cache if missing or older than max_age_days."""
-    cache_file = _cache_csv_path(city)
-    if cache_file.exists():
-        age = datetime.now() - datetime.fromtimestamp(cache_file.stat().st_mtime)
-        if age <= timedelta(days=max_age_days):
-            return load_cached_real_price_data(city)
-    return download_latest_real_price_data(city)
+    return _prepare_real_price_df(df, city)
 
 
 def _matches_building_type(series, target_type):
@@ -502,3 +423,4 @@ def format_real_price_metrics_for_prompt(real_price_results):
             f"相似成交量 {metrics.get('transaction_count', 0)} 筆。"
         )
     return "\n".join(lines) + "\n"
+
