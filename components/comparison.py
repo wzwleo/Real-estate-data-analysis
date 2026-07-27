@@ -1556,7 +1556,7 @@ class ComparisonAnalyzer:
                     continue
                 city = result.get("city", "")
                 if city:
-                    st.caption(f"資料縣市：{city}，資料來源為專案 data/real_price/ 中的手動 CSV。")
+                    st.caption(f"資料縣市：{city}，資料來源為專案 real_price/ 中的手動 CSV。")
                 render_real_price_analysis(result.get("metrics", {}))
 
     def _format_real_price_for_prompt(self, res):
