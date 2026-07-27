@@ -10,8 +10,14 @@ import streamlit as st
 
 SUPPORTED_REAL_PRICE_CITY = "臺中市"
 
-REAL_PRICE_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "real_price"
+REAL_PRICE_DATA_DIR = Path(__file__).resolve().parents[1] / "real_price"
 
+CITY_FOLDER_MAP = {
+    "臺中市": "taichung",
+    "台中市": "taichung",
+}
+
+# Backward compatible fallback: still supports one merged CSV if present.
 CITY_FILE_MAP = {
     "臺中市": "taichung_real_price.csv",
     "台中市": "taichung_real_price.csv",
@@ -185,7 +191,13 @@ def _prepare_real_price_df(df, city=""):
 
 
 def _read_manual_real_price_csv(file_path):
-    """Read manually committed real price CSV from data/real_price."""
+    """Read manually committed real price CSV from real_price."""
+    file_path = Path(file_path)
+    try:
+        return _read_csv_bytes(file_path.read_bytes())
+    except Exception:
+        pass
+
     for enc in ("utf-8-sig", "utf-8", "cp950", "big5"):
         try:
             return pd.read_csv(file_path, encoding=enc, dtype=str, engine="python", on_bad_lines="skip")
@@ -196,9 +208,45 @@ def _read_manual_real_price_csv(file_path):
     return pd.read_csv(file_path, dtype=str, engine="python", on_bad_lines="skip")
 
 
+def _normalize_manual_real_price_df(df, city):
+    """Normalize either prepared CSV columns or raw MOI CSV columns."""
+    prepared_columns = {"交易日期", "行政區", "建物型態", "建坪", "總價(萬)", "單價(萬/坪)"}
+    if df is None or df.empty:
+        return pd.DataFrame()
+    if prepared_columns.issubset(set(df.columns)):
+        df = df.copy()
+        df["交易日期"] = pd.to_datetime(df["交易日期"], errors="coerce")
+        for col in ["建坪", "屋齡", "總價(萬)", "單價(萬/坪)"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df.dropna(subset=["交易日期", "建坪", "總價(萬)", "單價(萬/坪)"]).reset_index(drop=True)
+    return _prepare_real_price_df(df, city)
+
+
+def _load_manual_real_price_file(file_path, city):
+    """Load and normalize one manually downloaded period CSV."""
+    return _normalize_manual_real_price_df(_read_manual_real_price_csv(file_path), city)
+
+
 def load_cached_real_price_data(city):
-    """Load manually provided real price CSV for a city from the GitHub project."""
+    """Load manually provided real price CSV files for a city from the GitHub project."""
     city = normalize_city_name(city)
+    folder_name = CITY_FOLDER_MAP.get(city)
+    if folder_name:
+        folder_path = REAL_PRICE_DATA_DIR / folder_name
+        if folder_path.exists():
+            frames = []
+            for file_path in sorted(folder_path.glob("*.csv")):
+                try:
+                    frame = _load_manual_real_price_file(file_path, city)
+                    if not frame.empty:
+                        frame["資料檔案"] = file_path.name
+                        frames.append(frame)
+                except Exception as e:
+                    st.warning(f"實價登錄 CSV 讀取失敗：{file_path.name}，已略過。原因：{e}")
+            if frames:
+                return pd.concat(frames, ignore_index=True)
+
     filename = CITY_FILE_MAP.get(city)
     if not filename:
         return pd.DataFrame()
@@ -207,17 +255,7 @@ def load_cached_real_price_data(city):
     if not file_path.exists():
         return pd.DataFrame()
 
-    df = _read_manual_real_price_csv(file_path)
-    prepared_columns = {"交易日期", "行政區", "建物型態", "建坪", "總價(萬)", "單價(萬/坪)"}
-    if prepared_columns.issubset(set(df.columns)):
-        df = df.copy()
-        df["交易日期"] = pd.to_datetime(df["交易日期"], errors="coerce")
-        for col in ["建坪", "屋齡", "總價(萬)", "單價(萬/坪)"]:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors="coerce")
-        return df.dropna(subset=["交易日期", "建坪", "總價(萬)", "單價(萬/坪)"]).reset_index(drop=True)
-
-    return _prepare_real_price_df(df, city)
+    return _load_manual_real_price_file(file_path, city)
 
 
 def _matches_building_type(series, target_type):
