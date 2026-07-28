@@ -2085,7 +2085,7 @@ class ComparisonAnalyzer:
             label = "嫌惡設施" if nuisance else "一般設施"
             st.markdown(f"**🏠 {house_name}** - 共 {len(house_df)} 個{label}")
             
-            for idx, (_, row) in enumerate(house_df.iterrows(), start=1):
+            for idx, (row_index, row) in enumerate(house_df.iterrows(), start=1):
                 maps_url = self._build_maps_url(row)
                 dist = row['距離(公尺)']
                 dist_color, dist_badge = self._distance_badge(dist, nuisance=nuisance)
@@ -2120,7 +2120,8 @@ class ComparisonAnalyzer:
                             keys_key = f"excluded_keys_{analysis_key}"
                             if keys_key not in st.session_state:
                                 st.session_state[keys_key] = []
-                            key_hash = hashlib.md5(exclude_key.encode("utf-8")).hexdigest()[:12]
+                            button_key_source = f"{exclude_key}|{row_index}|{idx}|{row.get('設施名稱', '')}|{dist}"
+                            key_hash = hashlib.md5(button_key_source.encode("utf-8")).hexdigest()[:12]
                             if st.button("❌ 排除此設施", key=f"exclude_nuisance_{analysis_key}_{key_hash}", use_container_width=True):
                                 excluded_keys = list(st.session_state.get(keys_key, []))
                                 if exclude_key not in excluded_keys:
