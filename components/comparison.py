@@ -1613,6 +1613,13 @@ class ComparisonAnalyzer:
         relevance_key = f"excluded_relevance_{analysis_key}"
         keys_key = f"excluded_keys_{analysis_key}"
         allowed_relevance = ["高度相關", "部分相關", "低度相關", "無關", "未經AI判斷"]
+        pending_clear_key = f"pending_clear_exclusions_{analysis_key}"
+        if st.session_state.pop(pending_clear_key, False):
+            st.session_state.pop(relevance_key, None)
+            st.session_state[keys_key] = []
+            for key in ["custom_prompt", "gemini_result", "used_prompt", "pedit", "prompt_signature"]:
+                if key in st.session_state:
+                    del st.session_state[key]
         if relevance_key not in st.session_state:
             st.session_state[relevance_key] = []
         if keys_key not in st.session_state:
@@ -1678,7 +1685,7 @@ class ComparisonAnalyzer:
         signature_key = f"exclusion_signature_{analysis_key}"
         if st.session_state.get(signature_key) != exclusion_signature:
             st.session_state[signature_key] = exclusion_signature
-            for key in ["custom_prompt", "gemini_result", "used_prompt"]:
+            for key in ["custom_prompt", "gemini_result", "used_prompt", "pedit", "prompt_signature"]:
                 if key in st.session_state:
                     del st.session_state[key]
         if res.get("include_nuisance", False) and not effective_df.empty and "主要類別" in effective_df.columns:
@@ -2208,11 +2215,7 @@ class ComparisonAnalyzer:
                 if info.get("excluded_count", 0) > 0:
                     st.warning(f"已排除 {info['excluded_count']} 筆嫌惡設施，這些資料不會納入統計、地圖與 AI 分析。")
                 if st.button("🔄 清除所有排除條件", key=f"clear_exclusions_{analysis_key}"):
-                    st.session_state[f"excluded_relevance_{analysis_key}"] = []
-                    st.session_state[f"excluded_keys_{analysis_key}"] = []
-                    for key in ["custom_prompt", "gemini_result", "used_prompt"]:
-                        if key in st.session_state:
-                            del st.session_state[key]
+                    st.session_state[f"pending_clear_exclusions_{analysis_key}"] = True
                     st.rerun()
                 if nuisance_display_df.empty:
                     st.info("目前篩選條件下沒有資料")
@@ -2496,7 +2499,12 @@ th, td {{ border: 1px solid #d1d5db; padding: 8px 10px; vertical-align: top; }} 
             else:
                 prompt = self._build_multi_without_nuisance_prompt(res, facilities_text, depth_texts, profile, icon, pinfo)
         
-        if "custom_prompt" not in st.session_state:
+        prompt_signature = hashlib.md5(prompt.encode("utf-8")).hexdigest()
+        if st.session_state.get("prompt_signature") != prompt_signature:
+            st.session_state.prompt_signature = prompt_signature
+            st.session_state.custom_prompt = prompt
+            st.session_state.pop("pedit", None)
+        elif "custom_prompt" not in st.session_state:
             st.session_state.custom_prompt = prompt
         
         c1, c2 = st.columns([3, 1])
