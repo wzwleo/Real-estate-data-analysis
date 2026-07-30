@@ -1711,7 +1711,7 @@ class ComparisonAnalyzer:
             allowed_relevance,
             relevance_key,
             default_selected=st.session_state[relevance_key],
-            groups={"AI 相關性": allowed_relevance},
+            groups={"AI 相關性排除": allowed_relevance},
             expanded=True,
         )
         st.session_state[relevance_key] = excluded_relevance
