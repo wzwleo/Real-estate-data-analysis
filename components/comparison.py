@@ -1667,6 +1667,26 @@ class ComparisonAnalyzer:
             groups.setdefault(group, []).append(option)
         return groups
 
+    def _nuisance_relevance_options(self):
+        return ["高度相關", "部分相關", "低度相關", "無關", "未經AI判斷"]
+
+    def _get_excluded_relevance_values(self, analysis_key):
+        """Read AI relevance exclusions directly from checkbox widgets when present."""
+        relevance_key = f"excluded_relevance_{analysis_key}"
+        allowed_relevance = self._nuisance_relevance_options()
+        selected = []
+        has_checkbox_state = False
+        for option in allowed_relevance:
+            widget_key = self._checkbox_filter_key(relevance_key, option)
+            if widget_key in st.session_state:
+                has_checkbox_state = True
+                if st.session_state.get(widget_key):
+                    selected.append(option)
+        if has_checkbox_state:
+            st.session_state[relevance_key] = selected
+            return selected
+        return st.session_state.get(relevance_key, [])
+
     def _render_nuisance_exclusion_controls(self, nuisance_df, analysis_key):
         """Render nuisance exclusion controls and return selected relevance exclusions."""
         relevance_key = f"excluded_relevance_{analysis_key}"
@@ -1707,7 +1727,7 @@ class ComparisonAnalyzer:
         if nuisance_df.empty:
             return {"original_count": 0, "excluded_count": 0, "included_count": 0}
         analysis_key = self._get_analysis_key(res)
-        excluded_relevance = st.session_state.get(f"excluded_relevance_{analysis_key}", [])
+        excluded_relevance = self._get_excluded_relevance_values(analysis_key)
         excluded_keys = st.session_state.get(f"excluded_keys_{analysis_key}", [])
         excluded_mask = nuisance_df["AI相關性"].isin(excluded_relevance) | nuisance_df["exclude_key"].isin(excluded_keys)
         excluded_count = int(excluded_mask.sum())
@@ -1726,7 +1746,7 @@ class ComparisonAnalyzer:
         if nuisance_df.empty:
             return df
         analysis_key = self._get_analysis_key(res)
-        excluded_relevance = st.session_state.get(f"excluded_relevance_{analysis_key}", [])
+        excluded_relevance = self._get_excluded_relevance_values(analysis_key)
         excluded_keys = st.session_state.get(f"excluded_keys_{analysis_key}", [])
         keep_mask = ~nuisance_df["AI相關性"].isin(excluded_relevance)
         keep_mask &= ~nuisance_df["exclude_key"].isin(excluded_keys)
@@ -1742,7 +1762,7 @@ class ComparisonAnalyzer:
         effective_res["exclusion_info"] = self._get_nuisance_exclusion_info(res)
         analysis_key = self._get_analysis_key(res)
         exclusion_signature = json.dumps({
-            "relevance": sorted(st.session_state.get(f"excluded_relevance_{analysis_key}", [])),
+            "relevance": sorted(self._get_excluded_relevance_values(analysis_key)),
             "keys": sorted(st.session_state.get(f"excluded_keys_{analysis_key}", [])),
         }, ensure_ascii=False)
         signature_key = f"exclusion_signature_{analysis_key}"
@@ -2273,7 +2293,7 @@ class ComparisonAnalyzer:
                     nuisance_types,
                     f"nuisance_facility_type_filter_{analysis_key}",
                     default_selected=nuisance_types,
-                    groups=self._build_nuisance_filter_groups(nuisance_types),
+                    groups={"嫌惡設施類型": nuisance_types},
                     expanded=True,
                 )
                 nuisance_display_df = nuisance_df[nuisance_df[type_col].isin(selected_nuisance_types)].copy() if nuisance_types else nuisance_df.copy()
