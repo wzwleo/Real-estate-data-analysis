@@ -1608,6 +1608,65 @@ class ComparisonAnalyzer:
             ))
         return rebuilt
 
+    def _checkbox_filter_key(self, key_prefix, option):
+        safe = hashlib.md5(str(option).encode("utf-8")).hexdigest()[:12]
+        return f"{key_prefix}_cb_{safe}"
+
+    def _render_checkbox_filter(self, title, options, key_prefix, default_selected=None, groups=None, expanded=True):
+        """Render an expander + checkbox filter and return selected options."""
+        options = list(dict.fromkeys([str(o) for o in options if str(o).strip()]))
+        if not options:
+            return []
+        default_set = set(options if default_selected is None else default_selected)
+        selected = []
+
+        st.markdown(f"**{title}**")
+
+        def render_items(items):
+            per_row = max((len(items) + 2) // 3, 1)
+            for row_no in range(per_row):
+                cols = st.columns(3)
+                for col_no in range(3):
+                    idx = row_no + col_no * per_row
+                    if idx >= len(items):
+                        continue
+                    option = items[idx]
+                    widget_key = self._checkbox_filter_key(key_prefix, option)
+                    if widget_key not in st.session_state:
+                        st.session_state[widget_key] = option in default_set
+                    with cols[col_no]:
+                        if st.checkbox(option, key=widget_key):
+                            selected.append(option)
+
+        rendered = set()
+        if groups:
+            for group_name, group_items in groups.items():
+                items = [item for item in group_items if item in options and item not in rendered]
+                if not items:
+                    continue
+                rendered.update(items)
+                with st.expander(f"\U0001f4c1 {group_name}", expanded=expanded):
+                    render_items(items)
+            remaining = [item for item in options if item not in rendered]
+            if remaining:
+                with st.expander("\U0001f4c1 \u5176\u4ed6", expanded=expanded):
+                    render_items(remaining)
+        else:
+            with st.expander(f"\U0001f4c1 {title}", expanded=expanded):
+                render_items(options)
+
+        return list(dict.fromkeys(selected))
+
+    def _build_nuisance_filter_groups(self, options):
+        """Group nuisance types by their first impact label for display-only filters."""
+        groups = {}
+        for option in options:
+            info = NUISANCE_TYPES.get(option, {}) if isinstance(NUISANCE_TYPES, dict) else {}
+            impacts = info.get("impacts", []) if isinstance(info, dict) else []
+            group = impacts[0] if impacts else "\u5176\u4ed6"
+            groups.setdefault(group, []).append(option)
+        return groups
+
     def _render_nuisance_exclusion_controls(self, nuisance_df, analysis_key):
         """Render nuisance exclusion controls and return selected relevance exclusions."""
         relevance_key = f"excluded_relevance_{analysis_key}"
@@ -1617,6 +1676,8 @@ class ComparisonAnalyzer:
         if st.session_state.pop(pending_clear_key, False):
             st.session_state.pop(relevance_key, None)
             st.session_state[keys_key] = []
+            for option in allowed_relevance:
+                st.session_state.pop(self._checkbox_filter_key(relevance_key, option), None)
             for key in ["custom_prompt", "gemini_result", "used_prompt", "pedit", "prompt_signature"]:
                 if key in st.session_state:
                     del st.session_state[key]
@@ -1625,13 +1686,15 @@ class ComparisonAnalyzer:
         if keys_key not in st.session_state:
             st.session_state[keys_key] = []
 
-        excluded_relevance = st.multiselect(
+        excluded_relevance = self._render_checkbox_filter(
             "排除 AI 相關性",
-            options=allowed_relevance,
-            default=[v for v in st.session_state[relevance_key] if v in allowed_relevance],
-            help="選擇後，符合這些 AI 相關性的嫌惡設施將不納入後續分析",
-            key=relevance_key,
+            allowed_relevance,
+            relevance_key,
+            default_selected=st.session_state[relevance_key],
+            groups={"AI 相關性": allowed_relevance},
+            expanded=True,
         )
+        st.session_state[relevance_key] = excluded_relevance
         return excluded_relevance, st.session_state[keys_key]
 
     def _get_nuisance_exclusion_info(self, res):
@@ -2174,12 +2237,15 @@ class ComparisonAnalyzer:
             if normal_df.empty:
                 st.info("📭 無一般設施資料")
             else:
+                analysis_key = self._get_analysis_key(res)
                 normal_types = sorted(normal_df["主要類別"].dropna().unique().tolist()) if "主要類別" in normal_df.columns else []
-                selected_normal_types = st.multiselect(
+                selected_normal_types = self._render_checkbox_filter(
                     "篩選一般設施類型",
-                    options=normal_types,
-                    default=normal_types,
-                    key="normal_facility_type_filter",
+                    normal_types,
+                    f"normal_facility_type_filter_{analysis_key}",
+                    default_selected=normal_types,
+                    groups={"一般設施類型": normal_types},
+                    expanded=True,
                 )
                 normal_display_df = normal_df[normal_df["主要類別"].isin(selected_normal_types)].copy() if normal_types else normal_df.copy()
                 st.caption(f"目前顯示 {len(normal_display_df)} / 原始 {len(normal_df)} 筆資料")
@@ -2202,11 +2268,13 @@ class ComparisonAnalyzer:
                 
                 type_col = "嫌惡設施類型" if "嫌惡設施類型" in nuisance_df.columns else "設施子類別"
                 nuisance_types = sorted(nuisance_df[type_col].dropna().unique().tolist()) if not nuisance_df.empty and type_col in nuisance_df.columns else []
-                selected_nuisance_types = st.multiselect(
+                selected_nuisance_types = self._render_checkbox_filter(
                     "篩選嫌惡設施類型",
-                    options=nuisance_types,
-                    default=nuisance_types,
-                    key="nuisance_facility_type_filter",
+                    nuisance_types,
+                    f"nuisance_facility_type_filter_{analysis_key}",
+                    default_selected=nuisance_types,
+                    groups=self._build_nuisance_filter_groups(nuisance_types),
+                    expanded=True,
                 )
                 nuisance_display_df = nuisance_df[nuisance_df[type_col].isin(selected_nuisance_types)].copy() if nuisance_types else nuisance_df.copy()
                 info = res.get("exclusion_info") or {"original_count": len(original_nuisance_df), "excluded_count": max(len(original_nuisance_df) - len(nuisance_df), 0), "included_count": len(nuisance_df)}
