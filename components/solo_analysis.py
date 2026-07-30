@@ -2355,7 +2355,7 @@ def tab1_module():
             st.markdown("---")
     
             # ── 價格 ──
-            st.subheader("價格 💸")
+            st.header("價格 💸")
             col1, col2 = st.columns([1, 1])
             with col1:
                 if not _compare_df.empty:
@@ -2363,16 +2363,16 @@ def tab1_module():
                 else:
                     st.warning("⚠️ 找不到比較基準資料，無法顯示圖表")
             with col2:
-                st.markdown("### 📌 價格分析結論")
-                st.write(r['price_text'])
+                st.markdown("## 📌 價格分析結論")
+                st.markdown(f"<div style='font-size:20px;line-height:1.8'>{r['price_text']}</div>", unsafe_allow_html=True)
             st.markdown("---")
     
             # ── 坪數 ──
-            st.subheader("坪數 📐")
+            st.header("坪數 📐")
             col1, col2 = st.columns([1, 1])
             with col1:
-                st.markdown("### 📌 坪數分析結論")
-                st.write(r['space_text'])
+                st.markdown("##📌 坪數分析結論")
+                st.markdown(f"<div style='font-size:20px;line-height:1.8'>{r['space_text']}</div>", unsafe_allow_html=True)
             with col2:
                 if not _compare_df.empty:
                     plot_space_efficiency_scatter(_selected_row, _compare_df)
@@ -2381,9 +2381,9 @@ def tab1_module():
             st.markdown("---")
     
             # ── 屋齡 ──
-            st.subheader("屋齡 🕰")
-            st.markdown("### 📌 屋齡分析結論")
-            st.write(r['age_text'])
+            st.header("屋齡 🕰")
+            st.markdown("## 📌 屋齡分析結論")
+            st.markdown(f"<div style='font-size:20px;line-height:1.8'>{r['age_text']}</div>", unsafe_allow_html=True)
             if not _compare_df.empty:
                 plot_age_distribution(_selected_row, _compare_df)
             else:
@@ -2391,9 +2391,9 @@ def tab1_module():
             st.markdown("---")
     
             # ── 樓層 ──
-            st.subheader("樓層 🏢")
-            st.markdown("### 📌 樓層分析結論")
-            st.write(r['floor_text'])
+            st.header("樓層 🏢")
+            st.markdown("## 📌 樓層分析結論")
+            st.markdown(f"<div style='font-size:20px;line-height:1.8'>{r['floor_text']}</div>", unsafe_allow_html=True)
             if not _compare_df.empty:
                 plot_floor_distribution(_selected_row, _compare_df)
             else:
@@ -2401,9 +2401,9 @@ def tab1_module():
             st.markdown("---")
     
             # ── 格局 ──
-            st.subheader("格局 🛋")
-            st.markdown("### 📌 格局分析結論")
-            st.write(r['layout_text'])
+            st.header("格局 🛋")
+            st.markdown("## 📌 格局分析結論")
+            st.markdown(f"<div style='font-size:20px;line-height:1.8'>{r['layout_text']}</div>", unsafe_allow_html=True)
             if not _compare_df.empty:
                 plot_layout_distribution(_selected_row, _compare_df)
             else:
@@ -2411,9 +2411,9 @@ def tab1_module():
             st.markdown("---")
     
             # ── 最終結論 & 雷達圖 ──
-            st.markdown("### 📌 最終結論")
-            st.write(r['summary_text'])
-    
+            st.markdown("## 📌 最終結論")
+            st.markdown(f"<div style='font-size:20px;line-height:1.8'>{r['summary_text']}</div>", unsafe_allow_html=True)
+            
             col1, col2 = st.columns([1, 1])
             with col1:
                 fig = create_radar_chart(r['scores'])
