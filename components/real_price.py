@@ -336,23 +336,155 @@ def filter_nearby_transactions(df, target_house):
         selected = base[mask].copy()
         if len(selected) >= 10:
             break
-    return selected.sort_values("交易日期", ascending=False).reset_index(drop=True)
+    selected = selected.sort_values("交易日期", ascending=False).reset_index(drop=True)
+    selected.attrs["recent_city_transactions"] = base.reset_index(drop=True)
+    selected.attrs["filter_target"] = target
+    return selected
+
+
+
+def _safe_mean(df, column):
+    if df is None or df.empty or column not in df.columns:
+        return math.nan
+    value = pd.to_numeric(df[column], errors="coerce").dropna()
+    return float(value.mean()) if not value.empty else math.nan
+
+
+def _period_avg(tx, days):
+    if tx is None or tx.empty:
+        return math.nan
+    cutoff = pd.Timestamp(datetime.now() - timedelta(days=days))
+    return _safe_mean(tx[tx["\u4ea4\u6613\u65e5\u671f"] >= cutoff], "\u55ae\u50f9(\u842c/\u576a)")
+
+
+def _fmt_metric(value, suffix=""):
+    try:
+        if value is None or math.isnan(float(value)):
+            return "\u7121\u8cc7\u6599"
+        return f"{float(value):.2f}{suffix}"
+    except Exception:
+        return "\u7121\u8cc7\u6599"
+
+
+def _fmt_money_range(low, high):
+    try:
+        if low is None or high is None or math.isnan(float(low)) or math.isnan(float(high)):
+            return "\u7121\u8cc7\u6599"
+        return f"{float(low):.0f} ~ {float(high):.0f} \u842c"
+    except Exception:
+        return "\u7121\u8cc7\u6599"
+
+
+def _price_band_label(value, bins):
+    try:
+        value = float(value)
+    except Exception:
+        return "\u7121\u8cc7\u6599"
+    if not bins:
+        return "\u7121\u8cc7\u6599"
+    for i in range(len(bins) - 1):
+        left, right = bins[i], bins[i + 1]
+        if value >= left and (value < right or i == len(bins) - 2):
+            return f"{left:.0f}-{right:.0f} \u842c/\u576a"
+    return "\u7121\u8cc7\u6599"
+
+
+def _build_similarity_reason(row, target):
+    reasons = []
+    score = 0
+    district = str(target.get("\u884c\u653f\u5340", "")).strip()
+    building_type = str(target.get("\u985e\u578b", target.get("\u5efa\u7269\u578b\u614b", ""))).strip()
+    area = _parse_number(target.get("\u5efa\u576a"))
+    age = _parse_number(target.get("\u5c4b\u9f61"))
+
+    if district and district in str(row.get("\u884c\u653f\u5340", "")):
+        score += 30
+        reasons.append("\u540c\u884c\u653f\u5340")
+    if building_type and _matches_building_type(pd.Series([row.get("\u5efa\u7269\u578b\u614b", "")]), building_type).iloc[0]:
+        score += 25
+        reasons.append("\u540c\u5efa\u7269\u578b\u614b")
+    row_area = _parse_number(row.get("\u5efa\u576a"))
+    if not math.isnan(area) and area > 0 and not math.isnan(row_area):
+        diff_pct = abs(row_area - area) / area * 100
+        if diff_pct <= 15:
+            score += 25
+            reasons.append(f"\u5efa\u576a\u5dee {diff_pct:.0f}%")
+        elif diff_pct <= 30:
+            score += 15
+            reasons.append(f"\u5efa\u576a\u5dee {diff_pct:.0f}%")
+    row_age = _parse_number(row.get("\u5c4b\u9f61"))
+    if not math.isnan(age) and not math.isnan(row_age):
+        age_diff = abs(row_age - age)
+        if age_diff <= 5:
+            score += 15
+            reasons.append(f"\u5c4b\u9f61\u5dee {age_diff:.0f} \u5e74")
+        elif age_diff <= 10:
+            score += 8
+            reasons.append(f"\u5c4b\u9f61\u5dee {age_diff:.0f} \u5e74")
+    tx_date = row.get("\u4ea4\u6613\u65e5\u671f")
+    if pd.notna(tx_date):
+        months = abs((pd.Timestamp(datetime.now()) - pd.Timestamp(tx_date)).days) / 30
+        if months <= 12:
+            score += 5
+            reasons.append("\u4e00\u5e74\u5167\u6210\u4ea4")
+    label = "\u9ad8" if score >= 80 else "\u4e2d" if score >= 55 else "\u4f4e"
+    return label, "\u3001".join(reasons) if reasons else "\u689d\u4ef6\u76f8\u4f3c\u5ea6\u6709\u9650"
+
+
+def _build_price_distribution(tx, target_unit_price):
+    col = "\u55ae\u50f9(\u842c/\u576a)"
+    if tx is None or tx.empty or col not in tx.columns:
+        return pd.DataFrame()
+    prices = pd.to_numeric(tx[col], errors="coerce").dropna()
+    if prices.empty:
+        return pd.DataFrame()
+    low = max(0, math.floor(prices.quantile(0.05) / 5) * 5)
+    high = math.ceil(prices.quantile(0.95) / 5) * 5
+    if high <= low:
+        high = low + 5
+    bins = list(range(int(low), int(high) + 6, 5))
+    rows = []
+    for i in range(len(bins) - 1):
+        left, right = bins[i], bins[i + 1]
+        mask = (prices >= left) & ((prices < right) if i < len(bins) - 2 else (prices <= right))
+        rows.append({"\u55ae\u50f9\u5340\u9593": f"{left}-{right} \u842c/\u576a", "\u6210\u4ea4\u7b46\u6578": int(mask.sum())})
+    dist = pd.DataFrame(rows)
+    dist.attrs["target_band"] = _price_band_label(target_unit_price, bins)
+    return dist
 
 
 def calculate_price_metrics(transactions, target_house):
     """Calculate price metrics for target house and comparable transactions."""
     target = target_house or {}
-    area = _parse_number(target.get("建坪"))
-    price = _parse_number(target.get("總價(萬)"))
+    area = _parse_number(target.get("\u5efa\u576a"))
+    price = _parse_number(target.get("\u7e3d\u50f9(\u842c)"))
     target_unit_price = price / area if area and not math.isnan(area) and not math.isnan(price) else math.nan
 
     tx = transactions.copy() if transactions is not None else pd.DataFrame()
+    city_tx = transactions.attrs.get("recent_city_transactions", pd.DataFrame()).copy() if transactions is not None else pd.DataFrame()
     metrics = {
         "target_unit_price": target_unit_price,
         "nearby_one_year_avg": math.nan,
+        "nearby_three_year_avg": math.nan,
+        "nearby_five_year_avg": math.nan,
         "price_gap_pct": math.nan,
-        "yearly_avg_unit_price": pd.DataFrame(columns=["年份", "平均單價(萬/坪)"]),
-        "yearly_volume": pd.DataFrame(columns=["年份", "成交量"]),
+        "reasonable_unit_price_low": math.nan,
+        "reasonable_unit_price_high": math.nan,
+        "reasonable_total_low": math.nan,
+        "reasonable_total_high": math.nan,
+        "suggested_offer_low": math.nan,
+        "suggested_offer_high": math.nan,
+        "negotiation_space_pct": math.nan,
+        "yearly_avg_unit_price": pd.DataFrame(columns=["\u5e74\u4efd", "\u5e73\u5747\u55ae\u50f9(\u842c/\u576a)"]),
+        "yearly_volume": pd.DataFrame(columns=["\u5e74\u4efd", "\u6210\u4ea4\u91cf"]),
+        "price_distribution": pd.DataFrame(),
+        "district_ranking": pd.DataFrame(),
+        "district_rank_text": "\u7121\u8cc7\u6599",
+        "market_heat_label": "\u7121\u8cc7\u6599",
+        "market_heat_detail": "\u7121\u8cc7\u6599",
+        "one_year_volume": 0,
+        "previous_year_volume": 0,
+        "volume_change_pct": math.nan,
         "five_year_change_pct": math.nan,
         "similar_cases": pd.DataFrame(),
         "transaction_count": 0,
@@ -360,61 +492,116 @@ def calculate_price_metrics(transactions, target_house):
     }
 
     if tx.empty:
-        metrics["message"] = "資料不足，建議放寬條件"
+        metrics["message"] = "\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u689d\u4ef6"
         return metrics
 
-    tx["交易日期"] = pd.to_datetime(tx["交易日期"], errors="coerce")
-    tx = tx.dropna(subset=["交易日期", "單價(萬/坪)"])
+    date_col = "\u4ea4\u6613\u65e5\u671f"
+    unit_col = "\u55ae\u50f9(\u842c/\u576a)"
+    tx[date_col] = pd.to_datetime(tx[date_col], errors="coerce")
+    tx = tx.dropna(subset=[date_col, unit_col])
+    tx[unit_col] = pd.to_numeric(tx[unit_col], errors="coerce")
+    tx = tx.dropna(subset=[unit_col])
     metrics["transaction_count"] = int(len(tx))
     if len(tx) < 10:
-        metrics["message"] = "資料不足，建議放寬條件"
+        metrics["message"] = "\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u689d\u4ef6"
 
-    one_year_cutoff = pd.Timestamp(datetime.now() - timedelta(days=365))
-    recent = tx[tx["交易日期"] >= one_year_cutoff]
-    if not recent.empty:
-        metrics["nearby_one_year_avg"] = float(recent["單價(萬/坪)"].mean())
-    elif not tx.empty:
-        metrics["nearby_one_year_avg"] = float(tx["單價(萬/坪)"].mean())
+    now = pd.Timestamp(datetime.now())
+    one_year_cutoff = now - timedelta(days=365)
+    prev_year_cutoff = now - timedelta(days=365 * 2)
+    recent = tx[tx[date_col] >= one_year_cutoff]
+    previous = tx[(tx[date_col] >= prev_year_cutoff) & (tx[date_col] < one_year_cutoff)]
+
+    metrics["nearby_one_year_avg"] = _period_avg(tx, 365)
+    metrics["nearby_three_year_avg"] = _period_avg(tx, 365 * 3)
+    metrics["nearby_five_year_avg"] = _period_avg(tx, 365 * 5)
+    if math.isnan(metrics["nearby_one_year_avg"]):
+        metrics["nearby_one_year_avg"] = metrics["nearby_five_year_avg"]
 
     if not math.isnan(target_unit_price) and not math.isnan(metrics["nearby_one_year_avg"]) and metrics["nearby_one_year_avg"]:
         metrics["price_gap_pct"] = (target_unit_price - metrics["nearby_one_year_avg"]) / metrics["nearby_one_year_avg"] * 100
 
-    tx["年份"] = tx["交易日期"].dt.year
-    yearly = tx.groupby("年份", as_index=False)["單價(萬/坪)"].mean().sort_values("年份")
-    volume = tx.groupby("年份", as_index=False).size().rename(columns={"size": "成交量"}).sort_values("年份")
-    metrics["yearly_avg_unit_price"] = yearly.rename(columns={"單價(萬/坪)": "平均單價(萬/坪)"})
+    base_avg = metrics["nearby_one_year_avg"] if not math.isnan(metrics["nearby_one_year_avg"]) else metrics["nearby_five_year_avg"]
+    if not math.isnan(base_avg):
+        metrics["reasonable_unit_price_low"] = base_avg * 0.95
+        metrics["reasonable_unit_price_high"] = base_avg * 1.05
+        if not math.isnan(area) and area > 0:
+            metrics["reasonable_total_low"] = metrics["reasonable_unit_price_low"] * area
+            metrics["reasonable_total_high"] = metrics["reasonable_unit_price_high"] * area
+            metrics["suggested_offer_low"] = base_avg * 0.92 * area
+            metrics["suggested_offer_high"] = base_avg * 0.98 * area
+            if not math.isnan(price) and price > 0:
+                gap_total = max(price - metrics["reasonable_total_high"], 0)
+                metrics["negotiation_space_pct"] = gap_total / price * 100
+
+    tx["\u5e74\u4efd"] = tx[date_col].dt.year
+    yearly = tx.groupby("\u5e74\u4efd", as_index=False)[unit_col].mean().sort_values("\u5e74\u4efd")
+    volume = tx.groupby("\u5e74\u4efd", as_index=False).size().rename(columns={"size": "\u6210\u4ea4\u91cf"}).sort_values("\u5e74\u4efd")
+    metrics["yearly_avg_unit_price"] = yearly.rename(columns={unit_col: "\u5e73\u5747\u55ae\u50f9(\u842c/\u576a)"})
     metrics["yearly_volume"] = volume
 
-    if len(yearly) >= 2 and yearly.iloc[0]["單價(萬/坪)"]:
-        first = yearly.iloc[0]["單價(萬/坪)"]
-        last = yearly.iloc[-1]["單價(萬/坪)"]
+    if len(yearly) >= 2 and yearly.iloc[0][unit_col]:
+        first = yearly.iloc[0][unit_col]
+        last = yearly.iloc[-1][unit_col]
         metrics["five_year_change_pct"] = (last - first) / first * 100
 
-    display_cols = ["交易日期", "行政區", "建物型態", "地址", "建坪", "屋齡", "總價(萬)", "單價(萬/坪)"]
+    metrics["one_year_volume"] = int(len(recent))
+    metrics["previous_year_volume"] = int(len(previous))
+    if metrics["previous_year_volume"] > 0:
+        metrics["volume_change_pct"] = (metrics["one_year_volume"] - metrics["previous_year_volume"]) / metrics["previous_year_volume"] * 100
+    if metrics["one_year_volume"] >= 80:
+        metrics["market_heat_label"] = "\u9ad8"
+    elif metrics["one_year_volume"] >= 25:
+        metrics["market_heat_label"] = "\u4e2d"
+    else:
+        metrics["market_heat_label"] = "\u4f4e"
+    change_text = _fmt_metric(metrics["volume_change_pct"], "%") if not math.isnan(metrics["volume_change_pct"]) else "\u7121\u53bb\u5e74\u540c\u671f\u8cc7\u6599"
+    metrics["market_heat_detail"] = f"\u8fd1\u4e00\u5e74 {metrics['one_year_volume']} \u7b46\uff0c\u524d\u4e00\u5e74 {metrics['previous_year_volume']} \u7b46\uff0c\u91cf\u8b8a\u5316 {change_text}"
+
+    metrics["price_distribution"] = _build_price_distribution(tx, target_unit_price)
+
+    target_district = str(target.get("\u884c\u653f\u5340", "")).strip()
+    if city_tx is not None and not city_tx.empty:
+        city_tx[date_col] = pd.to_datetime(city_tx[date_col], errors="coerce")
+        city_tx[unit_col] = pd.to_numeric(city_tx[unit_col], errors="coerce")
+        rank_base = city_tx[(city_tx[date_col] >= one_year_cutoff)].dropna(subset=["\u884c\u653f\u5340", unit_col])
+        if rank_base.empty:
+            rank_base = city_tx.dropna(subset=["\u884c\u653f\u5340", unit_col])
+        if not rank_base.empty:
+            district_rank = rank_base.groupby("\u884c\u653f\u5340", as_index=False).agg({unit_col: "mean"})
+            counts = rank_base.groupby("\u884c\u653f\u5340").size().reset_index(name="\u6210\u4ea4\u91cf")
+            district_rank = district_rank.merge(counts, on="\u884c\u653f\u5340", how="left")
+            district_rank = district_rank.rename(columns={unit_col: "\u5e73\u5747\u55ae\u50f9"}).sort_values("\u5e73\u5747\u55ae\u50f9", ascending=False).reset_index(drop=True)
+            district_rank["\u6392\u540d"] = district_rank.index + 1
+            metrics["district_ranking"] = district_rank[["\u6392\u540d", "\u884c\u653f\u5340", "\u5e73\u5747\u55ae\u50f9", "\u6210\u4ea4\u91cf"]].copy()
+            if target_district and target_district in district_rank["\u884c\u653f\u5340"].astype(str).tolist():
+                row = district_rank[district_rank["\u884c\u653f\u5340"].astype(str) == target_district].iloc[0]
+                metrics["district_rank_text"] = f"{target_district} \u8fd1\u4e00\u5e74\u5747\u50f9 {row['\u5e73\u5747\u55ae\u50f9']:.2f} \u842c/\u576a\uff0c\u53f0\u4e2d\u5e02\u6392\u540d\u7b2c {int(row['\u6392\u540d'])}/{len(district_rank)}"
+
+    display_cols = [date_col, "\u884c\u653f\u5340", "\u5efa\u7269\u578b\u614b", "\u5730\u5740", "\u5efa\u576a", "\u5c4b\u9f61", "\u7e3d\u50f9(\u842c)", unit_col]
     available = [c for c in display_cols if c in tx.columns]
-    cases = tx.sort_values("交易日期", ascending=False).head(10)[available].copy()
-    if "交易日期" in cases.columns:
-        cases["交易日期"] = cases["交易日期"].dt.strftime("%Y-%m-%d")
-    for col in ["建坪", "屋齡", "總價(萬)", "單價(萬/坪)"]:
+    cases = tx.sort_values(date_col, ascending=False).head(10)[available].copy()
+    if not cases.empty:
+        labels = []
+        reasons = []
+        for _, row in cases.iterrows():
+            label, reason = _build_similarity_reason(row, target)
+            labels.append(label)
+            reasons.append(reason)
+        cases["\u53ef\u6bd4\u6027"] = labels
+        cases["\u76f8\u4f3c\u539f\u56e0"] = reasons
+    if date_col in cases.columns:
+        cases[date_col] = cases[date_col].dt.strftime("%Y-%m-%d")
+    for col in ["\u5efa\u576a", "\u5c4b\u9f61", "\u7e3d\u50f9(\u842c)", unit_col]:
         if col in cases.columns:
             cases[col] = pd.to_numeric(cases[col], errors="coerce").round(2)
     metrics["similar_cases"] = cases
     return metrics
 
 
-def _fmt_metric(value, suffix=""):
-    try:
-        if value is None or math.isnan(float(value)):
-            return "無資料"
-        return f"{float(value):.2f}{suffix}"
-    except Exception:
-        return "無資料"
-
-
 def render_real_price_analysis(metrics):
     """Render real price analysis in Streamlit."""
     if not metrics:
-        st.info("資料不足，建議放寬條件")
+        st.info("\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u689d\u4ef6")
         return
 
     message = metrics.get("message", "")
@@ -422,43 +609,81 @@ def render_real_price_analysis(metrics):
         st.warning(message)
 
     c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("本案單價", _fmt_metric(metrics.get("target_unit_price"), " 萬/坪"))
-    c2.metric("周邊近一年均價", _fmt_metric(metrics.get("nearby_one_year_avg"), " 萬/坪"))
-    gap = metrics.get("price_gap_pct")
-    c3.metric("價格差距", _fmt_metric(gap, "%"))
-    c4.metric("近 5 年漲跌幅", _fmt_metric(metrics.get("five_year_change_pct"), "%"))
-    c5.metric("成交量", f"{metrics.get('transaction_count', 0)} 筆")
+    c1.metric("\u672c\u6848\u55ae\u50f9", _fmt_metric(metrics.get("target_unit_price"), " \u842c/\u576a"))
+    c2.metric("\u5468\u908a\u8fd1\u4e00\u5e74\u5747\u50f9", _fmt_metric(metrics.get("nearby_one_year_avg"), " \u842c/\u576a"))
+    c3.metric("\u50f9\u683c\u5dee\u8ddd", _fmt_metric(metrics.get("price_gap_pct"), "%"))
+    c4.metric("\u8fd1 5 \u5e74\u6f32\u8dcc\u5e45", _fmt_metric(metrics.get("five_year_change_pct"), "%"))
+    c5.metric("\u6210\u4ea4\u91cf", f"{metrics.get('transaction_count', 0)} \u7b46")
+
+    st.markdown("#### \u8b70\u50f9\u8207\u884c\u60c5\u5224\u65b7")
+    p1, p2, p3, p4 = st.columns(4)
+    p1.metric("\u5408\u7406\u55ae\u50f9\u5340\u9593", f"{_fmt_metric(metrics.get('reasonable_unit_price_low'), '')} ~ {_fmt_metric(metrics.get('reasonable_unit_price_high'), ' \u842c/\u576a')}")
+    p2.metric("\u5408\u7406\u7e3d\u50f9\u5340\u9593", _fmt_money_range(metrics.get("reasonable_total_low"), metrics.get("reasonable_total_high")))
+    p3.metric("\u5efa\u8b70\u51fa\u50f9\u5340\u9593", _fmt_money_range(metrics.get("suggested_offer_low"), metrics.get("suggested_offer_high")))
+    p4.metric("\u4f30\u8a08\u8b70\u50f9\u7a7a\u9593", _fmt_metric(metrics.get("negotiation_space_pct"), "%"))
+
+    st.markdown("#### \u8fd1 1 / 3 / 5 \u5e74\u884c\u60c5")
+    a1, a2, a3, a4 = st.columns(4)
+    a1.metric("\u8fd1\u4e00\u5e74\u5747\u50f9", _fmt_metric(metrics.get("nearby_one_year_avg"), " \u842c/\u576a"))
+    a2.metric("\u8fd1\u4e09\u5e74\u5747\u50f9", _fmt_metric(metrics.get("nearby_three_year_avg"), " \u842c/\u576a"))
+    a3.metric("\u8fd1\u4e94\u5e74\u5747\u50f9", _fmt_metric(metrics.get("nearby_five_year_avg"), " \u842c/\u576a"))
+    a4.metric("\u4ea4\u6613\u71b1\u5ea6", metrics.get("market_heat_label", "\u7121\u8cc7\u6599"))
+    st.caption(metrics.get("market_heat_detail", ""))
 
     yearly = metrics.get("yearly_avg_unit_price")
     if isinstance(yearly, pd.DataFrame) and not yearly.empty:
-        chart_df = yearly.set_index("年份")
-        st.line_chart(chart_df)
+        st.markdown("#### \u8fd1 5 \u5e74\u5e73\u5747\u55ae\u50f9\u8da8\u52e2")
+        st.line_chart(yearly.set_index("\u5e74\u4efd"))
     else:
-        st.info("近 5 年趨勢資料不足")
+        st.info("\u8fd1 5 \u5e74\u8da8\u52e2\u8cc7\u6599\u4e0d\u8db3")
+
+    dist = metrics.get("price_distribution")
+    if isinstance(dist, pd.DataFrame) and not dist.empty:
+        st.markdown("#### \u5468\u908a\u6210\u4ea4\u55ae\u50f9\u5206\u5e03")
+        st.bar_chart(dist.set_index("\u55ae\u50f9\u5340\u9593"))
+        target_band = dist.attrs.get("target_band", "")
+        if target_band:
+            st.caption(f"\u672c\u6848\u55ae\u50f9\u7d04\u843d\u5728\uff1a{target_band}")
+
+    ranking = metrics.get("district_ranking")
+    if isinstance(ranking, pd.DataFrame) and not ranking.empty:
+        st.markdown("#### \u884c\u653f\u5340\u884c\u60c5\u6392\u540d")
+        st.caption(metrics.get("district_rank_text", ""))
+        display_rank = ranking.head(10).copy()
+        if "\u5e73\u5747\u55ae\u50f9" in display_rank.columns:
+            display_rank["\u5e73\u5747\u55ae\u50f9"] = pd.to_numeric(display_rank["\u5e73\u5747\u55ae\u50f9"], errors="coerce").round(2)
+        st.dataframe(display_rank, use_container_width=True, hide_index=True)
 
     cases = metrics.get("similar_cases")
-    st.markdown("#### 相似成交案例前 10 筆")
+    st.markdown("#### \u76f8\u4f3c\u6210\u4ea4\u6848\u4f8b\u524d 10 \u7b46")
     if isinstance(cases, pd.DataFrame) and not cases.empty:
         st.dataframe(cases, use_container_width=True, hide_index=True)
     else:
-        st.info("資料不足，建議放寬條件")
+        st.info("\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u689d\u4ef6")
 
 
 def format_real_price_metrics_for_prompt(real_price_results):
     if not real_price_results:
-        return "\n【實價登錄價格分析】\n無實價登錄分析資料\n"
-    lines = ["\n【實價登錄價格分析】", "=" * 60]
+        return "\n\u3010\u5be6\u50f9\u767b\u9304\u50f9\u683c\u5206\u6790\u3011\n\u7121\u5be6\u50f9\u767b\u9304\u5206\u6790\u8cc7\u6599\n"
+    lines = ["\n\u3010\u5be6\u50f9\u767b\u9304\u50f9\u683c\u5206\u6790\u3011", "=" * 60]
     for house_name, result in real_price_results.items():
         if not result or result.get("error"):
-            lines.append(f"- {house_name}：{result.get('error', '資料不足，建議放寬條件') if isinstance(result, dict) else '資料不足，建議放寬條件'}")
+            msg = result.get("error", "\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u689d\u4ef6") if isinstance(result, dict) else "\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u689d\u4ef6"
+            lines.append(f"- {house_name}\uff1a{msg}")
             continue
         metrics = result.get("metrics", {})
         lines.append(
-            f"- {house_name}：本案單價 {_fmt_metric(metrics.get('target_unit_price'), ' 萬/坪')}；"
-            f"周邊近一年均價 {_fmt_metric(metrics.get('nearby_one_year_avg'), ' 萬/坪')}；"
-            f"價格差距 {_fmt_metric(metrics.get('price_gap_pct'), '%')}；"
-            f"近5年漲跌幅 {_fmt_metric(metrics.get('five_year_change_pct'), '%')}；"
-            f"相似成交量 {metrics.get('transaction_count', 0)} 筆。"
+            f"- {house_name}\uff1a\u672c\u6848\u55ae\u50f9 {_fmt_metric(metrics.get('target_unit_price'), ' \u842c/\u576a')}\uff1b"
+            f"\u5468\u908a\u8fd1\u4e00\u5e74\u5747\u50f9 {_fmt_metric(metrics.get('nearby_one_year_avg'), ' \u842c/\u576a')}\uff1b"
+            f"\u8fd1\u4e09\u5e74\u5747\u50f9 {_fmt_metric(metrics.get('nearby_three_year_avg'), ' \u842c/\u576a')}\uff1b"
+            f"\u8fd1\u4e94\u5e74\u5747\u50f9 {_fmt_metric(metrics.get('nearby_five_year_avg'), ' \u842c/\u576a')}\uff1b"
+            f"\u50f9\u683c\u5dee\u8ddd {_fmt_metric(metrics.get('price_gap_pct'), '%')}\uff1b"
+            f"\u5408\u7406\u7e3d\u50f9\u5340\u9593 {_fmt_money_range(metrics.get('reasonable_total_low'), metrics.get('reasonable_total_high'))}\uff1b"
+            f"\u5efa\u8b70\u51fa\u50f9\u5340\u9593 {_fmt_money_range(metrics.get('suggested_offer_low'), metrics.get('suggested_offer_high'))}\uff1b"
+            f"\u4f30\u8a08\u8b70\u50f9\u7a7a\u9593 {_fmt_metric(metrics.get('negotiation_space_pct'), '%')}\uff1b"
+            f"\u8fd15\u5e74\u6f32\u8dcc\u5e45 {_fmt_metric(metrics.get('five_year_change_pct'), '%')}\uff1b"
+            f"\u4ea4\u6613\u71b1\u5ea6 {metrics.get('market_heat_label', '\u7121\u8cc7\u6599')}\uff08{metrics.get('market_heat_detail', '\u7121\u8cc7\u6599')}\uff09\uff1b"
+            f"\u884c\u653f\u5340\u6392\u540d {metrics.get('district_rank_text', '\u7121\u8cc7\u6599')}\uff1b"
+            f"\u76f8\u4f3c\u6210\u4ea4\u91cf {metrics.get('transaction_count', 0)} \u7b46\u3002"
         )
     return "\n".join(lines) + "\n"
-
