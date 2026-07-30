@@ -5,6 +5,7 @@ from page_modules.search_page import render_search_page
 from page_modules.analysis_page import render_analysis_page
 from page_modules.analysis_records_page import render_analysis_records_page
 from page_modules.cp_ranking_page import render_cp_ranking_page
+from page_modules.assistant_page import render_assistant_page
 
 def main():
     st.set_page_config(layout="wide")
@@ -26,6 +27,8 @@ def main():
         render_analysis_records_page()
     elif st.session_state.current_page == 'cp_ranking':
         render_cp_ranking_page()
+    elif st.session_state.current_page == 'assistant':
+        render_assistant_page()
 
 if __name__ == "__main__":
     main()
