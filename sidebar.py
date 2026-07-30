@@ -30,6 +30,9 @@ def render_sidebar():
         # 重置搜尋頁面
         if 'current_search_page' in st.session_state:
             del st.session_state.current_search_page
+    
+    if st.sidebar.button("🤖 智能小幫手", use_container_width=True, key="assistant_button"):
+        st.session_state.current_page = 'assistant'
 
     
     # 設置區域
