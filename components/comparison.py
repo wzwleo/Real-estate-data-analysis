@@ -2209,7 +2209,6 @@ class ComparisonAnalyzer:
                     key="nuisance_facility_type_filter",
                 )
                 nuisance_display_df = nuisance_df[nuisance_df[type_col].isin(selected_nuisance_types)].copy() if nuisance_types else nuisance_df.copy()
-                st.caption(f"目前顯示 {len(nuisance_display_df)} / 原始 {len(nuisance_df)} 筆資料")
                 info = res.get("exclusion_info") or {"original_count": len(original_nuisance_df), "excluded_count": max(len(original_nuisance_df) - len(nuisance_df), 0), "included_count": len(nuisance_df)}
                 st.caption(f"原始嫌惡設施：{info['original_count']} 筆｜已排除：{info['excluded_count']} 筆｜目前納入分析：{info['included_count']} 筆")
                 if info.get("excluded_count", 0) > 0:
