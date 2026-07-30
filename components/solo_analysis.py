@@ -377,6 +377,7 @@ def plot_layout_distribution(target_row, df, chart_key=None):
         hovertemplate='<b>%{x}</b><br>平均單價: %{y:.2f} 萬/坪<extra></extra>'
     ))
     fig.update_layout(
+        font=dict(size=14),
         title=f"{target_district} 包含「{target_type_main}」的房型 前五格局供給與平均單價 (共 {len(df_valid)} 筆)",
         xaxis_title='格局',
         yaxis=dict(title='物件數量', side='left', showgrid=True, gridcolor='whitesmoke'),
@@ -479,6 +480,7 @@ def plot_floor_distribution(target_row, df, chart_key=None):
         hovertemplate='<b>%{x}</b><br>平均單價: %{y:.2f} 萬/坪<extra></extra>'
     ))
     fig.update_layout(
+        font=dict(size=14),
         title=f"{target_district}「{target_type_main}」樓層分布與單價趨勢 (共 {len(df_filtered)} 筆)",
         xaxis_title="樓層區間",
         yaxis=dict(title="房屋數量", showgrid=True),
@@ -596,6 +598,7 @@ def plot_age_distribution(target_row, df, chart_key=None):
         hovertemplate='<b>%{x}</b><br>平均建坪單價: %{y:.2f} 萬/坪<extra></extra>'
     ))
     fig.update_layout(
+        font=dict(size=14),
         title=f"{target_district} 包含「{target_type_main}」的房型 屋齡分布與單價趨勢 (共 {len(df_filtered_age)} 筆)",
         xaxis_title="屋齡範圍 (年)",
         yaxis=dict(title="房屋數量", side='left', showgrid=True, gridcolor='whitesmoke'),
@@ -706,6 +709,7 @@ def plot_price_scatter(target_row, df, chart_key=None):
     x_range = (0, x_center * 2.5)
     y_range = (0, y_center * 2.5)
     fig.update_layout(
+        font=dict(size=14),
         title=f'{target_district} 包含「{target_type}」的房型 房價 vs 建坪 (共 {len(df_filtered)} 筆)',
         xaxis_title='建坪 (坪)', yaxis_title='總價 (萬)',
         template='plotly_white', width=500, height=500,
@@ -864,6 +868,7 @@ def plot_space_efficiency_scatter(target_row, df, chart_key=None):
     )
     buffer = 1.5  # 放大倍率
     fig.update_layout(
+        font=dict(size=14),
         title=dict(
             text=f'{target_district} 包含「{target_type_main}」的房型 建坪 vs 實際坪數 (共 {len(df_filtered)} 筆)',
             x=0.9,         # 0=左邊，0.5=中間，1=右邊
@@ -2351,7 +2356,7 @@ def tab1_module():
     
             st.success("✅ 分析完成")
             st.header("🏡 房屋分析說明")
-            st.write("我們將針對所選房屋的五大面向逐一分析，包括價格、坪數、屋齡、樓層與格局。每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。")
+            st.markdown("<div style='font-size:20px;line-height:1.8'>我們將針對所選房屋的五大面向逐一分析，包括價格、坪數、屋齡、樓層與格局。每項分析都結合市場資料與 AI 評估，提供清楚、可理解的參考資訊。</div>", unsafe_allow_html=True)
             st.markdown("---")
     
             # ── 價格 ──
