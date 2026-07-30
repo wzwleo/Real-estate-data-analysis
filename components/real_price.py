@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 
@@ -600,15 +601,17 @@ def calculate_price_metrics(transactions, target_house):
 
 
 
+
+def _metric_num(value):
+    try:
+        n = float(value)
+        return n if not math.isnan(n) else math.nan
+    except (TypeError, ValueError):
+        return math.nan
+
+
 def _build_real_price_ai_explanation(metrics):
     """Build a concise local explanation from real price metrics."""
-    def _num(value):
-        try:
-            n = float(value)
-            return n if not math.isnan(n) else math.nan
-        except (TypeError, ValueError):
-            return math.nan
-
     if not metrics:
         return "\u8cc7\u6599\u4e0d\u8db3\uff0c\u66ab\u6642\u7121\u6cd5\u5f62\u6210\u50f9\u683c\u5224\u8b80\u3002"
 
@@ -621,8 +624,8 @@ def _build_real_price_ai_explanation(metrics):
     heat_detail = metrics.get("market_heat_detail", "")
     rank_text = metrics.get("district_rank_text", "")
 
-    if not math.isnan(_num(target)) and not math.isnan(_num(one_year)):
-        gap_value = _num(gap)
+    if not math.isnan(_metric_num(target)) and not math.isnan(_metric_num(one_year)):
+        gap_value = _metric_num(gap)
         if not math.isnan(gap_value):
             if gap_value > 10:
                 lines.append(f"\u672c\u6848\u55ae\u50f9 {_fmt_metric(target, ' \u842c/\u576a')}\uff0c\u6bd4\u5468\u908a\u8fd1\u4e00\u5e74\u5747\u50f9 {_fmt_metric(one_year, ' \u842c/\u576a')} \u9ad8\u7d04 {_fmt_metric(gap, '%')}\uff0c\u50f9\u683c\u504f\u9ad8\uff0c\u5efa\u8b70\u628a\u5be6\u50f9\u6848\u4f8b\u3001\u6a13\u5c64\u3001\u5c4b\u6cc1\u8207\u8eca\u4f4d\u689d\u4ef6\u62ff\u4f86\u8b70\u50f9\u3002")
@@ -638,7 +641,7 @@ def _build_real_price_ai_explanation(metrics):
     negotiation = _fmt_metric(metrics.get("negotiation_space_pct"), "%")
     lines.append(f"\u4ee5\u76ee\u524d\u7be9\u51fa\u7684\u8fd1\u4f3c\u4ea4\u6613\u63a8\u4f30\uff0c\u5408\u7406\u7e3d\u50f9\u5340\u9593\u7d04 {money_range}\uff0c\u5efa\u8b70\u51fa\u50f9\u5340\u9593\u7d04 {offer_range}\uff0c\u4f30\u8a08\u8b70\u50f9\u7a7a\u9593\u7d04 {negotiation}\u3002")
 
-    five_value = _num(five_change)
+    five_value = _metric_num(five_change)
     if not math.isnan(five_value):
         if five_value > 8:
             trend_text = "\u8fd1\u4e94\u5e74\u50f9\u683c\u5448\u660e\u986f\u4e0a\u5347\uff0c\u4ee3\u8868\u5340\u57df\u884c\u60c5\u6709\u652f\u6490\uff0c\u4f46\u8ffd\u50f9\u98a8\u96aa\u4e5f\u8f03\u9ad8\u3002"
@@ -655,6 +658,60 @@ def _build_real_price_ai_explanation(metrics):
 
     lines.append("\u63d0\u9192\uff1a\u6b64\u8aaa\u660e\u7531\u5be6\u50f9\u767b\u9304\u7d71\u8a08\u8cc7\u6599\u81ea\u52d5\u6574\u7406\uff0c\u5c6c\u65bc\u8f14\u52a9\u5224\u8b80\uff0c\u4e0d\u7b49\u65bc\u4f30\u50f9\u6216\u4fdd\u8b49\u6210\u4ea4\u50f9\uff1b\u4ecd\u9700\u6bd4\u5c0d\u6a13\u5c64\u3001\u5c4b\u6cc1\u3001\u8eca\u4f4d\u3001\u88dd\u6f62\u3001\u7ba1\u7406\u54c1\u8cea\u8207\u5be6\u969b\u6210\u4ea4\u689d\u4ef6\u3002")
     return "\n\n".join(lines)
+
+
+def _build_negotiation_ai_explanation(metrics):
+    base = metrics.get("nearby_one_year_avg")
+    if math.isnan(_metric_num(base)):
+        base = metrics.get("nearby_five_year_avg")
+        source = "\u8fd1\u4e94\u5e74\u5747\u50f9"
+    else:
+        source = "\u5468\u908a\u8fd1\u4e00\u5e74\u5747\u50f9"
+    unit_low = metrics.get("reasonable_unit_price_low")
+    unit_high = metrics.get("reasonable_unit_price_high")
+    total_low = metrics.get("reasonable_total_low")
+    total_high = metrics.get("reasonable_total_high")
+    area = math.nan
+    if not math.isnan(_metric_num(total_low)) and not math.isnan(_metric_num(unit_low)) and _metric_num(unit_low) > 0:
+        area = _metric_num(total_low) / _metric_num(unit_low)
+    lines = [
+        f"\u5408\u7406\u55ae\u50f9\u5340\u9593\uff1a\u4ee5{source} {_fmt_metric(base, ' \u842c/\u576a')} \u70ba\u57fa\u6e96\uff0c\u4e0a\u4e0b\u5404 5% \u4f30\u7b97\uff0c\u5f97\u5230 {_fmt_metric(unit_low, ' \u842c/\u576a')} ~ {_fmt_metric(unit_high, ' \u842c/\u576a')}\u3002",
+        f"\u5408\u7406\u7e3d\u50f9\u5340\u9593\uff1a\u5c07\u5408\u7406\u55ae\u50f9\u4e58\u4e0a\u672c\u6848\u5efa\u576a\u7d04 {_fmt_metric(area, ' \u576a')}\uff0c\u5f97\u5230 {_fmt_money_range(total_low, total_high)}\u3002",
+        f"\u5efa\u8b70\u51fa\u50f9\u5340\u9593\uff1a\u4ee5{source}\u7684 92% ~ 98% \u4e58\u4e0a\u5efa\u576a\u63a8\u4f30\uff0c\u5f97\u5230 {_fmt_money_range(metrics.get('suggested_offer_low'), metrics.get('suggested_offer_high'))}\uff0c\u7528\u4f86\u4fdd\u7559\u8b70\u50f9\u7a7a\u9593\u3002",
+        f"\u4f30\u8a08\u8b70\u50f9\u7a7a\u9593\uff1a\u82e5\u672c\u6848\u7e3d\u50f9\u9ad8\u65bc\u5408\u7406\u7e3d\u50f9\u4e0a\u7de3\uff0c\u5c07\u8d85\u51fa\u90e8\u5206\u9664\u4ee5\u672c\u6848\u7e3d\u50f9\u4f30\u7b97\uff0c\u76ee\u524d\u7d04 {_fmt_metric(metrics.get('negotiation_space_pct'), '%')}\u3002",
+    ]
+    return "\n\n".join(lines)
+
+
+def _build_trend_ai_explanation(metrics):
+    return (
+        f"\u8fd1\u4e00\u5e74\u5747\u50f9\u70ba {_fmt_metric(metrics.get('nearby_one_year_avg'), ' \u842c/\u576a')}\uff0c"
+        f"\u8fd1\u4e09\u5e74\u70ba {_fmt_metric(metrics.get('nearby_three_year_avg'), ' \u842c/\u576a')}\uff0c"
+        f"\u8fd1\u4e94\u5e74\u70ba {_fmt_metric(metrics.get('nearby_five_year_avg'), ' \u842c/\u576a')}\u3002"
+        f"\u8fd1\u4e94\u5e74\u6f32\u8dcc\u5e45 {_fmt_metric(metrics.get('five_year_change_pct'), '%')}\uff0c"
+        f"\u4ea4\u6613\u71b1\u5ea6\u70ba {metrics.get('market_heat_label', '\u7121\u8cc7\u6599')}\u3002{metrics.get('market_heat_detail', '')}"
+    )
+
+
+def _build_distribution_ai_explanation(metrics, dist):
+    target_band = dist.attrs.get("target_band", "") if isinstance(dist, pd.DataFrame) else ""
+    if target_band:
+        return f"\u5206\u5e03\u5716\u7528\u6bcf 5 \u842c/\u576a\u4f5c\u70ba\u5340\u9593\uff0c\u7d71\u8a08\u76f8\u4f3c\u6210\u4ea4\u843d\u5728\u5404\u55ae\u50f9\u5e36\u7684\u7b46\u6578\u3002\u672c\u6848\u55ae\u50f9\u7d04\u843d\u5728 {target_band}\uff0c\u53ef\u4ee5\u89c0\u5bdf\u5b83\u662f\u5426\u843d\u5728\u4e3b\u6d41\u6210\u4ea4\u50f9\u5e36\u5167\u3002"
+    return "\u50f9\u683c\u5206\u5e03\u8cc7\u6599\u4e0d\u8db3\uff0c\u66ab\u6642\u96e3\u4ee5\u5224\u65b7\u672c\u6848\u55ae\u50f9\u5728\u5468\u908a\u6210\u4ea4\u4e2d\u7684\u4f4d\u7f6e\u3002"
+
+
+def _build_district_ai_explanation(metrics):
+    rank_text = metrics.get("district_rank_text", "")
+    if rank_text and rank_text != "\u7121\u8cc7\u6599":
+        return f"{rank_text}\u3002\u884c\u653f\u5340\u6392\u540d\u53ef\u7528\u4f86\u5224\u65b7\u8a72\u5340\u5728\u53f0\u4e2d\u5e02\u7684\u50f9\u683c\u4f4d\u968e\uff0c\u4f46\u5be6\u969b\u8b70\u50f9\u4ecd\u61c9\u56de\u5230\u540c\u5340\u57df\u3001\u540c\u985e\u578b\u3001\u540c\u5c4b\u9f61\u7684\u6848\u4f8b\u6bd4\u5c0d\u3002"
+    return "\u884c\u653f\u5340\u6392\u540d\u8cc7\u6599\u4e0d\u8db3\uff0c\u5efa\u8b70\u4ee5\u76f8\u4f3c\u6210\u4ea4\u6848\u4f8b\u70ba\u4e3b\u3002"
+
+
+def _build_cases_ai_explanation(cases):
+    if isinstance(cases, pd.DataFrame) and not cases.empty:
+        high_count = int((cases.get("\u53ef\u6bd4\u6027", pd.Series(dtype=str)).astype(str) == "\u9ad8").sum()) if "\u53ef\u6bd4\u6027" in cases.columns else 0
+        return f"\u76f8\u4f3c\u6848\u4f8b\u512a\u5148\u770b\u53ef\u6bd4\u6027\u3001\u5efa\u576a\u3001\u5c4b\u9f61\u8207\u6210\u4ea4\u65e5\u671f\u3002\u76ee\u524d\u524d 10 \u7b46\u4e2d\u6709 {high_count} \u7b46\u6a19\u793a\u70ba\u9ad8\u53ef\u6bd4\u6027\uff0c\u8b70\u50f9\u6642\u53ef\u512a\u5148\u62ff\u9019\u4e9b\u6848\u4f8b\u5c0d\u7167\u3002"
+    return "\u76f8\u4f3c\u6210\u4ea4\u6848\u4f8b\u4e0d\u8db3\uff0c\u5efa\u8b70\u653e\u5bec\u5efa\u576a\u3001\u5c4b\u9f61\u6216\u5efa\u7269\u578b\u614b\u689d\u4ef6\u518d\u6bd4\u5c0d\u3002"
 
 
 def render_real_price_analysis(metrics):
@@ -682,6 +739,7 @@ def render_real_price_analysis(metrics):
 
     with tabs[1]:
         st.markdown("#### \u8b70\u50f9\u8207\u884c\u60c5\u5224\u65b7")
+        st.info(_build_negotiation_ai_explanation(metrics))
         p1, p2, p3, p4 = st.columns(4)
         p1.metric("\u5408\u7406\u55ae\u50f9\u5340\u9593", f"{_fmt_metric(metrics.get('reasonable_unit_price_low'), '')} ~ {_fmt_metric(metrics.get('reasonable_unit_price_high'), ' \u842c/\u576a')}")
         p2.metric("\u5408\u7406\u7e3d\u50f9\u5340\u9593", _fmt_money_range(metrics.get("reasonable_total_low"), metrics.get("reasonable_total_high")))
@@ -691,6 +749,7 @@ def render_real_price_analysis(metrics):
 
     with tabs[2]:
         st.markdown("#### \u8fd1 1 / 3 / 5 \u5e74\u884c\u60c5")
+        st.info(_build_trend_ai_explanation(metrics))
         a1, a2, a3, a4 = st.columns(4)
         a1.metric("\u8fd1\u4e00\u5e74\u5747\u50f9", _fmt_metric(metrics.get("nearby_one_year_avg"), " \u842c/\u576a"))
         a2.metric("\u8fd1\u4e09\u5e74\u5747\u50f9", _fmt_metric(metrics.get("nearby_three_year_avg"), " \u842c/\u576a"))
@@ -707,8 +766,14 @@ def render_real_price_analysis(metrics):
     with tabs[3]:
         dist = metrics.get("price_distribution")
         st.markdown("#### \u5468\u908a\u6210\u4ea4\u55ae\u50f9\u5206\u5e03")
+        st.info(_build_distribution_ai_explanation(metrics, dist))
         if isinstance(dist, pd.DataFrame) and not dist.empty:
-            st.bar_chart(dist.set_index("\u55ae\u50f9\u5340\u9593"))
+            fig = px.bar(dist, x="\u55ae\u50f9\u5340\u9593", y="\u6210\u4ea4\u7b46\u6578", text="\u6210\u4ea4\u7b46\u6578")
+            fig.update_traces(textposition="outside", marker_color="#79bdf2")
+            fig.update_xaxes(tickangle=0, automargin=True)
+            fig.update_yaxes(title_text="\u6210\u4ea4\u7b46\u6578")
+            fig.update_layout(height=380, margin=dict(l=20, r=20, t=20, b=70), xaxis_title="", showlegend=False)
+            st.plotly_chart(fig, use_container_width=True)
             target_band = dist.attrs.get("target_band", "")
             if target_band:
                 st.caption(f"\u672c\u6848\u55ae\u50f9\u7d04\u843d\u5728\uff1a{target_band}")
@@ -718,6 +783,7 @@ def render_real_price_analysis(metrics):
     with tabs[4]:
         ranking = metrics.get("district_ranking")
         st.markdown("#### \u884c\u653f\u5340\u884c\u60c5\u6392\u540d")
+        st.info(_build_district_ai_explanation(metrics))
         if isinstance(ranking, pd.DataFrame) and not ranking.empty:
             st.caption(metrics.get("district_rank_text", ""))
             display_rank = ranking.head(10).copy()
@@ -730,6 +796,7 @@ def render_real_price_analysis(metrics):
     with tabs[5]:
         cases = metrics.get("similar_cases")
         st.markdown("#### \u76f8\u4f3c\u6210\u4ea4\u6848\u4f8b\u524d 10 \u7b46")
+        st.info(_build_cases_ai_explanation(cases))
         if isinstance(cases, pd.DataFrame) and not cases.empty:
             st.dataframe(cases, use_container_width=True, hide_index=True)
         else:
