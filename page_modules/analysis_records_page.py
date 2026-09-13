@@ -1,7 +1,5 @@
 import streamlit as st
 import pandas as pd
-import streamlit as st
-import pandas as pd
 from components.solo_analysis import (
     plot_price_scatter,
     plot_space_efficiency_scatter,
@@ -10,6 +8,22 @@ from components.solo_analysis import (
     plot_layout_distribution,
     create_radar_chart,
 )
+from utils import get_property_image_url, render_analysis_hero
+
+
+def _record_photo_row(result):
+    selected = result.get("selected_row") or {}
+    house_data = result.get("house_data") or {}
+    row = dict(selected) if isinstance(selected, dict) else {}
+    row["標題"] = result.get("house_title") or row.get("標題") or house_data.get("標題") or "未提供"
+    row["地址"] = result.get("house_address") or row.get("地址") or "未提供"
+    if not row.get("類型"):
+        row["類型"] = house_data.get("類型", "")
+    if not get_property_image_url(row):
+        pid = result.get("property_id") or row.get("編號")
+        if pid and str(pid).strip() not in ("", "nan", "None"):
+            row["圖片網址"] = f"https://res.sinyi.com.tw/buy/{pid}/smallimg/A.JPG"
+    return row
 
 def render_analysis_records_page():
     st.title("📚 分析結果總覽")
@@ -47,22 +61,9 @@ def render_analysis_records_page():
             # ===============================
             # 顯示基本資訊
             # ===============================
-            st.markdown(f"""
-            <div style="
-                border:2px solid #4CAF50;
-                border-radius:10px;
-                padding:10px;
-                background-color:#1f1f1f;
-                text-align:center;
-                color:white;
-            ">
-                <div style="font-size:40px; font-weight:bold;">{result.get('house_title','未提供')}</div>
-                <div style="font-size:20px;">📍 {result.get('house_address','未提供')}</div>
-                <div style="font-size:14px; color:#cccccc; margin-top:5px;">
-                    分析時間：{result.get('timestamp', '未知')}
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+            photo_row = _record_photo_row(result)
+            render_analysis_hero(photo_row, eyebrow="分析結果總覽")
+            st.caption(f"分析時間：{result.get('timestamp', '未知')}")
             
             st.write("\n")
             
