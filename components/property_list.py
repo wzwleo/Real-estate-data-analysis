@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils import display_pagination
+from utils import display_pagination, render_property_image
 from components.favorites import FavoritesManager, normalize_property_id
 
 def display_pagination(df, items_per_page=10):
@@ -78,7 +78,9 @@ def render_property_card(row, current_page, idx):
     with st.container():
         global_idx = (current_page - 1) * 10 + idx + 1
 
-        col1, col2, col3, col4 = st.columns([7, 1, 1, 2])
+        col_img, col1, col4 = st.columns([2.2, 5.3, 2])
+        with col_img:
+            render_property_image(row, height=140)
         with col1:
             display_age = "預售" if row['屋齡'] == 0 else f"{row['屋齡']}年"
             st.subheader(f"#{global_idx} 🏠 {row['標題']}")
