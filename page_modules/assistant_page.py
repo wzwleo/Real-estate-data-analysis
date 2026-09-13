@@ -6,6 +6,7 @@ import re
 import json
 import html
 import google.generativeai as genai
+import plotly.express as px
 from components.favorites import FavoritesManager, normalize_property_id
 from utils import get_property_image_url
 from components.nuisance_lookup import (
@@ -14,6 +15,19 @@ from components.nuisance_lookup import (
     render_nuisance_result,
     DEFAULT_RADIUS as NUISANCE_RADIUS,
 )
+
+try:
+    from components.real_price import (
+        load_cached_real_price_data,
+        filter_nearby_transactions,
+        calculate_price_metrics,
+    )
+    REAL_PRICE_OK = True
+except Exception:
+    REAL_PRICE_OK = False
+    load_cached_real_price_data = None
+    filter_nearby_transactions = None
+    calculate_price_metrics = None
 
 
 # ══════════════════════════════════════════════
@@ -34,6 +48,242 @@ def _load_data():
         return df
     except Exception as e:
         return None
+
+
+def _round_num(value, digits=2):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return ""
+    if pd.isna(number):
+        return ""
+    return round(number, digits)
+
+
+def _load_real_price():
+    """Load cleaned 實價登錄 via existing real_price helpers; cache across reruns."""
+    if not REAL_PRICE_OK:
+        return pd.DataFrame()
+    try:
+        df = _cached_taichung_real_price()
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty:
+        return pd.DataFrame()
+    return df
+
+
+@st.cache_data(show_spinner="載入實價登錄中，第一次約 20 秒…", ttl=6 * 3600)
+def _cached_taichung_real_price():
+    return load_cached_real_price_data("台中市")
+
+
+def _filter_real_price(df, district="", housetype=""):
+    if df is None or df.empty:
+        return pd.DataFrame()
+    work = df.copy()
+    if "交易日期" in work.columns:
+        work["交易日期"] = pd.to_datetime(work["交易日期"], errors="coerce")
+        cutoff = pd.Timestamp.now() - pd.DateOffset(years=5)
+        work = work[work["交易日期"] >= cutoff]
+    if district:
+        work = work[work["行政區"].astype(str).str.contains(str(district).replace("台中市", "").strip(), na=False)]
+    if housetype:
+        token = str(housetype).strip()
+        alias = token
+        for key, short in (
+            ("住宅大樓", "大樓"), ("大樓", "大樓"), ("華廈", "華廈"),
+            ("公寓", "公寓"), ("套房", "套房"), ("透天", "透天"), ("別墅", "透天"),
+        ):
+            if key in token:
+                alias = short
+                break
+        type_col = "建物類型簡稱" if "建物類型簡稱" in work.columns else "建物型態"
+        work = work[work[type_col].astype(str).str.contains(alias, na=False)]
+    return work
+
+
+def _real_price_market_stats(district="", housetype=""):
+    df = _load_real_price()
+    if df is None or df.empty:
+        return {"實價來源": "無法載入實價登錄", "實價成交筆數": 0}
+    filtered = _filter_real_price(df, district, housetype)
+    if filtered.empty:
+        return {
+            "實價來源": "內政部實價登錄",
+            "實價成交筆數": 0,
+            "說明": "這個條件下沒有足夠成交",
+            "近期成交案例": [],
+        }
+
+    filtered = filtered.copy()
+    filtered["_unit"] = pd.to_numeric(filtered.get("單價(萬/坪)"), errors="coerce")
+    filtered["_price"] = pd.to_numeric(filtered.get("總價(萬)"), errors="coerce")
+    filtered["_area"] = pd.to_numeric(filtered.get("建坪"), errors="coerce")
+    filtered["_date"] = pd.to_datetime(filtered.get("交易日期"), errors="coerce")
+    last_year = filtered[filtered["_date"] >= (pd.Timestamp.now() - pd.DateOffset(years=1))]
+
+    type_col = "建物類型簡稱" if "建物類型簡稱" in filtered.columns else "建物型態"
+    cases = []
+    recent = filtered.dropna(subset=["_date"]).sort_values("_date", ascending=False).head(8)
+    for _, row in recent.iterrows():
+        tx_date = row["_date"]
+        cases.append({
+            "交易日期": tx_date.strftime("%Y-%m-%d") if pd.notna(tx_date) else "",
+            "類型": str(row.get(type_col, "") or ""),
+            "地址": str(row.get("地址", "") or ""),
+            "建坪": _round_num(row.get("_area"), 1),
+            "總價(萬)": _round_num(row.get("_price"), 0),
+            "單價(萬/坪)": _round_num(row.get("_unit")),
+        })
+
+    yearly = (
+        filtered.dropna(subset=["_date", "_unit"])
+        .assign(_year=lambda d: d["_date"].dt.year)
+        .groupby("_year")["_unit"]
+        .median()
+        .reset_index()
+        .sort_values("_year")
+    )
+    trend = [
+        {"年": int(row["_year"]), "中位單價(萬/坪)": _round_num(row["_unit"])}
+        for _, row in yearly.iterrows()
+        if _round_num(row["_unit"]) != ""
+    ]
+
+    stats = {
+        "實價來源": "內政部實價登錄（已清理）",
+        "實價區域": district or "全台中市",
+        "實價類型": housetype or "不限",
+        "近五年成交筆數": int(len(filtered)),
+        "近五年中位數單價(萬/坪)": _round_num(filtered["_unit"].median()),
+        "近五年中位數總價(萬)": _round_num(filtered["_price"].median(), 0),
+        "近一年成交筆數": int(len(last_year)),
+        "近一年中位數單價(萬/坪)": _round_num(last_year["_unit"].median()) if not last_year.empty else "",
+        "近一年中位數總價(萬)": _round_num(last_year["_price"].median(), 0) if not last_year.empty else "",
+        "實價最早交易": filtered["_date"].min().strftime("%Y-%m-%d") if filtered["_date"].notna().any() else "",
+        "實價最晚交易": filtered["_date"].max().strftime("%Y-%m-%d") if filtered["_date"].notna().any() else "",
+        "近期成交案例": cases,
+        "單價走勢": trend,
+    }
+    if last_year.empty:
+        stats["近一年中位數單價(萬/坪)"] = ""
+        stats["近一年中位數總價(萬)"] = ""
+        stats["說明"] = "近一年樣本不足，下列中位數改看近五年"
+    return {k: v for k, v in stats.items() if v != "" and v != []}
+
+
+def _render_real_price_panel(view, chart_key="rp_trend"):
+    if not view:
+        return
+    if view.get("error"):
+        st.warning(view.get("error"))
+        return
+    if view.get("實價來源") == "無法載入實價登錄":
+        st.warning("實價登錄沒有載到，目前不能用成交價回答。")
+        return
+
+    st.markdown("#### 實價登錄成交")
+    caption = "、".join(
+        part for part in [
+            str(view.get("實價來源") or ""),
+            str(view.get("實價區域") or view.get("行政區") or ""),
+            str(view.get("實價類型") or ""),
+            f"{view.get('實價最晚交易', '')} 以前".strip() if view.get("實價最晚交易") else "",
+        ] if part
+    )
+    if caption:
+        st.caption(caption)
+
+    if view.get("判斷"):
+        st.info(f"{view.get('判斷')}｜開價單價 {view.get('物件開價單價(萬/坪)', '—')} 萬/坪，相對成交 {view.get('開價相對成交(%)', '—')}%")
+
+    cols = st.columns(4)
+    cols[0].metric("近一年筆數", view.get("近一年成交筆數", view.get("可比成交筆數", "—")))
+    cols[1].metric("近一年中位單價", f"{view.get('近一年中位數單價(萬/坪)', view.get('附近一年成交均價(萬/坪)', '—'))} 萬/坪")
+    cols[2].metric("近一年中位總價", f"{view.get('近一年中位數總價(萬)', '—')} 萬")
+    cols[3].metric("近五年中位單價", f"{view.get('近五年中位數單價(萬/坪)', view.get('附近五年成交均價(萬/坪)', '—'))} 萬/坪")
+
+    cases = view.get("近期成交案例") or view.get("近期可比案例") or []
+    if cases:
+        st.dataframe(pd.DataFrame(cases), use_container_width=True, hide_index=True)
+
+    trend = view.get("單價走勢") or []
+    if len(trend) >= 2:
+        trend_df = pd.DataFrame(trend)
+        fig = px.line(
+            trend_df,
+            x="年",
+            y="中位單價(萬/坪)",
+            markers=True,
+            title="實價中位單價走勢",
+        )
+        fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=20))
+        st.plotly_chart(fig, use_container_width=True, key=chart_key)
+
+
+def _metrics_for_assistant(metrics, house=None):
+    gap = metrics.get("price_gap_pct")
+    try:
+        gap_num = float(gap)
+        gap_ok = not pd.isna(gap_num)
+    except (TypeError, ValueError):
+        gap_num = None
+        gap_ok = False
+    if gap_ok and gap_num > 8:
+        verdict = "開價偏高"
+    elif gap_ok and gap_num < -5:
+        verdict = "開價相對實價親民"
+    elif gap_ok:
+        verdict = "開價接近近期成交"
+    else:
+        verdict = "成交樣本不足，僅供參考"
+
+    cases = metrics.get("similar_cases")
+    case_rows = []
+    if isinstance(cases, pd.DataFrame) and not cases.empty:
+        keep = [c for c in ["交易日期", "行政區", "建物型態", "地址", "建坪", "屋齡", "樓層", "格局", "總價(萬)", "單價(萬/坪)"] if c in cases.columns]
+        for rec in cases.head(5)[keep].to_dict("records"):
+            case_rows.append({k: _native(v) for k, v in rec.items()})
+
+    title = (house or {}).get("標題", "")
+    return {
+        "房屋": title,
+        "資料來源": "內政部實價登錄",
+        "判斷": verdict,
+        "物件開價單價(萬/坪)": _round_num(metrics.get("target_unit_price")),
+        "附近一年成交均價(萬/坪)": _round_num(metrics.get("nearby_one_year_avg")),
+        "附近三年成交均價(萬/坪)": _round_num(metrics.get("nearby_three_year_avg")),
+        "附近五年成交均價(萬/坪)": _round_num(metrics.get("nearby_five_year_avg")),
+        "開價相對成交(%)": _round_num(gap_num, 1) if gap_ok else "",
+        "可比成交筆數": int(metrics.get("transaction_count") or 0),
+        "合理單價下限(萬/坪)": _round_num(metrics.get("reasonable_unit_price_low")),
+        "合理單價上限(萬/坪)": _round_num(metrics.get("reasonable_unit_price_high")),
+        "建議議價總價下限(萬)": _round_num(metrics.get("suggested_offer_low"), 0),
+        "建議議價總價上限(萬)": _round_num(metrics.get("suggested_offer_high"), 0),
+        "說明": metrics.get("message") or "",
+        "近期可比案例": case_rows,
+        "單價走勢": _trend_from_metrics(metrics),
+    }
+
+
+def _trend_from_metrics(metrics):
+    yearly = metrics.get("yearly_avg_unit_price")
+    if not isinstance(yearly, pd.DataFrame) or yearly.empty:
+        return []
+    year_col = "年份" if "年份" in yearly.columns else yearly.columns[0]
+    value_col = "平均單價(萬/坪)" if "平均單價(萬/坪)" in yearly.columns else yearly.columns[-1]
+    rows = []
+    for _, row in yearly.sort_values(year_col).iterrows():
+        unit = _round_num(row[value_col])
+        if unit == "":
+            continue
+        try:
+            year = int(row[year_col])
+        except (TypeError, ValueError):
+            continue
+        rows.append({"年": year, "中位單價(萬/坪)": unit})
+    return rows
 
 
 def _parse_age(x):
@@ -320,25 +570,39 @@ def tool_get_market_stats(district="", housetype=""):
     filtered['_area']  = pd.to_numeric(filtered['建坪'], errors='coerce')
     filtered['_age']   = filtered['屋齡'].apply(_parse_age)
 
-    stats = {
+    listing = {
+        "來源": "信義房屋在售開價，不是成交價",
         "區域": district or "全台中市",
         "類型": housetype or "不限",
-        "總筆數": int(len(filtered)),
-        "中位數總價(萬)": round(filtered['_price'].median(), 0),
-        "平均總價(萬)": round(filtered['_price'].mean(), 0),
-        "最低總價(萬)": round(filtered['_price'].min(), 0),
-        "最高總價(萬)": round(filtered['_price'].max(), 0),
-        "中位數建坪": round(filtered['_area'].median(), 1),
-        "中位數屋齡": round(filtered['_age'].median(), 1),
+        "在售筆數": int(len(filtered)),
+        "在售中位數總價(萬)": round(filtered['_price'].median(), 0),
+        "在售平均總價(萬)": round(filtered['_price'].mean(), 0),
+        "在售最低總價(萬)": round(filtered['_price'].min(), 0),
+        "在售最高總價(萬)": round(filtered['_price'].max(), 0),
+        "在售中位數建坪": round(filtered['_area'].median(), 1),
+        "在售中位數屋齡": round(filtered['_age'].median(), 1),
     }
 
     if filtered['_area'].notna().any() and filtered['_price'].notna().any():
         valid = filtered.dropna(subset=['_price', '_area'])
         valid = valid[valid['_area'] > 0]
         valid['_unit'] = valid['_price'] / valid['_area']
-        stats["中位數單價(萬/坪)"] = round(valid['_unit'].median(), 2)
-    stats = {k: (int(v) if isinstance(v, np.integer) else float(v) if isinstance(v, np.floating) else v) for k, v in stats.items()}
-    return stats
+        listing["在售中位數單價(萬/坪)"] = round(valid['_unit'].median(), 2)
+    listing = {k: (int(v) if isinstance(v, np.integer) else float(v) if isinstance(v, np.floating) else v) for k, v in listing.items()}
+    real = _real_price_market_stats(district, housetype)
+    st.session_state["_agent_real_price_view"] = real
+    return {
+        "注意": "問成交價、最近成交、實價時，只能用「實價成交」；「在售開價」是賣家要價，不能說成成交價。",
+        "在售開價": listing,
+        "實價成交": real,
+    }
+
+
+def tool_get_real_price_stats(district="", housetype=""):
+    """只回傳內政部實價登錄，不含信義開價。"""
+    real = _real_price_market_stats(district, housetype)
+    st.session_state["_agent_real_price_view"] = real
+    return real
 
 
 def tool_get_property_detail(title="", property_id=""):
@@ -443,17 +707,65 @@ def tool_rank_districts(housetype="", sort_by="median_unit"):
     ).reset_index()
     sort_col = "中位數單價萬坪" if sort_by != "median_price" else "中位數總價萬"
     grouped = grouped.sort_values(sort_col, ascending=True)
+    real_df = _load_real_price()
+    real_medians = {}
+    real_counts = {}
+    if real_df is not None and not real_df.empty:
+        real_filtered = _filter_real_price(real_df, "", housetype)
+        if not real_filtered.empty:
+            real_filtered = real_filtered.copy()
+            real_filtered["_unit"] = pd.to_numeric(real_filtered["單價(萬/坪)"], errors="coerce")
+            real_group = real_filtered.groupby("行政區").agg(
+                實價筆數=("_unit", "count"),
+                實價中位數單價=("_unit", "median"),
+            )
+            real_medians = real_group["實價中位數單價"].to_dict()
+            real_counts = real_group["實價筆數"].to_dict()
     rows = []
     for _, row in grouped.head(12).iterrows():
-        rows.append({
-            "行政區": row["行政區"],
-            "物件數": int(row["物件數"]),
-            "中位數總價(萬)": round(float(row["中位數總價萬"]), 0),
-            "平均總價(萬)": round(float(row["平均總價萬"]), 0),
-            "中位數單價(萬/坪)": round(float(row["中位數單價萬坪"]), 2) if pd.notna(row["中位數單價萬坪"]) else "",
-            "中位數建坪": round(float(row["中位數建坪"]), 1) if pd.notna(row["中位數建坪"]) else "",
-        })
+        district = row["行政區"]
+        item = {
+            "行政區": district,
+            "在售物件數": int(row["物件數"]),
+            "在售中位數總價(萬)": round(float(row["中位數總價萬"]), 0),
+            "在售中位數單價(萬/坪)": round(float(row["中位數單價萬坪"]), 2) if pd.notna(row["中位數單價萬坪"]) else "",
+            "在售中位數建坪": round(float(row["中位數建坪"]), 1) if pd.notna(row["中位數建坪"]) else "",
+        }
+        if district in real_medians and pd.notna(real_medians[district]):
+            item["實價成交筆數"] = int(real_counts.get(district, 0))
+            item["實價中位數單價(萬/坪)"] = round(float(real_medians[district]), 2)
+        rows.append(item)
+    if any("實價中位數單價(萬/坪)" in r for r in rows):
+        rows.sort(key=lambda r: r.get("實價中位數單價(萬/坪)") if r.get("實價中位數單價(萬/坪)") != "" else 10**9)
     return rows
+
+
+def tool_compare_ask_to_real_price(title="", property_id=""):
+    if not REAL_PRICE_OK:
+        return {"error": "實價登錄模組無法載入"}
+    houses = _lookup_houses([title] if title else [], property_id)
+    if not houses:
+        scored = st.session_state.get("_agent_scored_cache") or []
+        if scored and not title and not property_id:
+            houses = scored[:1]
+    if not houses:
+        return {"error": "請先指出要查哪一間，或先搜尋推薦物件"}
+
+    house = houses[0]
+    df = _load_real_price()
+    if df is None or df.empty:
+        return {"error": "實價登錄資料無法載入"}
+    try:
+        transactions = filter_nearby_transactions(df, house)
+        metrics = calculate_price_metrics(transactions, house)
+    except Exception as exc:
+        return {"error": f"實價比對失敗：{exc}"}
+    payload = _metrics_for_assistant(metrics, house)
+    payload["行政區"] = house.get("行政區", "")
+    payload["開價總價(萬)"] = _native(house.get("總價(萬)", ""))
+    payload["建坪"] = _native(house.get("建坪", ""))
+    st.session_state["_agent_real_price_view"] = payload
+    return payload
 
 
 def tool_check_nearby_nuisances(title="", property_id="", radius=500):
@@ -503,12 +815,24 @@ TOOLS = [
             },
             {
                 "name": "get_market_stats",
-                "description": "取得特定區域與類型的市場統計，含中位數價格、坪數、屋齡、單價",
+                "description": "取得信義在售開價統計。不要用這個回答成交價。",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "district":  {"type": "string", "description": "行政區名稱"},
                         "housetype": {"type": "string", "description": "房屋類型"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "get_real_price_stats",
+                "description": "查內政部實價登錄成交價。問最近成交、成交價、實價、均價成交時一定要用這個，不要用 get_market_stats。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "district": {"type": "string", "description": "行政區，例如西屯區"},
+                        "housetype": {"type": "string", "description": "房屋類型，可留空代表不限"},
                     },
                     "required": []
                 }
@@ -571,12 +895,24 @@ TOOLS = [
             },
             {
                 "name": "rank_districts",
-                "description": "比較台中各行政區行情，預設依中位數單價由低到高排序",
+                "description": "比較台中各行政區行情。同時回傳在售開價與實價登錄中位數單價，預設依實價單價由低到高",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "housetype": {"type": "string", "description": "可限定類型，例如大樓"},
                         "sort_by": {"type": "string", "description": "median_unit 或 median_price"},
+                    },
+                    "required": []
+                }
+            },
+            {
+                "name": "compare_ask_to_real_price",
+                "description": "用內政部實價登錄，比較某一間在售房屋開價與附近近五年成交。問這間貴不貴、能不能議價、開價和實價差多少時使用。一次一間。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string", "description": "房屋標題，追問時用上一間推薦的完整標題"},
+                        "property_id": {"type": "string", "description": "房屋編號"},
                     },
                     "required": []
                 }
@@ -692,12 +1028,14 @@ def run_agent(user_input, model, step_container):
             allowed = inspect.signature({
                 "search_properties": tool_search_properties,
                 "get_market_stats": tool_get_market_stats,
+                "get_real_price_stats": tool_get_real_price_stats,
                 "get_property_detail": tool_get_property_detail,
                 "compare_properties": tool_compare_properties,
                 "find_similar_properties": tool_find_similar_properties,
                 "list_favorites": tool_list_favorites,
                 "add_to_favorites": tool_add_to_favorites,
                 "rank_districts": tool_rank_districts,
+                "compare_ask_to_real_price": tool_compare_ask_to_real_price,
                 "check_nearby_nuisances": tool_check_nearby_nuisances,
             }.get(fn_name, lambda **kwargs: None)).parameters
             fn_args = {k: v for k, v in fn_args.items() if k in allowed and v is not None}
@@ -729,9 +1067,15 @@ def run_agent(user_input, model, step_container):
                 tool_results.append(_pack_tool(fn_name, top_for_gemini))
 
             elif fn_name == "get_market_stats":
-                show_step("📈", "取得市場統計", f"{fn_args.get('district','')} {fn_args.get('housetype','')}")
+                show_step("📈", "取得在售開價", f"{fn_args.get('district','')} {fn_args.get('housetype','')}")
                 stats = tool_get_market_stats(**fn_args)
-                show_step("✅", "市場數據取得完成")
+                show_step("✅", "開價統計完成")
+                tool_results.append(_pack_tool(fn_name, stats))
+
+            elif fn_name == "get_real_price_stats":
+                show_step("💰", "查詢實價登錄成交", f"{fn_args.get('district','')} {fn_args.get('housetype','')}")
+                stats = tool_get_real_price_stats(**fn_args)
+                show_step("✅", "實價成交查詢完成")
                 tool_results.append(_pack_tool(fn_name, stats))
 
             elif fn_name == "get_property_detail":
@@ -775,9 +1119,21 @@ def run_agent(user_input, model, step_container):
                 tool_results.append(_pack_tool(fn_name, result))
 
             elif fn_name == "rank_districts":
-                show_step("🗺️", "比較各行政區行情", fn_args.get("housetype", ""))
+                show_step("🗺️", "比較各行政區行情（含實價）", fn_args.get("housetype", ""))
                 ranks = tool_rank_districts(**fn_args)
                 tool_results.append(_pack_tool(fn_name, ranks))
+
+            elif fn_name == "compare_ask_to_real_price":
+                show_step("💰", "比對開價與實價登錄", fn_args.get("title", "上一間推薦"))
+                payload = tool_compare_ask_to_real_price(**fn_args)
+                houses = _lookup_houses([fn_args.get("title", "")] if fn_args.get("title") else [], fn_args.get("property_id", ""))
+                if not houses:
+                    scored = st.session_state.get("_agent_scored_cache") or []
+                    houses = scored[:1]
+                if houses:
+                    recommended = houses[:1]
+                show_step("✅", "實價比對完成")
+                tool_results.append(_pack_tool(fn_name, payload))
 
             elif fn_name == "check_nearby_nuisances":
                 show_step("⚠️", "查詢周邊嫌惡設施", fn_args.get("title", "上一間推薦"))
@@ -892,6 +1248,7 @@ def _build_followups(user_query, houses):
 
     if title1:
         add("查周邊嫌惡設施", f"請查「{title1}」半徑500公尺內的嫌惡設施，並列出最近的類型與距離")
+        add("開價對實價", f"請用實價登錄判斷「{title1}」現在開價貴不貴，並說明附近成交均價")
         add("第一名細節", f"請查「{title1}」的完整細節，包含車位、單價、樓層和屋齡")
         add("找類似更便宜的", f"找跟「{title1}」同區同類型、價格更便宜的類似物件")
     if title1 and title2:
@@ -922,7 +1279,16 @@ def _render_followups(items, key_prefix):
 
 def render_assistant_page():
     st.title("🤖 智能小幫手 — 房小智")
-    st.caption("用對話找房、看行情、比較物件。收藏請直接點推薦卡片上的按鈕。")
+    st.caption("用對話找房、看行情、比對實價。收藏請直接點推薦卡片上的按鈕。")
+    if REAL_PRICE_OK:
+        with st.spinner("載入實價登錄（第一次較久）..."):
+            real_df = _load_real_price()
+        if real_df is None or real_df.empty:
+            st.warning("實價登錄沒載到，問成交價會不準。請確認 GitHub 有 real_price/taichung 季檔。")
+        else:
+            st.caption(f"已載入實價登錄 {len(real_df):,} 筆")
+    else:
+        st.warning("實價模組沒載入成功。")
 
     gemini_key = st.session_state.get("GEMINI_KEY", "")
     if not gemini_key:
@@ -935,18 +1301,22 @@ def render_assistant_page():
 
 你可以使用這些工具：
 - search_properties：找房子（會自動算 CP 值）。支援預算、房數、屋齡、建坪、樓層、車位。
-- get_market_stats：某一區、某一類型的行情統計。
+- get_market_stats：信義在售開價統計。不能用來回答成交價。
+- get_real_price_stats：內政部實價登錄成交。問成交價、最近成交、實價時一定要用這個。
 - get_property_detail：查某一間的完整細節（追問車位、樓層、單價時用）。
 - compare_properties：比較兩間以上房屋。
 - find_similar_properties：找類似替代物件。
 - list_favorites：看使用者收藏。
 - add_to_favorites：幫使用者收藏某間房子。
-- rank_districts：比較各行政區哪裡相對便宜。
+- rank_districts：比較各行政區開價與實價哪裡相對便宜。
+- compare_ask_to_real_price：比對某一間開價與附近實價成交，判斷貴不貴、議價空間。
 - check_nearby_nuisances：查單一房屋周邊嫌惡設施與最近距離。一次只查一間。
 
 判斷原則：
 - 找房子、推薦、CP 值 → search_properties
-- 行情、均價、市場概況 → get_market_stats
+- 行情、在售均價、賣家要價 → get_market_stats
+- 成交價、最近成交、實價多少 → get_real_price_stats，只講近一年成交與案例日期
+- 問「這一間」貴不貴、開價合不合理、能不能議價 → compare_ask_to_real_price，標題用上次推薦的完整標題
 - 問「這一間」細節 → get_property_detail，標題用上次推薦的完整標題
 - 「這兩間比一比」→ compare_properties
 - 「有沒有類似的」→ find_similar_properties
@@ -960,6 +1330,8 @@ def render_assistant_page():
 - 用繁體中文，語氣親切
 - 房屋標題必須完整引用，不可縮寫
 - 搜尋時說明前 5～10 名：排名、標題、總價、格局、屋齡、車位、CP 分數、一句推薦理由
+- 講行情時必須區分在售開價與實價成交。問「成交價」「最近成交」「實價」時，只能引用「實價成交」裡的近一年數字與案例日期，禁止把在售中位數說成成交價。
+- 比較開價與實價時說出單價差、判斷（偏高／合理／親民）與可比筆數
 - 比較時清楚寫出誰總價低、誰單價低、誰較新
 - 嫌惡設施用摘要說明：有幾類、最近是什麼、多遠；不要列座標
 - 不要說請稍等，直接呼叫工具"""
@@ -1024,6 +1396,8 @@ def render_assistant_page():
                         _render_house_cards(msg['recommended'], key_prefix=f"hist_{i}", user_query=msg.get('user_query', ''))
                     if msg.get('nuisance'):
                         render_nuisance_result(msg['nuisance'])
+                    if msg.get('real_price'):
+                        _render_real_price_panel(msg['real_price'], chart_key=f"rp_hist_{i}")
                     if i == len(st.session_state.assistant_history) - 1:
                         _render_followups(msg.get("followups") or [], key_prefix=f"last_{i}")
 
@@ -1062,6 +1436,9 @@ def render_assistant_page():
             nuisance = st.session_state.pop("_agent_nuisance_result", None)
             if nuisance:
                 render_nuisance_result(nuisance)
+            real_price = st.session_state.pop("_agent_real_price_view", None)
+            if real_price:
+                _render_real_price_panel(real_price, chart_key="rp_new")
             followups = _build_followups(final_input, recommended)
 
         st.session_state.assistant_history.append({
@@ -1071,6 +1448,7 @@ def render_assistant_page():
             'user_query': final_input,
             'followups': followups,
             'nuisance': nuisance,
+            'real_price': real_price,
         })
 
         st.rerun()
