@@ -4,6 +4,7 @@ import json
 import pandas as pd
 import re
 from components.favorites import FavoritesManager, normalize_property_id
+from utils import render_property_image
 
 def render_ai_chat_search():
     st.header("🤖 AI 房市顧問")
@@ -357,7 +358,9 @@ def render_ai_chat_search():
                 else:
                     sim_color = "#888780"
 
-                col1, col4 = st.columns([7, 2])
+                col_img, col1, col4 = st.columns([2.2, 5.3, 2])
+                with col_img:
+                    render_property_image(row, height=140)
                 with col1:
                     display_age = "預售" if pd.isna(row['屋齡']) or row['屋齡'] == 0 else f"{row['屋齡']}年"
                     st.subheader(f"#{global_idx} 🏠 {row['標題']}")
