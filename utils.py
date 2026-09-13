@@ -1,7 +1,134 @@
 import os
+import html
 import pandas as pd
 import math
 import streamlit as st
+from streamlit.components.v1 import html as st_html
+
+IMAGE_URL_COLUMNS = ("圖片網址", "圖片", "image_url")
+
+
+def get_property_image_url(row):
+    """從房屋資料列取出可用的圖片網址。"""
+    if row is None:
+        return ""
+    for col in IMAGE_URL_COLUMNS:
+        try:
+            value = row[col] if col in row else None
+        except Exception:
+            value = None
+        if value is None or (isinstance(value, float) and pd.isna(value)):
+            continue
+        url = str(value).strip()
+        if url.lower() in ("", "nan", "none", "-", "無"):
+            continue
+        if url.startswith("http://") or url.startswith("https://"):
+            return url
+    return ""
+
+
+def render_property_image(row, height=140, placeholder=True):
+    """在 Streamlit 畫面顯示房屋照片（搜尋清單用縮圖）。"""
+    url = get_property_image_url(row)
+    if url:
+        safe_url = html.escape(url, quote=True)
+        st_html(
+            (
+                '<div style="margin:0;padding:0;background:transparent;">'
+                f'<img src="{safe_url}" alt="房屋照片" referrerpolicy="no-referrer" '
+                f'style="width:100%;height:{int(height)}px;object-fit:cover;'
+                'border-radius:8px;display:block;" />'
+                "</div>"
+            ),
+            height=int(height) + 12,
+            scrolling=False,
+        )
+        return True
+    if placeholder:
+        st.markdown(
+            f'<div style="width:100%;height:{int(height)}px;border-radius:8px;'
+            f'background:rgb(38,39,48);display:flex;align-items:center;justify-content:center;'
+            f'color:rgb(136,135,128);font-size:13px;">無圖片</div>',
+            unsafe_allow_html=True,
+        )
+    return False
+
+
+def render_analysis_hero(row, eyebrow="個別分析"):
+    """分析頁雜誌風封面：全幅照片，標題疊在圖下緣。"""
+    title = html.escape(str(row.get("標題", "未提供")), quote=True)
+    address = html.escape(str(row.get("地址", "未提供")), quote=True)
+    house_type = html.escape(str(row.get("類型", "")), quote=True)
+    url = get_property_image_url(row)
+
+    if url:
+        safe_url = html.escape(url, quote=True)
+        media = (
+            f'<img src="{safe_url}" alt="房屋照片" referrerpolicy="no-referrer" '
+            'style="width:100%;height:360px;object-fit:cover;display:block;" />'
+        )
+    else:
+        media = '<div style="width:100%;height:360px;background:rgb(26,26,26);"></div>'
+
+    type_line = (
+        f'<div style="font-size:13px;color:rgb(208,208,208);margin-top:6px;">{house_type}</div>'
+        if house_type and house_type not in ("", "未提供", "nan")
+        else ""
+    )
+    eyebrow_text = html.escape(eyebrow, quote=True)
+    st.markdown(
+        (
+            '<div style="position:relative;border-radius:12px;overflow:hidden;'
+            'background:rgb(17,17,17);margin-bottom:4px;">'
+            f"{media}"
+            '<div style="position:absolute;left:0;right:0;bottom:0;padding:48px 32px 28px;'
+            "background:linear-gradient(to top, rgba(14,17,23,0.94) 0%, "
+            'rgba(14,17,23,0.62) 48%, rgba(14,17,23,0) 100%);color:rgb(255,255,255);">'
+            f'<div style="font-size:12px;letter-spacing:3px;color:rgb(200,230,201);'
+            f'margin-bottom:8px;">{eyebrow_text}</div>'
+            f'<div style="font-size:34px;font-weight:700;line-height:1.25;">{title}</div>'
+            f'<div style="font-size:15px;color:rgb(232,232,232);margin-top:10px;">📍 {address}</div>'
+            f"{type_line}"
+            "</div></div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def render_analysis_photo_strip(rows, title_key="標題"):
+    """比較頁雜誌風封面卡：照片當封面，標題疊在圖下緣。"""
+    if not rows:
+        return
+
+    cards = []
+    for row in rows:
+        title = html.escape(str(row.get(title_key) or row.get("房屋") or ""), quote=True)
+        address = html.escape(str(row.get("地址", "")), quote=True)
+        url = get_property_image_url(row)
+        if url:
+            safe_url = html.escape(url, quote=True)
+            photo = (
+                f'<img src="{safe_url}" alt="" referrerpolicy="no-referrer" '
+                'style="width:100%;height:200px;object-fit:cover;display:block;" />'
+            )
+        else:
+            photo = '<div style="height:200px;background:rgb(26,26,26);"></div>'
+        cards.append(
+            '<div style="flex:1;min-width:200px;position:relative;border-radius:12px;'
+            'overflow:hidden;background:rgb(17,17,17);color:rgb(255,255,255);">'
+            f"{photo}"
+            '<div style="position:absolute;left:0;right:0;bottom:0;padding:28px 14px 14px;'
+            "background:linear-gradient(to top, rgba(14,17,23,0.92) 0%, "
+            'rgba(14,17,23,0.45) 70%, rgba(14,17,23,0) 100%);">'
+            f'<div style="font-size:15px;font-weight:700;line-height:1.35;">{title}</div>'
+            f'<div style="font-size:12px;color:rgb(216,216,216);margin-top:6px;">{address}</div>'
+            "</div></div>"
+        )
+
+    st.markdown(
+        f'<div style="display:flex;gap:12px;flex-wrap:wrap;margin:4px 0 12px 0;">{"".join(cards)}</div>',
+        unsafe_allow_html=True,
+    )
 
 def get_city_options(data_dir="./Data"):
     """ 獲取城市選項，只顯示對照表內有定義的檔案 """
