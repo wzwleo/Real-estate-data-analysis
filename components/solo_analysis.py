@@ -21,6 +21,8 @@ except Exception:
         def normalize_property_id(value):
             return "" if value is None else str(value).strip()
 
+from utils import render_analysis_hero
+
 
 def safe_generate(model, prompt, fallback_text):
     """Gemini 容錯包裝：失敗時回退到本地文字"""
@@ -966,20 +968,8 @@ def tab1_module():
                 (all_df['類型'].astype(str).str.contains(target_type, case=False, na=False))
             ].copy()
 
-        # 顯示卡片，標題直排，詳細資訊橫排
-        st.markdown(f"""
-        <div style="
-            border:2px solid #4CAF50;
-            border-radius:10px;
-            padding:10px;
-            background-color:#1f1f1f;
-            text-align:center;
-            color:white;
-        ">
-            <div style="font-size:40px; font-weight:bold;">{selected_row.get('標題','未提供')}</div>
-            <div style="font-size:20px;">📍 {selected_row.get('地址','未提供')}</div>
-        </div>
-        """, unsafe_allow_html=True)
+        # 照片與標題合成一張卡片
+        render_analysis_hero(selected_row)
 
         st.write("\n")
         
