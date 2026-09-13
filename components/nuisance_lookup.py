@@ -95,7 +95,10 @@ def lookup_nearby_nuisances(address, title="", radius=DEFAULT_RADIUS):
     seen = set()
     places = []
     for nuisance_type in ASSISTANT_NUISANCE_TYPES:
-        keywords = NUISANCE_TYPES.get(nuisance_type, {}).get("keywords", [])[:2]
+        keywords = list(NUISANCE_TYPES.get(nuisance_type, {}).get("keywords", []))
+        if nuisance_type == "特種行業、KTV、遊樂場":
+            keywords = [k for k in keywords if k != "酒店"]
+        keywords = keywords[:2]
         impacts = NUISANCE_TYPES.get(nuisance_type, {}).get("impacts", [])
         place_type = "hospital" if nuisance_type == "醫院" else ""
         for keyword in keywords:
