@@ -315,6 +315,45 @@ IMPACT_TYPES = {
     "飛安": {"description": "飛安", "color": "#607d8b"},
 }
 
+def is_relevant_nuisance_place(nuisance_type, name, google_types=None):
+    """Drop Google Text Search hits that clearly are not the requested nuisance."""
+    name = "" if name is None else str(name).strip()
+    types = {str(t).lower() for t in (google_types or [])}
+    if not name:
+        return False
+
+    if nuisance_type == "醫院":
+        if "hospital" not in types and types.intersection(
+            {"doctor", "dentist", "pharmacy", "physiotherapist", "spa"}
+        ):
+            return False
+        clinic_tokens = (
+            "診所", "婦產", "牙醫", "中醫", "皮膚", "泌尿", "復健", "藥局",
+            "眼科", "耳鼻喉", "身心", "醫美", "月子", "健診", "健檢", "物理治療",
+        )
+        if any(token in name for token in clinic_tokens) and "醫院" not in name:
+            return False
+        if "hospital" in types:
+            return "診所" not in name
+        return any(token in name for token in ("醫院", "醫學中心", "榮民總醫院", "衛生福利部"))
+
+    if nuisance_type == "基地台、電塔、變電所":
+        residential_tokens = (
+            "大門", "社區", "大樓", "華廈", "公寓", "花園", "建設", "接待",
+            "管理室", "停車場", "公園", "幼兒園", "學校", "宅", "邸",
+        )
+        if any(token in name for token in residential_tokens):
+            return False
+        return any(
+            token in name
+            for token in (
+                "基地台", "電信機房", "電塔", "高壓電", "輸電塔", "鐵塔",
+                "變電所", "變電站", "超高壓",
+            )
+        )
+
+    return True
+
 # 建立反向映射
 CHINESE_TO_CATEGORY = {}
 for category, items in PLACE_TYPES.items():
