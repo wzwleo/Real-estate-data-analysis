@@ -24,6 +24,32 @@ except Exception:
 from utils import render_analysis_hero
 
 
+def _price_band_label(percentile):
+    try:
+        p = float(percentile)
+    except (TypeError, ValueError):
+        return "資料不足"
+    if p < 40:
+        return "低於主流價格帶（對買方較親民，不是缺點）"
+    if p > 60:
+        return "高於主流價格帶（預算壓力）"
+    return "位於主流價格帶"
+
+
+def _price_buyer_note(percentile):
+    """主流價格帶是描述位置，偏低對買方是親民，不是劣勢。"""
+    try:
+        p = float(percentile)
+    except (TypeError, ValueError):
+        return ""
+    if p < 40:
+        return "總價低於主流價格帶，對買方是較便宜、較親民，必須列為優勢，禁止列為劣勢"
+    if p > 60:
+        return "總價高於主流價格帶，對買方是預算壓力，可列為劣勢"
+    return "總價落在主流價格帶（約40～60百分位）"
+
+
+
 def safe_generate(model, prompt, fallback_text):
     """Gemini 容錯包裝：失敗時回退到本地文字"""
     try:
@@ -1137,7 +1163,7 @@ def tab1_module():
                         "區域": b_district, "房屋類型": b_type, "比較樣本數": b_total_count,
                         "目標房屋": {"總價(萬)": b_target_price, "建坪": b_target_area, "建坪單價(萬/坪)": b_price_per_ping},
                         "價格分布": {"價格百分位": round(b_price_percentile, 1), "價格排名": f"{b_price_rank}/{b_total_count}", "市場中位數(萬)": round(b_median_price, 1), "與中位數差距(萬)": round(b_target_price - b_median_price, 1)},
-                        "市場密集度": {"是否位於主流價格帶": "是" if b_is_dense else "否", "主流價格帶占比(%)": round(b_dense_ratio * 100, 1)}
+                        "市場密集度": {"價格帶位置": _price_band_label(b_price_percentile), "主流價格帶占比(%)": round(b_dense_ratio * 100, 1), "對買方解讀": _price_buyer_note(b_price_percentile)}
                     }
 
                     # ── 坪數分析 ──
@@ -1275,7 +1301,18 @@ def tab1_module():
                         "分數": b_scores,
                         "總分": b_total_score
                     }
-                    b_summary_prompt = f"你是台灣房市分析顧問，請根據以下五大面向數據，用繁體中文提供：1.整體評價 2.三大優勢 3.三大劣勢 4.購屋建議（不超過200字）\n{json.dumps(b_summary_data, ensure_ascii=False)}"
+                    b_summary_prompt = f"""你是台灣房市分析顧問，請根據以下五大面向數據，用繁體中文提供：1.整體評價 2.三大優勢 3.三大劣勢 4.購屋建議（不超過200字）
+
+寫作規則（必須遵守，避免自相矛盾）：
+- 總價或單價低於同區同類型中位數，對買方是優勢，禁止寫成劣勢，也禁止把「不在主流價格帶」「遠低於市場中位數」當成缺點。
+- 主流價格帶只表示是否落在中間價位，偏低=較親民，偏高=預算壓力。
+- 屋齡偏高可以當劣勢；若單價因屋齡而較便宜，可當優勢。兩者可同時存在，但必須分清楚一邊講屋齡、一邊講單價。
+- 同一件事不可又當優勢又當劣勢（例如優勢寫價格有吸引力，劣勢又寫總價遠低於中位數）。
+- 劣勢請寫真正風險：屋齡舊、維護成本、空間較小、樓層條件等，不要寫「太便宜」。
+
+數據：
+{json.dumps(b_summary_data, ensure_ascii=False)}
+"""
 
                     b_price_text   = safe_generate(b_model, b_price_prompt,   "價格分析暫時無法產生。")
                     b_space_text   = safe_generate(b_model, b_space_prompt,   "坪數分析暫時無法產生。")
@@ -1456,8 +1493,9 @@ def tab1_module():
                         },
                     
                         "市場密集度": {
-                            "是否位於主流價格帶": "是" if is_in_dense_area else "否",
-                            "主流價格帶占比(%)": round(dense_ratio * 100, 1)
+                            "價格帶位置": _price_band_label(price_percentile),
+                            "主流價格帶占比(%)": round(dense_ratio * 100, 1),
+                            "對買方解讀": _price_buyer_note(price_percentile)
                         }
                     }
                     
@@ -1469,7 +1507,7 @@ def tab1_module():
                     
                     請用繁體中文完成三件事：
                     1️⃣ 解讀該房屋價格在市場中的位置（偏低 / 主流 / 偏高）
-                    2️⃣ 說明是否落在市場主流交易區間
+                    2️⃣ 說明價格帶位置。總價低於中位數或百分位低於40，請寫成對買方較親民，不要說成缺點或非主流。
                     3️⃣ 提供一段理性、保守、不誇大的購屋建議
                     
                     **注意：此分析使用建坪計算單價，非實際坪數。**
@@ -2189,6 +2227,7 @@ def tab1_module():
                         **3. 三大劣勢**
                         - 列出最需要注意的 3 個缺點或風險
                         - 每個缺點用一句話說明，並引用具體數據支持
+                        - 禁止把下列內容當劣勢：總價低於中位數、單價較低、價格百分位偏低、不在主流價格帶、遠低於市場中位數。這些對買方是便宜，要寫在優勢。
                         
                         **4. 購屋建議**
                         - 給出明確的購買建議：「強烈推薦」、「值得考慮」、「需謹慎評估」或「不建議」
@@ -2203,6 +2242,12 @@ def tab1_module():
                         3. **給出明確判斷**：避免模糊用語
                         4. **嚴格字數限制**：各項字數不超過100字
                         5. **使用繁體中文**：符合台灣用語習慣
+                        6. **禁止自相矛盾**（務必遵守）：
+                           - 總價／單價低於同區同類型中位數，或價格百分位低於40，對買方是「較便宜、較親民」，必須當優勢。禁止把「不在主流價格帶」「遠低於市場中位數」寫成劣勢。
+                           - 「主流價格帶」只描述是否落在約40～60百分位。偏低≠不好，偏高才是預算壓力。
+                           - 屋齡偏高可列劣勢；同年齡單價較低可列優勢。兩邊主題不同就可以並存，但用詞必須讓讀者一眼看出一個講屋齡、一個講單價。
+                           - 同一件事不可優劣各寫一次（例如優勢寫價格吸引人，劣勢又寫總價太低所以非主流）。
+                           - 劣勢只寫真正風險：屋齡偏高、維護、每房坪數偏小、樓層過高或過低等。不要寫「太便宜」。
                         
                         請開始撰寫綜合總結。
                         """
